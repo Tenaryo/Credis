@@ -19,5 +19,6 @@ class CommandHandler {
     std::string handle_get(const std::string& key);
     std::string handle_rpush(const std::vector<std::string>& args);
     std::string handle_lpush(const std::vector<std::string>& args);
+    std::string handle_lpop(const std::string& key);
     std::string handle_lrange(const std::vector<std::string>& args);
 };

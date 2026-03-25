@@ -117,6 +117,32 @@ int64_t Store::llen(const std::string& key) {
     return static_cast<int64_t>(list.size());
 }
 
+std::optional<std::string> Store::lpop(const std::string& key) {
+    auto it = data_.find(key);
+    if (it == data_.end()) {
+        return std::nullopt;
+    }
+
+    Entry& entry = it->second;
+    if (is_expired(entry)) {
+        data_.erase(it);
+        return std::nullopt;
+    }
+
+    if (!std::holds_alternative<std::deque<std::string>>(entry.value)) {
+        return std::nullopt;
+    }
+
+    auto& list = std::get<std::deque<std::string>>(entry.value);
+    if (list.empty()) {
+        return std::nullopt;
+    }
+
+    std::string value = std::move(list.front());
+    list.pop_front();
+    return value;
+}
+
 std::vector<std::string> Store::lrange(const std::string& key, int64_t start, int64_t stop) {
     std::vector<std::string> result;
 
