@@ -34,5 +34,6 @@ class Store {
     int64_t lpush(const std::string& key, const std::string& value);
     int64_t llen(const std::string& key);
     std::optional<std::string> lpop(const std::string& key);
+    std::vector<std::string> lpop(const std::string& key, int64_t count);
     std::vector<std::string> lrange(const std::string& key, int64_t start, int64_t stop);
 };

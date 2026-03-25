@@ -78,14 +78,26 @@ int64_t Store::llen(const std::string& key) {
     return list ? static_cast<int64_t>(list->size()) : 0;
 }
 
-std::optional<std::string> Store::lpop(const std::string& key) {
+std::vector<std::string> Store::lpop(const std::string& key, int64_t count) {
+    std::vector<std::string> result;
     auto* list = get_list(key);
     if (!list || list->empty()) {
-        return std::nullopt;
+        return result;
     }
-    std::string value = std::move(list->front());
-    list->pop_front();
-    return value;
+
+    if (count <= 0) {
+        return result;
+    }
+
+    int64_t actual_count = std::min(count, static_cast<int64_t>(list->size()));
+    result.reserve(actual_count);
+
+    for (int64_t i = 0; i < actual_count; ++i) {
+        result.push_back(std::move(list->front()));
+        list->pop_front();
+    }
+
+    return result;
 }
 
 std::vector<std::string> Store::lrange(const std::string& key, int64_t start, int64_t stop) {
