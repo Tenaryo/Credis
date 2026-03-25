@@ -57,7 +57,7 @@ std::string CommandHandler::process(std::string_view input) {
         if (args.size() < 2) {
             return RespParser::encode_error("ERR wrong number of arguments for 'lpop' command");
         }
-        return handle_lpop(args[1]);
+        return handle_lpop(args);
     } else if (cmd == "LRANGE") {
         if (args.size() < 4) {
             return RespParser::encode_error("ERR wrong number of arguments for 'lrange' command");
@@ -137,12 +137,30 @@ std::string CommandHandler::handle_lpush(const std::vector<std::string>& args) {
     return RespParser::encode_integer(count);
 }
 
-std::string CommandHandler::handle_lpop(const std::string& key) {
-    auto value = store_.lpop(key);
-    if (value) {
-        return RespParser::encode_bulk_string(*value);
+std::string CommandHandler::handle_lpop(const std::vector<std::string>& args) {
+    const std::string& key = args[1];
+
+    if (args.size() == 2) {
+        auto elements = store_.lpop(key, 1);
+        if (elements.empty()) {
+            return RespParser::encode_null_bulk_string();
+        }
+        return RespParser::encode_bulk_string(elements[0]);
     }
-    return RespParser::encode_null_bulk_string();
+
+    int64_t count = 0;
+    try {
+        count = std::stoll(args[2]);
+    } catch (...) {
+        return RespParser::encode_error("ERR value is not an integer or out of range");
+    }
+
+    if (count <= 0) {
+        return RespParser::encode_array({});
+    }
+
+    auto elements = store_.lpop(key, count);
+    return RespParser::encode_array(elements);
 }
 
 std::string CommandHandler::handle_lrange(const std::vector<std::string>& args) {
