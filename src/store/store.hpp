@@ -19,6 +19,9 @@ class Store {
 
     static std::chrono::steady_clock::time_point get_current_time();
     bool is_expired(const Entry& entry) const;
+    Entry* find_valid_entry(const std::string& key);
+    std::deque<std::string>* get_list(const std::string& key);
+    std::deque<std::string>* get_or_create_list(const std::string& key);
   public:
     void set(const std::string& key,
              const std::string& value,
