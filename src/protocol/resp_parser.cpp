@@ -63,4 +63,12 @@ std::string RespParser::encode_null_bulk_string() { return "$-1\r\n"; }
 
 std::string RespParser::encode_integer(int64_t n) { return ":" + std::to_string(n) + "\r\n"; }
 
+std::string RespParser::encode_array(const std::vector<std::string>& elements) {
+    std::string result = "*" + std::to_string(elements.size()) + "\r\n";
+    for (const auto& elem : elements) {
+        result += encode_bulk_string(elem);
+    }
+    return result;
+}
+
 std::string RespParser::encode_error(std::string_view s) { return "-" + std::string(s) + "\r\n"; }

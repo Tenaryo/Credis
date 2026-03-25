@@ -43,6 +43,11 @@ std::string CommandHandler::process(std::string_view input) {
             return RespParser::encode_error("ERR wrong number of arguments for 'rpush' command");
         }
         return handle_rpush(args);
+    } else if (cmd == "LRANGE") {
+        if (args.size() < 4) {
+            return RespParser::encode_error("ERR wrong number of arguments for 'lrange' command");
+        }
+        return handle_lrange(args);
     }
 
     return RespParser::encode_error("ERR unknown command '" + cmd + "'");
@@ -106,4 +111,21 @@ std::string CommandHandler::handle_rpush(const std::vector<std::string>& args) {
         count = store_.rpush(key, args[i]);
     }
     return RespParser::encode_integer(count);
+}
+
+std::string CommandHandler::handle_lrange(const std::vector<std::string>& args) {
+    const std::string& key = args[1];
+
+    int64_t start = 0;
+    int64_t stop = 0;
+
+    try {
+        start = std::stoll(args[2]);
+        stop = std::stoll(args[3]);
+    } catch (...) {
+        return RespParser::encode_error("ERR value is not an integer or out of range");
+    }
+
+    auto elements = store_.lrange(key, start, stop);
+    return RespParser::encode_array(elements);
 }
