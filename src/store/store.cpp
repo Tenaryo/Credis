@@ -40,6 +40,43 @@ std::deque<std::string>* Store::get_or_create_list(const std::string& key) {
     return &std::get<std::deque<std::string>>(entry->value);
 }
 
+Stream* Store::get_or_create_stream(const std::string& key) {
+    Entry* entry = find_valid_entry(key);
+    if (!entry) {
+        data_[key] = Entry{.value = Stream{}};
+        entry = &data_[key];
+    }
+    if (!std::holds_alternative<Stream>(entry->value)) {
+        entry->value = Stream{};
+    }
+    return &std::get<Stream>(entry->value);
+}
+
+bool Store::parse_entry_id(const std::string& id, int64_t& timestamp, int64_t& sequence) {
+    auto dash_pos = id.find('-');
+    if (dash_pos == std::string::npos) {
+        return false;
+    }
+    try {
+        timestamp = std::stoll(id.substr(0, dash_pos));
+        sequence = std::stoll(id.substr(dash_pos + 1));
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool Store::compare_entry_id(const std::string& a, const std::string& b) {
+    int64_t ts_a, seq_a, ts_b, seq_b;
+    if (!parse_entry_id(a, ts_a, seq_a) || !parse_entry_id(b, ts_b, seq_b)) {
+        return false;
+    }
+    if (ts_a != ts_b) {
+        return ts_a < ts_b;
+    }
+    return seq_a < seq_b;
+}
+
 void Store::set(const std::string& key, const std::string& value, std::optional<uint64_t> ttl_ms) {
     Entry entry;
     entry.value = value;
@@ -149,5 +186,38 @@ std::string Store::get_type(const std::string& key) {
     if (std::holds_alternative<std::deque<std::string>>(entry->value)) {
         return "list";
     }
+    if (std::holds_alternative<Stream>(entry->value)) {
+        return "stream";
+    }
     return "none";
+}
+
+std::string Store::xadd(const std::string& key,
+                        const std::string& id,
+                        const std::vector<std::pair<std::string, std::string>>& fields) {
+    int64_t timestamp, sequence;
+    if (!parse_entry_id(id, timestamp, sequence)) {
+        return "ERR Invalid stream ID specified";
+    }
+
+    if (timestamp == 0 && sequence == 0) {
+        return "ERR The ID specified in XADD must be greater than 0-0";
+    }
+
+    auto* stream = get_or_create_stream(key);
+
+    if (!stream->empty()) {
+        const std::string& last_id = stream->back().id;
+        if (!compare_entry_id(id, last_id)) {
+            return "ERR The ID specified in XADD is equal or smaller than the target stream top "
+                   "item";
+        }
+    }
+
+    StreamEntry entry;
+    entry.id = id;
+    entry.fields = fields;
+    stream->push_back(std::move(entry));
+
+    return id;
 }

@@ -109,6 +109,13 @@ CommandHandler::process_with_fd(int fd,
         }
         return {false, RespParser::encode_simple_string(store_.get_type(args[1]))};
     }
+    if (cmd == "XADD") {
+        if (args.size() < 4 || (args.size() - 3) % 2 != 0) {
+            return {false,
+                    RespParser::encode_error("ERR wrong number of arguments for 'xadd' command")};
+        }
+        return {false, handle_xadd(args)};
+    }
 
     return {false, RespParser::encode_error("ERR unknown command '" + cmd + "'")};
 }
@@ -286,4 +293,22 @@ ProcessResult CommandHandler::handle_lpush_with_blocking(
         count = store_.lpush(key, args[i]);
     }
     return {false, RespParser::encode_integer(count)};
+}
+
+std::string CommandHandler::handle_xadd(const std::vector<std::string>& args) {
+    const std::string& key = args[1];
+    const std::string& id = args[2];
+
+    std::vector<std::pair<std::string, std::string>> fields;
+    for (size_t i = 3; i < args.size(); i += 2) {
+        fields.emplace_back(args[i], args[i + 1]);
+    }
+
+    std::string result = store_.xadd(key, id, fields);
+
+    if (result.starts_with("ERR")) {
+        return RespParser::encode_error(result);
+    }
+
+    return RespParser::encode_bulk_string(result);
 }
