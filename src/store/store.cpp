@@ -316,3 +316,26 @@ Store::xrange(const std::string& key, const std::string& start, const std::strin
 
     return result;
 }
+
+std::vector<Redis::StreamEntry> Store::xread(const std::string& key, const std::string& id) {
+    std::vector<Redis::StreamEntry> result;
+
+    auto* stream = get_stream(key);
+    if (!stream || stream->empty()) {
+        return result;
+    }
+
+    std::string threshold_id = id;
+    auto dash = id.find('-');
+    if (dash == std::string::npos) {
+        threshold_id = id + "-0";
+    }
+
+    for (const auto& entry : *stream) {
+        if (compare_entry_id(threshold_id, entry.id)) {
+            result.push_back(entry);
+        }
+    }
+
+    return result;
+}

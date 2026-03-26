@@ -63,5 +63,7 @@ class Store {
     std::vector<Redis::StreamEntry>
     xrange(const std::string& key, const std::string& start, const std::string& end);
 
+    std::vector<Redis::StreamEntry> xread(const std::string& key, const std::string& id);
+
     std::string get_type(const std::string& key);
 };

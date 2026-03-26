@@ -123,6 +123,13 @@ CommandHandler::process_with_fd(int fd,
         }
         return {false, handle_xrange(args)};
     }
+    if (cmd == "XREAD") {
+        if (args.size() < 4) {
+            return {false,
+                    RespParser::encode_error("ERR wrong number of arguments for 'xread' command")};
+        }
+        return {false, handle_xread(args)};
+    }
 
     return {false, RespParser::encode_error("ERR unknown command '" + cmd + "'")};
 }
@@ -335,6 +342,57 @@ std::string CommandHandler::handle_xrange(const std::vector<std::string>& args) 
         for (const auto& [field, value] : entry.fields) {
             result += RespParser::encode_bulk_string(field);
             result += RespParser::encode_bulk_string(value);
+        }
+    }
+
+    return result;
+}
+
+std::string CommandHandler::handle_xread(const std::vector<std::string>& args) {
+    size_t streams_idx = 0;
+    for (size_t i = 1; i < args.size(); ++i) {
+        std::string arg = args[i];
+        std::transform(
+            arg.begin(), arg.end(), arg.begin(), [](unsigned char c) { return std::toupper(c); });
+        if (arg == "STREAMS") {
+            streams_idx = i;
+            break;
+        }
+    }
+
+    if (streams_idx == 0) {
+        return RespParser::encode_error("ERR syntax error");
+    }
+
+    size_t num_pairs = args.size() - streams_idx - 1;
+    if (num_pairs == 0 || num_pairs % 2 != 0) {
+        return RespParser::encode_error("ERR wrong number of arguments for 'xread' command");
+    }
+
+    size_t num_streams = num_pairs / 2;
+    std::vector<std::pair<std::string, std::vector<Redis::StreamEntry>>> results;
+
+    for (size_t i = 0; i < num_streams; ++i) {
+        const std::string& key = args[streams_idx + 1 + i];
+        const std::string& id = args[streams_idx + 1 + num_streams + i];
+
+        auto entries = store_.xread(key, id);
+        results.emplace_back(key, std::move(entries));
+    }
+
+    std::string result = "*" + std::to_string(results.size()) + "\r\n";
+    for (const auto& [key, entries] : results) {
+        result += "*2\r\n";
+        result += RespParser::encode_bulk_string(key);
+        result += "*" + std::to_string(entries.size()) + "\r\n";
+        for (const auto& entry : entries) {
+            result += "*2\r\n";
+            result += RespParser::encode_bulk_string(entry.id);
+            result += "*" + std::to_string(entry.fields.size() * 2) + "\r\n";
+            for (const auto& [field, value] : entry.fields) {
+                result += RespParser::encode_bulk_string(field);
+                result += RespParser::encode_bulk_string(value);
+            }
         }
     }
 

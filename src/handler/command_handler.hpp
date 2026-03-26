@@ -37,6 +37,7 @@ class CommandHandler {
     std::string handle_lrange(const std::vector<std::string>& args);
     std::string handle_xadd(const std::vector<std::string>& args);
     std::string handle_xrange(const std::vector<std::string>& args);
+    std::string handle_xread(const std::vector<std::string>& args);
 
     ProcessResult handle_blpop(int fd, const std::vector<std::string>& args);
     ProcessResult
