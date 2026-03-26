@@ -198,9 +198,30 @@ std::string Store::xadd(const std::string& key,
     int64_t timestamp, sequence;
     std::string final_id;
 
-    bool auto_seq = id.size() >= 2 && id.substr(id.size() - 2) == "-*";
+    bool auto_full_id = (id == "*");
+    bool auto_seq = !auto_full_id && id.size() >= 2 && id.substr(id.size() - 2) == "-*";
 
-    if (auto_seq) {
+    if (auto_full_id) {
+        auto now = std::chrono::system_clock::now();
+        timestamp =
+            std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+
+        auto* stream = get_or_create_stream(key);
+
+        if (stream->empty()) {
+            sequence = 0;
+        } else {
+            int64_t last_ts, last_seq;
+            parse_entry_id(stream->back().id, last_ts, last_seq);
+            if (last_ts == timestamp) {
+                sequence = last_seq + 1;
+            } else {
+                sequence = 0;
+            }
+        }
+
+        final_id = std::to_string(timestamp) + "-" + std::to_string(sequence);
+    } else if (auto_seq) {
         auto dash_pos = id.find('-');
         if (dash_pos == std::string::npos) {
             return "ERR Invalid stream ID specified";
