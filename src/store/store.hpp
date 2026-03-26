@@ -10,6 +10,10 @@
 #include <variant>
 #include <vector>
 
+namespace Redis {
+using String = std::string;
+using List = std::deque<std::string>;
+
 struct StreamEntry {
     std::string id;
     std::vector<std::pair<std::string, std::string>> fields;
@@ -17,9 +21,12 @@ struct StreamEntry {
 
 using Stream = std::deque<StreamEntry>;
 
+using Value = std::variant<String, List, Stream>;
+} // namespace Redis
+
 class Store {
     struct Entry {
-        std::variant<std::string, std::deque<std::string>, Stream> value;
+        Redis::Value value;
         std::optional<std::chrono::steady_clock::time_point> expiry;
     };
 
@@ -28,9 +35,9 @@ class Store {
     static std::chrono::steady_clock::time_point get_current_time();
     bool is_expired(const Entry& entry) const;
     Entry* find_valid_entry(const std::string& key);
-    std::deque<std::string>* get_list(const std::string& key);
-    std::deque<std::string>* get_or_create_list(const std::string& key);
-    Stream* get_or_create_stream(const std::string& key);
+    Redis::List* get_list(const std::string& key);
+    Redis::List* get_or_create_list(const std::string& key);
+    Redis::Stream* get_or_create_stream(const std::string& key);
     static bool parse_entry_id(const std::string& id, int64_t& timestamp, int64_t& sequence);
     static bool compare_entry_id(const std::string& a, const std::string& b);
   public:

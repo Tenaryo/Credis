@@ -20,36 +20,36 @@ Store::Entry* Store::find_valid_entry(const std::string& key) {
     return &it->second;
 }
 
-std::deque<std::string>* Store::get_list(const std::string& key) {
+Redis::List* Store::get_list(const std::string& key) {
     Entry* entry = find_valid_entry(key);
-    if (!entry || !std::holds_alternative<std::deque<std::string>>(entry->value)) {
+    if (!entry || !std::holds_alternative<Redis::List>(entry->value)) {
         return nullptr;
     }
-    return &std::get<std::deque<std::string>>(entry->value);
+    return &std::get<Redis::List>(entry->value);
 }
 
-std::deque<std::string>* Store::get_or_create_list(const std::string& key) {
+Redis::List* Store::get_or_create_list(const std::string& key) {
     Entry* entry = find_valid_entry(key);
     if (!entry) {
-        data_[key] = Entry{.value = std::deque<std::string>{}};
+        data_[key] = Entry{.value = Redis::List{}};
         entry = &data_[key];
     }
-    if (!std::holds_alternative<std::deque<std::string>>(entry->value)) {
-        entry->value = std::deque<std::string>{};
+    if (!std::holds_alternative<Redis::List>(entry->value)) {
+        entry->value = Redis::List{};
     }
-    return &std::get<std::deque<std::string>>(entry->value);
+    return &std::get<Redis::List>(entry->value);
 }
 
-Stream* Store::get_or_create_stream(const std::string& key) {
+Redis::Stream* Store::get_or_create_stream(const std::string& key) {
     Entry* entry = find_valid_entry(key);
     if (!entry) {
-        data_[key] = Entry{.value = Stream{}};
+        data_[key] = Entry{.value = Redis::Stream{}};
         entry = &data_[key];
     }
-    if (!std::holds_alternative<Stream>(entry->value)) {
-        entry->value = Stream{};
+    if (!std::holds_alternative<Redis::Stream>(entry->value)) {
+        entry->value = Redis::Stream{};
     }
-    return &std::get<Stream>(entry->value);
+    return &std::get<Redis::Stream>(entry->value);
 }
 
 bool Store::parse_entry_id(const std::string& id, int64_t& timestamp, int64_t& sequence) {
@@ -88,10 +88,10 @@ void Store::set(const std::string& key, const std::string& value, std::optional<
 
 std::optional<std::string> Store::get(const std::string& key) {
     Entry* entry = find_valid_entry(key);
-    if (!entry || !std::holds_alternative<std::string>(entry->value)) {
+    if (!entry || !std::holds_alternative<Redis::String>(entry->value)) {
         return std::nullopt;
     }
-    return std::get<std::string>(entry->value);
+    return std::get<Redis::String>(entry->value);
 }
 
 bool Store::exists(const std::string& key) { return find_valid_entry(key) != nullptr; }
@@ -180,13 +180,13 @@ std::string Store::get_type(const std::string& key) {
     if (!entry) {
         return "none";
     }
-    if (std::holds_alternative<std::string>(entry->value)) {
+    if (std::holds_alternative<Redis::String>(entry->value)) {
         return "string";
     }
-    if (std::holds_alternative<std::deque<std::string>>(entry->value)) {
+    if (std::holds_alternative<Redis::List>(entry->value)) {
         return "list";
     }
-    if (std::holds_alternative<Stream>(entry->value)) {
+    if (std::holds_alternative<Redis::Stream>(entry->value)) {
         return "stream";
     }
     return "none";
@@ -214,7 +214,7 @@ std::string Store::xadd(const std::string& key,
         }
     }
 
-    StreamEntry entry;
+    Redis::StreamEntry entry;
     entry.id = id;
     entry.fields = fields;
     stream->push_back(std::move(entry));
