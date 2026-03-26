@@ -196,8 +196,41 @@ std::string Store::xadd(const std::string& key,
                         const std::string& id,
                         const std::vector<std::pair<std::string, std::string>>& fields) {
     int64_t timestamp, sequence;
-    if (!parse_entry_id(id, timestamp, sequence)) {
-        return "ERR Invalid stream ID specified";
+    std::string final_id;
+
+    bool auto_seq = id.size() >= 2 && id.substr(id.size() - 2) == "-*";
+
+    if (auto_seq) {
+        auto dash_pos = id.find('-');
+        if (dash_pos == std::string::npos) {
+            return "ERR Invalid stream ID specified";
+        }
+        try {
+            timestamp = std::stoll(id.substr(0, dash_pos));
+        } catch (...) {
+            return "ERR Invalid stream ID specified";
+        }
+
+        auto* stream = get_or_create_stream(key);
+
+        if (stream->empty()) {
+            sequence = (timestamp == 0) ? 1 : 0;
+        } else {
+            int64_t last_ts, last_seq;
+            parse_entry_id(stream->back().id, last_ts, last_seq);
+            if (last_ts == timestamp) {
+                sequence = last_seq + 1;
+            } else {
+                sequence = (timestamp == 0) ? 1 : 0;
+            }
+        }
+
+        final_id = std::to_string(timestamp) + "-" + std::to_string(sequence);
+    } else {
+        if (!parse_entry_id(id, timestamp, sequence)) {
+            return "ERR Invalid stream ID specified";
+        }
+        final_id = id;
     }
 
     if (timestamp == 0 && sequence == 0) {
@@ -208,16 +241,16 @@ std::string Store::xadd(const std::string& key,
 
     if (!stream->empty()) {
         const std::string& last_id = stream->back().id;
-        if (!compare_entry_id(last_id, id)) {
+        if (!compare_entry_id(last_id, final_id)) {
             return "ERR The ID specified in XADD is equal or smaller than the target stream top "
                    "item";
         }
     }
 
     Redis::StreamEntry entry;
-    entry.id = id;
+    entry.id = final_id;
     entry.fields = fields;
     stream->push_back(std::move(entry));
 
-    return id;
+    return final_id;
 }
