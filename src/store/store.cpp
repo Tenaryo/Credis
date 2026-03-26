@@ -137,3 +137,17 @@ std::vector<std::string> Store::lrange(const std::string& key, int64_t start, in
 
     return result;
 }
+
+std::string Store::get_type(const std::string& key) {
+    auto* entry = find_valid_entry(key);
+    if (!entry) {
+        return "none";
+    }
+    if (std::holds_alternative<std::string>(entry->value)) {
+        return "string";
+    }
+    if (std::holds_alternative<std::deque<std::string>>(entry->value)) {
+        return "list";
+    }
+    return "none";
+}

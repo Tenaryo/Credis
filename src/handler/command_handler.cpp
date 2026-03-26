@@ -102,6 +102,13 @@ CommandHandler::process_with_fd(int fd,
         }
         return handle_blpop(fd, args);
     }
+    if (cmd == "TYPE") {
+        if (args.size() < 2) {
+            return {false,
+                    RespParser::encode_error("ERR wrong number of arguments for 'type' command")};
+        }
+        return {false, RespParser::encode_simple_string(store_.get_type(args[1]))};
+    }
 
     return {false, RespParser::encode_error("ERR unknown command '" + cmd + "'")};
 }
