@@ -16,3 +16,8 @@ target_include_directories(redis PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
 target_include_directories(redis PRIVATE ${ASIO_INCLUDE_DIR})
 target_link_libraries(redis PRIVATE Threads::Threads)
+
+option(BUILD_TESTS "Build tests" ON)
+if(BUILD_TESTS)
+    add_subdirectory(tests)
+endif()

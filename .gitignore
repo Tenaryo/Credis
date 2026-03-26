@@ -1045,3 +1045,6 @@ dkms.conf
 *.dis
 
 vcpkg_installed
+
+# Test build directories
+build*/
