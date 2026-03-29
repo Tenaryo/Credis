@@ -1,4 +1,5 @@
 #include "block_manager/blocking_manager.hpp"
+#include "cli/cli_parser.hpp"
 #include "connection/connection.hpp"
 #include "event_loop/event_loop.hpp"
 #include "handler/command_handler.hpp"
@@ -9,11 +10,11 @@
 #include <memory>
 #include <unordered_map>
 
-int main() {
+int main(int argc, char* argv[]) {
     std::cout << std::unitbuf;
     std::cerr << std::unitbuf;
 
-    Server server(6379);
+    Server server(parse_port(argc, argv));
     EventLoop event_loop;
     event_loop.add_fd(server.fd());
 
