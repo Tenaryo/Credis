@@ -51,6 +51,15 @@ CommandHandler::process_with_fd(int fd,
         return {false, result};
     }
 
+    if (cmd == "DISCARD") {
+        auto dit = transactions_.find(fd);
+        if (dit == transactions_.end() || !dit->second.in_multi) {
+            return {false, RespParser::encode_error("ERR DISCARD without MULTI")};
+        }
+        transactions_.erase(dit);
+        return {false, RespParser::encode_simple_string("OK")};
+    }
+
     auto it = transactions_.find(fd);
     if (it != transactions_.end() && it->second.in_multi) {
         it->second.queued_commands.push_back(args);
