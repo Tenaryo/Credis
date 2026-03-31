@@ -31,7 +31,7 @@ EventLoop& EventLoop::operator=(EventLoop&& other) noexcept {
 }
 
 void EventLoop::add_fd(int fd, uint32_t events) {
-    struct epoll_event ev{};
+    struct epoll_event ev {};
     ev.events = events;
     ev.data.fd = fd;
     if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &ev) < 0) {
@@ -41,7 +41,7 @@ void EventLoop::add_fd(int fd, uint32_t events) {
 
 void EventLoop::remove_fd(int fd) { epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr); }
 
-void EventLoop::run(int server_fd,
+void EventLoop::run(int /* server_fd */,
                     std::function<void(int)> on_data,
                     std::function<std::chrono::milliseconds()> get_timeout) {
     struct epoll_event events[MAX_EVENTS];

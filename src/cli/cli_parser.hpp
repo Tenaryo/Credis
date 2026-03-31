@@ -1,13 +1,15 @@
 #pragma once
 
 #include "server/server_config.hpp"
-#include <cstring>
-#include <stdexcept>
+#include "util/parse.hpp"
+#include <string_view>
 
 inline int parse_port(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
-            return std::stoi(argv[i + 1]);
+        if (std::string_view(argv[i]) == "--port" && i + 1 < argc) {
+            auto port = parse_int<int>(argv[i + 1]);
+            if (port)
+                return *port;
         }
     }
     return 6379;
@@ -15,11 +17,13 @@ inline int parse_port(int argc, char* argv[]) {
 
 inline std::optional<ReplicaOfConfig> parse_replicaof(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--replicaof") == 0 && i + 1 < argc) {
+        if (std::string_view(argv[i]) == "--replicaof" && i + 1 < argc) {
             std::string val = argv[i + 1];
             auto space = val.find(' ');
             if (space != std::string::npos) {
-                return ReplicaOfConfig{val.substr(0, space), std::stoi(val.substr(space + 1))};
+                auto port = parse_int<int>(val.substr(space + 1));
+                if (port)
+                    return ReplicaOfConfig{val.substr(0, space), *port};
             }
         }
     }

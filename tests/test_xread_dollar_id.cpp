@@ -87,7 +87,8 @@ void test_xread_with_dollar_new_entries() {
 void test_blocking_with_dollar_id() {
     BlockingManager manager;
 
-    manager.block_client_for_stream(10, "stream", "100-0", std::chrono::milliseconds(1000));
+    manager.block_client_for_stream(
+        10, "stream", *StreamId::parse("100-0"), std::chrono::milliseconds(1000));
 
     auto client = manager.wake_client_for_stream("stream", "200-0");
     assert(client.has_value());

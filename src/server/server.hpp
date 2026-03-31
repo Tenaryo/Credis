@@ -6,8 +6,9 @@
 class Server {
     int server_fd_{-1};
     int port_;
+    Server(int port, int fd) : server_fd_(fd), port_(port) {}
   public:
-    explicit Server(int port);
+    static std::expected<Server, std::string> create(int port);
     ~Server();
 
     Server(const Server&) = delete;
@@ -17,9 +18,4 @@ class Server {
 
     std::expected<int, std::string> accept_connection() const;
     [[nodiscard]] int fd() const noexcept { return server_fd_; }
-  private:
-    std::expected<void, std::string> create_socket();
-    std::expected<void, std::string> set_reuse_addr();
-    std::expected<void, std::string> bind_socket();
-    std::expected<void, std::string> listen_socket();
 };

@@ -2,6 +2,7 @@
 #include "block_manager/blocking_manager.hpp"
 #include "protocol/resp_parser.hpp"
 #include "store/store.hpp"
+#include "util/parse.hpp"
 #include <algorithm>
 #include <cctype>
 
@@ -22,12 +23,12 @@ CommandHandler::process_with_fd(int fd,
         return {false, RespParser::encode_error("ERR " + parsed.error())};
     }
 
-    const auto& args = *parsed;
+    auto& args = *parsed;
     if (args.empty()) {
         return {false, RespParser::encode_error("ERR empty command")};
     }
 
-    std::string cmd = args[0];
+    std::string& cmd = args[0];
     std::transform(
         cmd.begin(), cmd.end(), cmd.begin(), [](unsigned char c) { return std::toupper(c); });
 
@@ -74,9 +75,7 @@ ProcessResult
 CommandHandler::execute_command(const std::vector<std::string>& args,
                                 int fd,
                                 std::function<void(int, const std::string&)> send_to_blocked) {
-    std::string cmd = args[0];
-    std::transform(
-        cmd.begin(), cmd.end(), cmd.begin(), [](unsigned char c) { return std::toupper(c); });
+    const std::string& cmd = args[0];
 
     if (cmd == "PING") {
         return {false, handle_ping()};
@@ -215,14 +214,12 @@ std::string CommandHandler::handle_set(const std::vector<std::string>& args) {
                 return RespParser::encode_error("ERR syntax error");
             }
 
-            uint64_t num = 0;
-            try {
-                num = std::stoull(args[i + 1]);
-            } catch (...) {
+            auto parsed = parse_int<uint64_t>(args[i + 1]);
+            if (!parsed) {
                 return RespParser::encode_error("ERR value is not an integer or out of range");
             }
 
-            ttl_ms = (option == "EX") ? num * 1000 : num;
+            ttl_ms = (option == "EX") ? *parsed * 1000 : *parsed;
             ++i;
         }
     }
@@ -273,12 +270,11 @@ std::string CommandHandler::handle_lpop(const std::vector<std::string>& args) {
         return RespParser::encode_bulk_string(elements[0]);
     }
 
-    int64_t count = 0;
-    try {
-        count = std::stoll(args[2]);
-    } catch (...) {
+    auto parsed = parse_int<int64_t>(args[2]);
+    if (!parsed) {
         return RespParser::encode_error("ERR value is not an integer or out of range");
     }
+    int64_t count = *parsed;
 
     if (count <= 0) {
         return RespParser::encode_array({});
@@ -291,21 +287,17 @@ std::string CommandHandler::handle_lpop(const std::vector<std::string>& args) {
 std::string CommandHandler::handle_lrange(const std::vector<std::string>& args) {
     const std::string& key = args[1];
 
-    int64_t start = 0;
-    int64_t stop = 0;
-
-    try {
-        start = std::stoll(args[2]);
-        stop = std::stoll(args[3]);
-    } catch (...) {
+    auto start_opt = parse_int<int64_t>(args[2]);
+    auto stop_opt = parse_int<int64_t>(args[3]);
+    if (!start_opt || !stop_opt) {
         return RespParser::encode_error("ERR value is not an integer or out of range");
     }
 
-    auto elements = store_.lrange(key, start, stop);
+    auto elements = store_.lrange(key, *start_opt, *stop_opt);
     return RespParser::encode_array(elements);
 }
 
-std::string CommandHandler::handle_info(const std::vector<std::string>& args) {
+std::string CommandHandler::handle_info(const std::vector<std::string>& /* args */) {
     std::string info = "# Replication\r\nrole:";
     info += config_.is_replica() ? "slave" : "master";
     info += "\r\n";
@@ -453,23 +445,7 @@ std::string CommandHandler::handle_xread(const std::vector<std::string>& args) {
         results.emplace_back(key, std::move(entries));
     }
 
-    std::string result = "*" + std::to_string(results.size()) + "\r\n";
-    for (const auto& [key, entries] : results) {
-        result += "*2\r\n";
-        result += RespParser::encode_bulk_string(key);
-        result += "*" + std::to_string(entries.size()) + "\r\n";
-        for (const auto& entry : entries) {
-            result += "*2\r\n";
-            result += RespParser::encode_bulk_string(entry.id);
-            result += "*" + std::to_string(entry.fields.size() * 2) + "\r\n";
-            for (const auto& [field, value] : entry.fields) {
-                result += RespParser::encode_bulk_string(field);
-                result += RespParser::encode_bulk_string(value);
-            }
-        }
-    }
-
-    return result;
+    return RespParser::encode_stream_entries(results);
 }
 
 ProcessResult CommandHandler::handle_xread_with_blocking(int fd,
@@ -487,12 +463,12 @@ ProcessResult CommandHandler::handle_xread_with_blocking(int fd,
             if (start_idx + 1 >= args.size()) {
                 return {false, RespParser::encode_error("ERR syntax error")};
             }
-            try {
-                timeout_ms = std::stoll(args[start_idx + 1]);
-            } catch (...) {
+            auto parsed = parse_int<int64_t>(args[start_idx + 1]);
+            if (!parsed) {
                 return {false,
                         RespParser::encode_error("ERR value is not an integer or out of range")};
             }
+            timeout_ms = *parsed;
             start_idx += 2;
         }
     }
@@ -548,23 +524,7 @@ ProcessResult CommandHandler::handle_xread_with_blocking(int fd,
     }
 
     if (has_data || !has_block) {
-        std::string result = "*" + std::to_string(results.size()) + "\r\n";
-        for (const auto& [key, entries] : results) {
-            result += "*2\r\n";
-            result += RespParser::encode_bulk_string(key);
-            result += "*" + std::to_string(entries.size()) + "\r\n";
-            for (const auto& entry : entries) {
-                result += "*2\r\n";
-                result += RespParser::encode_bulk_string(entry.id);
-                result += "*" + std::to_string(entry.fields.size() * 2) + "\r\n";
-                for (const auto& [field, value] : entry.fields) {
-                    result += RespParser::encode_bulk_string(field);
-                    result += RespParser::encode_bulk_string(value);
-                }
-            }
-        }
-
-        return {false, result};
+        return {false, RespParser::encode_stream_entries(results)};
     }
 
     if (blocking_manager_) {
@@ -577,8 +537,9 @@ ProcessResult CommandHandler::handle_xread_with_blocking(int fd,
             id = max_id.value_or("0-0");
         }
 
+        auto sid = StreamId::parse(id).value_or(StreamId{0, 0});
         blocking_manager_->block_client_for_stream(
-            fd, key, id, std::chrono::milliseconds(timeout_ms));
+            fd, key, sid, std::chrono::milliseconds(timeout_ms));
         return {true, ""};
     }
 
@@ -604,20 +565,8 @@ ProcessResult CommandHandler::handle_xadd_with_blocking(
 
     if (blocking_manager_) {
         while (auto blocked = blocking_manager_->wake_client_for_stream(key, new_id)) {
-            auto entries = store_.xread(key, blocked->last_id);
-            std::string response = "*1\r\n";
-            response += "*2\r\n";
-            response += RespParser::encode_bulk_string(key);
-            response += "*" + std::to_string(entries.size()) + "\r\n";
-            for (const auto& entry : entries) {
-                response += "*2\r\n";
-                response += RespParser::encode_bulk_string(entry.id);
-                response += "*" + std::to_string(entry.fields.size() * 2) + "\r\n";
-                for (const auto& [field, value] : entry.fields) {
-                    response += RespParser::encode_bulk_string(field);
-                    response += RespParser::encode_bulk_string(value);
-                }
-            }
+            auto entries = store_.xread(key, blocked->last_id.to_string());
+            auto response = RespParser::encode_stream_entries({{key, std::move(entries)}});
             send_to_blocked(blocked->fd, response);
         }
     }

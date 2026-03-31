@@ -6,7 +6,8 @@
 void test_block_client_for_stream() {
     BlockingManager manager;
 
-    manager.block_client_for_stream(10, "mystream", "100-0", std::chrono::milliseconds(1000));
+    manager.block_client_for_stream(
+        10, "mystream", *StreamId::parse("100-0"), std::chrono::milliseconds(1000));
 
     assert(manager.is_blocked(10));
     assert(manager.blocked_count() == 1);
@@ -17,7 +18,8 @@ void test_block_client_for_stream() {
 void test_wake_client_no_match() {
     BlockingManager manager;
 
-    manager.block_client_for_stream(10, "mystream", "100-0", std::chrono::milliseconds(1000));
+    manager.block_client_for_stream(
+        10, "mystream", *StreamId::parse("100-0"), std::chrono::milliseconds(1000));
 
     auto client = manager.wake_client_for_stream("mystream", "50-0");
 
@@ -30,7 +32,8 @@ void test_wake_client_no_match() {
 void test_wake_client_with_match() {
     BlockingManager manager;
 
-    manager.block_client_for_stream(10, "mystream", "100-0", std::chrono::milliseconds(1000));
+    manager.block_client_for_stream(
+        10, "mystream", *StreamId::parse("100-0"), std::chrono::milliseconds(1000));
 
     auto client = manager.wake_client_for_stream("mystream", "200-0");
 
@@ -45,8 +48,10 @@ void test_wake_client_with_match() {
 void test_multiple_clients_fifo() {
     BlockingManager manager;
 
-    manager.block_client_for_stream(10, "stream", "100-0", std::chrono::milliseconds(1000));
-    manager.block_client_for_stream(20, "stream", "100-0", std::chrono::milliseconds(1000));
+    manager.block_client_for_stream(
+        10, "stream", *StreamId::parse("100-0"), std::chrono::milliseconds(1000));
+    manager.block_client_for_stream(
+        20, "stream", *StreamId::parse("100-0"), std::chrono::milliseconds(1000));
 
     auto client1 = manager.wake_client_for_stream("stream", "200-0");
     assert(client1.has_value());
@@ -62,8 +67,10 @@ void test_multiple_clients_fifo() {
 void test_different_last_ids() {
     BlockingManager manager;
 
-    manager.block_client_for_stream(10, "stream", "100-0", std::chrono::milliseconds(1000));
-    manager.block_client_for_stream(20, "stream", "200-0", std::chrono::milliseconds(1000));
+    manager.block_client_for_stream(
+        10, "stream", *StreamId::parse("100-0"), std::chrono::milliseconds(1000));
+    manager.block_client_for_stream(
+        20, "stream", *StreamId::parse("200-0"), std::chrono::milliseconds(1000));
 
     auto client1 = manager.wake_client_for_stream("stream", "150-0");
     assert(client1.has_value());
@@ -82,8 +89,10 @@ void test_different_last_ids() {
 void test_different_streams() {
     BlockingManager manager;
 
-    manager.block_client_for_stream(10, "stream1", "100-0", std::chrono::milliseconds(1000));
-    manager.block_client_for_stream(20, "stream2", "100-0", std::chrono::milliseconds(1000));
+    manager.block_client_for_stream(
+        10, "stream1", *StreamId::parse("100-0"), std::chrono::milliseconds(1000));
+    manager.block_client_for_stream(
+        20, "stream2", *StreamId::parse("100-0"), std::chrono::milliseconds(1000));
 
     auto client1 = manager.wake_client_for_stream("stream1", "200-0");
     assert(client1.has_value());
@@ -101,7 +110,8 @@ void test_different_streams() {
 void test_timeout_indefinite() {
     BlockingManager manager;
 
-    manager.block_client_for_stream(10, "stream", "100-0", std::chrono::milliseconds(0));
+    manager.block_client_for_stream(
+        10, "stream", *StreamId::parse("100-0"), std::chrono::milliseconds(0));
 
     auto expired = manager.get_expired_clients();
     assert(expired.empty());

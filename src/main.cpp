@@ -14,7 +14,12 @@ int main(int argc, char* argv[]) {
     std::cout << std::unitbuf;
     std::cerr << std::unitbuf;
 
-    Server server(parse_port(argc, argv));
+    auto server_result = Server::create(parse_port(argc, argv));
+    if (!server_result) {
+        std::cerr << server_result.error() << '\n';
+        return 1;
+    }
+    auto server = std::move(*server_result);
     EventLoop event_loop;
     event_loop.add_fd(server.fd());
 

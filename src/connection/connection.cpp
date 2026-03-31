@@ -37,4 +37,12 @@ std::optional<std::string_view> Connection::handle_read() {
     return std::string_view(buffer_.data(), bytes_read_);
 }
 
-void Connection::send_data(const char* data, size_t len) { ::send(fd_, data, len, 0); }
+void Connection::send_data(const char* data, size_t len) {
+    size_t sent = 0;
+    while (sent < len) {
+        auto n = ::send(fd_, data + sent, len - sent, MSG_NOSIGNAL);
+        if (n <= 0)
+            break;
+        sent += static_cast<size_t>(n);
+    }
+}
