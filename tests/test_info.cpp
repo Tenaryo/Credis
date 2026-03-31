@@ -15,9 +15,8 @@ void test_info_replication_returns_role_master() {
     assert(response.starts_with("$"));
     auto crlf = response.find("\r\n");
     assert(crlf != std::string::npos);
-    std::string body = response.substr(crlf + 2);
-    auto end = body.find("\r\n");
-    std::string content = body.substr(0, end);
+    int len = std::stoi(response.substr(1, crlf - 1));
+    std::string content = response.substr(crlf + 2, len);
 
     assert(content.find("# Replication") != std::string::npos);
     assert(content.find("role:master") != std::string::npos);
@@ -35,9 +34,8 @@ void test_info_without_args_returns_replication_section() {
     assert(response.starts_with("$"));
     auto crlf = response.find("\r\n");
     assert(crlf != std::string::npos);
-    std::string body = response.substr(crlf + 2);
-    auto end = body.find("\r\n");
-    std::string content = body.substr(0, end);
+    int len = std::stoi(response.substr(1, crlf - 1));
+    std::string content = response.substr(crlf + 2, len);
 
     assert(content.find("# Replication") != std::string::npos);
     assert(content.find("role:master") != std::string::npos);

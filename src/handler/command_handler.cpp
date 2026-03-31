@@ -184,6 +184,9 @@ CommandHandler::execute_command(const std::vector<std::string>& args,
         }
         return handle_xread_with_blocking(fd, args);
     }
+    if (cmd == "INFO") {
+        return {false, handle_info(args)};
+    }
 
     return {false, RespParser::encode_error("ERR unknown command '" + cmd + "'")};
 }
@@ -299,6 +302,11 @@ std::string CommandHandler::handle_lrange(const std::vector<std::string>& args) 
 
     auto elements = store_.lrange(key, start, stop);
     return RespParser::encode_array(elements);
+}
+
+std::string CommandHandler::handle_info(const std::vector<std::string>& args) {
+    std::string info = "# Replication\r\nrole:master\r\n";
+    return RespParser::encode_bulk_string(info);
 }
 
 ProcessResult CommandHandler::handle_blpop(int fd, const std::vector<std::string>& args) {
