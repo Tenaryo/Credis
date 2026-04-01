@@ -187,6 +187,9 @@ CommandHandler::execute_command(const std::vector<std::string>& args,
     if (cmd == "INFO") {
         return {false, handle_info(args)};
     }
+    if (cmd == "REPLCONF") {
+        return {false, RespParser::encode_simple_string("OK")};
+    }
 
     return {false, RespParser::encode_error("ERR unknown command '" + cmd + "'")};
 }

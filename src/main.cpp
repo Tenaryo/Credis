@@ -15,7 +15,8 @@ int main(int argc, char* argv[]) {
     std::cout << std::unitbuf;
     std::cerr << std::unitbuf;
 
-    auto server_result = Server::create(parse_port(argc, argv));
+    int server_port = parse_port(argc, argv);
+    auto server_result = Server::create(server_port);
     if (!server_result) {
         std::cerr << server_result.error() << '\n';
         return 1;
@@ -36,6 +37,10 @@ int main(int argc, char* argv[]) {
         ReplicaConnector connector(config.replicaof->host, config.replicaof->port);
         if (!connector.send_ping()) {
             std::cerr << "Failed to complete PING handshake with master\n";
+            return 1;
+        }
+        if (!connector.send_replconf(server_port)) {
+            std::cerr << "Failed to complete REPLCONF handshake with master\n";
             return 1;
         }
     }

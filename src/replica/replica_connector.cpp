@@ -1,6 +1,5 @@
 #include "replica_connector.hpp"
 #include "protocol/resp_parser.hpp"
-#include <cstring>
 #include <memory>
 #include <netdb.h>
 #include <sys/socket.h>
@@ -55,14 +54,15 @@ bool ReplicaConnector::connect_to_master() {
     return true;
 }
 
-bool ReplicaConnector::send_ping() {
+bool ReplicaConnector::send_and_expect(const std::vector<std::string>& args,
+                                       std::string_view expected_response) {
     if (fd_ < 0 && !connect_to_master())
         return false;
 
-    auto ping = RespParser::encode_array({"PING"});
+    auto msg = RespParser::encode_array(args);
     size_t sent = 0;
-    while (sent < ping.size()) {
-        auto n = ::send(fd_, ping.data() + sent, ping.size() - sent, MSG_NOSIGNAL);
+    while (sent < msg.size()) {
+        auto n = ::send(fd_, msg.data() + sent, msg.size() - sent, MSG_NOSIGNAL);
         if (n <= 0)
             return false;
         sent += static_cast<size_t>(n);
@@ -73,7 +73,13 @@ bool ReplicaConnector::send_ping() {
     if (n <= 0)
         return false;
 
-    return std::string_view(buf, static_cast<size_t>(n)) == "+PONG\r\n";
+    return std::string_view(buf, static_cast<size_t>(n)) == expected_response;
 }
 
-bool ReplicaConnector::send_replconf([[maybe_unused]] int listening_port) { return false; }
+bool ReplicaConnector::send_ping() { return send_and_expect({"PING"}, "+PONG\r\n"); }
+
+bool ReplicaConnector::send_replconf(int listening_port) {
+    if (!send_and_expect({"REPLCONF", "listening-port", std::to_string(listening_port)}, "+OK\r\n"))
+        return false;
+    return send_and_expect({"REPLCONF", "capa", "psync2"}, "+OK\r\n");
+}

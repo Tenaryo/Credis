@@ -149,7 +149,7 @@ void test_replica_sends_replconf_listening_port() {
     MockMaster::MultiStepResult server_result;
 
     std::thread server_thread([&]() {
-        server_result = master.run_multi_step_handshake({"+PONG\r\n", "+OK\r\n"});
+        server_result = master.run_multi_step_handshake({"+PONG\r\n", "+OK\r\n", "+OK\r\n"});
     });
 
     ReplicaConnector connector("127.0.0.1", port);
@@ -159,7 +159,7 @@ void test_replica_sends_replconf_listening_port() {
     server_thread.join();
 
     assert(server_result.accepted);
-    assert(server_result.messages.size() >= 2);
+    assert(server_result.messages.size() == 3);
     assert(server_result.messages[1] ==
            "*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n6380\r\n");
 

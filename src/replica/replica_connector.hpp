@@ -1,11 +1,15 @@
 #pragma once
 
 #include <string>
+#include <string_view>
+#include <vector>
 
 class ReplicaConnector {
     std::string host_;
     int port_;
     int fd_{-1};
+
+    bool send_and_expect(const std::vector<std::string>& args, std::string_view expected_response);
   public:
     ReplicaConnector(std::string host, int port);
     ~ReplicaConnector();
