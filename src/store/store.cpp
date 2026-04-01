@@ -310,10 +310,12 @@ Store::xrange(std::string_view key, std::string start, std::string end) {
     if (!stream || stream->empty())
         return {};
 
-    auto start_sid = start.find('-') == std::string::npos
+    auto start_sid = start == "-" ? StreamId{0, 0}
+                     : start.find('-') == std::string::npos
                          ? StreamId{parse_int<int64_t>(start).value_or(0), 0}
                          : StreamId::parse(start).value_or(StreamId{INT64_MAX, INT64_MAX});
-    auto end_sid = end.find('-') == std::string::npos
+    auto end_sid = end == "+" ? StreamId{INT64_MAX, INT64_MAX}
+                   : end.find('-') == std::string::npos
                        ? StreamId{parse_int<int64_t>(end).value_or(0), INT64_MAX}
                        : StreamId::parse(end).value_or(StreamId{-1, -1});
 
