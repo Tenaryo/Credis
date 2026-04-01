@@ -69,6 +69,27 @@ class MockMaster {
     }
 };
 
+void test_replica_ping_handshake_with_localhost() {
+    MockMaster master;
+    int port = master.port();
+
+    MockMaster::HandshakeResult server_result;
+
+    std::thread server_thread([&]() { server_result = master.run_ping_handshake(); });
+
+    ReplicaConnector connector("localhost", port);
+    bool success = connector.send_ping();
+
+    server_thread.join();
+
+    assert(success);
+    assert(server_result.accepted);
+    assert(server_result.received == "*1\r\n$4\r\nPING\r\n");
+
+    std::cout << "\u2713 Test 2 passed: replica connects via hostname localhost and completes PING "
+                 "handshake\n";
+}
+
 void test_replica_ping_handshake() {
     MockMaster master;
     int port = master.port();
@@ -93,6 +114,7 @@ int main() {
     std::cout << "Running replica handshake PING tests...\n\n";
 
     test_replica_ping_handshake();
+    test_replica_ping_handshake_with_localhost();
 
     std::cout << "\n\u2713 All tests passed!\n";
     return 0;
