@@ -17,4 +17,5 @@ class ReplicaConnector {
 
     bool connect_to_master();
     bool send_ping();
+    bool send_replconf(int listening_port);
 };
