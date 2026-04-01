@@ -124,6 +124,65 @@ void test_xrange_single_entry() {
     std::cout << "Test 7 passed: XRANGE works with single entry\n";
 }
 
+void test_xrange_dash_start() {
+    Store store;
+    std::vector<std::pair<std::string, std::string>> fields1 = {{"raspberry", "strawberry"}};
+    std::vector<std::pair<std::string, std::string>> fields2 = {{"banana", "apple"}};
+    std::vector<std::pair<std::string, std::string>> fields3 = {{"banana", "orange"}};
+    std::vector<std::pair<std::string, std::string>> fields4 = {{"apple", "mango"}};
+
+    store.xadd("strawberry", "0-1", fields1);
+    store.xadd("strawberry", "0-2", fields2);
+    store.xadd("strawberry", "0-3", fields3);
+    store.xadd("strawberry", "0-4", fields4);
+
+    auto result = store.xrange("strawberry", "-", "0-2");
+
+    assert(result.size() == 2);
+    assert(result[0].id == "0-1");
+    assert(result[0].fields[0].first == "raspberry");
+    assert(result[0].fields[0].second == "strawberry");
+    assert(result[1].id == "0-2");
+    assert(result[1].fields[0].first == "banana");
+    assert(result[1].fields[0].second == "apple");
+
+    std::cout << "Test 8 passed: XRANGE with '-' start returns entries from beginning\n";
+}
+
+void test_xrange_plus_end() {
+    Store store;
+    std::vector<std::pair<std::string, std::string>> fields = {{"key", "value"}};
+
+    store.xadd("stream", "100-0", fields);
+    store.xadd("stream", "200-0", fields);
+    store.xadd("stream", "300-0", fields);
+
+    auto result = store.xrange("stream", "100-0", "+");
+
+    assert(result.size() == 3);
+    assert(result[0].id == "100-0");
+    assert(result[1].id == "200-0");
+    assert(result[2].id == "300-0");
+
+    std::cout << "Test 9 passed: XRANGE with '+' end returns all entries to end\n";
+}
+
+void test_xrange_dash_to_plus() {
+    Store store;
+    std::vector<std::pair<std::string, std::string>> fields = {{"key", "value"}};
+
+    store.xadd("stream", "100-0", fields);
+    store.xadd("stream", "200-0", fields);
+
+    auto result = store.xrange("stream", "-", "+");
+
+    assert(result.size() == 2);
+    assert(result[0].id == "100-0");
+    assert(result[1].id == "200-0");
+
+    std::cout << "Test 10 passed: XRANGE with '-' to '+' returns all entries\n";
+}
+
 int main() {
     std::cout << "Running XRANGE tests...\n\n";
 
@@ -134,6 +193,9 @@ int main() {
     test_xrange_empty_stream();
     test_xrange_no_match();
     test_xrange_single_entry();
+    test_xrange_dash_start();
+    test_xrange_plus_end();
+    test_xrange_dash_to_plus();
 
     std::cout << "\nAll tests passed!\n";
     return 0;
