@@ -75,3 +75,5 @@ bool ReplicaConnector::send_ping() {
 
     return std::string_view(buf, static_cast<size_t>(n)) == "+PONG\r\n";
 }
+
+bool ReplicaConnector::send_replconf([[maybe_unused]] int listening_port) { return false; }
