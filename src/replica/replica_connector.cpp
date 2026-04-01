@@ -56,6 +56,12 @@ bool ReplicaConnector::connect_to_master() {
 
 bool ReplicaConnector::send_and_expect(const std::vector<std::string>& args,
                                        std::string_view expected_response) {
+    return send_and_check(
+        args, [expected_response](std::string_view resp) { return resp == expected_response; });
+}
+
+template <typename Pred>
+bool ReplicaConnector::send_and_check(const std::vector<std::string>& args, Pred&& pred) {
     if (fd_ < 0 && !connect_to_master())
         return false;
 
@@ -73,7 +79,7 @@ bool ReplicaConnector::send_and_expect(const std::vector<std::string>& args,
     if (n <= 0)
         return false;
 
-    return std::string_view(buf, static_cast<size_t>(n)) == expected_response;
+    return pred(std::string_view(buf, static_cast<size_t>(n)));
 }
 
 bool ReplicaConnector::send_ping() { return send_and_expect({"PING"}, "+PONG\r\n"); }
@@ -82,4 +88,9 @@ bool ReplicaConnector::send_replconf(int listening_port) {
     if (!send_and_expect({"REPLCONF", "listening-port", std::to_string(listening_port)}, "+OK\r\n"))
         return false;
     return send_and_expect({"REPLCONF", "capa", "psync2"}, "+OK\r\n");
+}
+
+bool ReplicaConnector::send_psync() {
+    return send_and_check({"PSYNC", "?", "-1"},
+                          [](std::string_view resp) { return resp.starts_with("+FULLRESYNC"); });
 }

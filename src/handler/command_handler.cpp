@@ -190,6 +190,11 @@ CommandHandler::execute_command(const std::vector<std::string>& args,
     if (cmd == "REPLCONF") {
         return {false, RespParser::encode_simple_string("OK")};
     }
+    if (cmd == "PSYNC") {
+        return {false,
+                RespParser::encode_simple_string("FULLRESYNC " + config_.master_replid + " " +
+                                                 std::to_string(config_.master_repl_offset))};
+    }
 
     return {false, RespParser::encode_error("ERR unknown command '" + cmd + "'")};
 }
