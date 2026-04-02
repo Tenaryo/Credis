@@ -9,6 +9,7 @@ class ReplicaConnector {
     std::string host_;
     int port_;
     int fd_{-1};
+    std::string pending_buffer_;
 
     bool send_and_expect(const std::vector<std::string>& args, std::string_view expected_response);
 

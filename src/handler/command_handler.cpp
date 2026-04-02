@@ -4,6 +4,7 @@
 #include "store/store.hpp"
 #include "util/parse.hpp"
 #include <algorithm>
+#include <array>
 #include <cctype>
 
 CommandHandler::CommandHandler(Store& store, const ServerConfig& config)
@@ -191,9 +192,22 @@ CommandHandler::execute_command(const std::vector<std::string>& args,
         return {false, RespParser::encode_simple_string("OK")};
     }
     if (cmd == "PSYNC") {
-        return {false,
-                RespParser::encode_simple_string("FULLRESYNC " + config_.master_replid + " " +
-                                                 std::to_string(config_.master_repl_offset))};
+        static constexpr std::array<char, 88> kEmptyRdb{
+            {'R',    'E',    'D',    'I',    'S',    '0',    '0',    '1',    '1',    '\xfa',
+             '\x09', 'r',    'e',    'd',    'i',    's',    '-',    'v',    'e',    'r',
+             '\x05', '7',    '.',    '2',    '.',    '0',    '\xfa', '\x0a', 'r',    'e',
+             'd',    'i',    's',    '-',    'b',    'i',    't',    's',    '\xc0', '\x40',
+             '\xfa', '\x05', 'c',    't',    'i',    'm',    'e',    '\xc2', '\x6d', '\x08',
+             '\xbc', '\x65', '\xfa', '\x08', 'u',    's',    'e',    'd',    '-',    'm',
+             'e',    'm',    '\xc2', '\xb0', '\xc4', '\x10', '\x00', '\xfa', '\x08', 'a',
+             'o',    'f',    '-',    'b',    'a',    's',    'e',    '\xc0', '\x00', '\xff',
+             '\xf0', '\x6e', '\x3b', '\xfe', '\xc0', '\xff', '\x5a', '\xa2'}};
+
+        auto response = "+FULLRESYNC " + config_.master_replid + " " +
+                        std::to_string(config_.master_repl_offset) + "\r\n";
+        response += "$88\r\n";
+        response.append(kEmptyRdb.begin(), kEmptyRdb.end());
+        return {false, response};
     }
 
     return {false, RespParser::encode_error("ERR unknown command '" + cmd + "'")};

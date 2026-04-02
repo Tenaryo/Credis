@@ -256,14 +256,15 @@ void test_master_handles_psync() {
     std::string input = "*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n";
     auto response = handler.process(input);
 
-    assert(response == "+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n");
+    assert(response.starts_with("+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n"));
 
     std::cout << "\u2713 Test passed: master responds FULLRESYNC to PSYNC\n";
 }
 
-constexpr std::string_view kEmptyRdbHex =
-    "524544495330303131fa0972656469732d76657205371e125227"
-    "0a3c8391000d31d09bfb91e19e5176a";
+constexpr std::string_view kEmptyRdbHex = "524544495330303131fa0972656469732d76657205372e322e30"
+                                          "fa0a72656469732d62697473c040fa056374696d65c26d08bc65"
+                                          "fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000"
+                                          "fff06e3bfec0ff5aa2";
 
 void test_master_psync_includes_empty_rdb() {
     Store store;
@@ -273,44 +274,44 @@ void test_master_psync_includes_empty_rdb() {
     std::string input = "*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n";
     auto response = handler.process(input);
 
-    std::string expected_prefix =
-        "+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n";
+    std::string expected_prefix = "+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n";
     assert(response.starts_with(expected_prefix));
 
     std::string_view rdb_part(response.data() + expected_prefix.size(),
                               response.size() - expected_prefix.size());
 
-    std::array<unsigned char, 41> rdb_bytes{0x52, 0x45, 0x44, 0x49, 0x53, 0x30, 0x30, 0x31,
-                                            0x31, 0xfa, 0x09, 0x72, 0x65, 0x64, 0x69, 0x73,
-                                            0x2d, 0x76, 0x65, 0x72, 0x05, 0x37, 0x1e, 0x12,
-                                            0x52, 0x27, 0x0a, 0x3c, 0x83, 0x91, 0x00, 0xd3,
-                                            0x1d, 0x09, 0xbf, 0xb9, 0x1e, 0x19, 0xe5, 0x17,
-                                            0x6a};
+    std::array<unsigned char, 88> rdb_bytes{
+        0x52, 0x45, 0x44, 0x49, 0x53, 0x30, 0x30, 0x31, 0x31, 0xfa, 0x09, 0x72, 0x65, 0x64, 0x69,
+        0x73, 0x2d, 0x76, 0x65, 0x72, 0x05, 0x37, 0x2e, 0x32, 0x2e, 0x30, 0xfa, 0x0a, 0x72, 0x65,
+        0x64, 0x69, 0x73, 0x2d, 0x62, 0x69, 0x74, 0x73, 0xc0, 0x40, 0xfa, 0x05, 0x63, 0x74, 0x69,
+        0x6d, 0x65, 0xc2, 0x6d, 0x08, 0xbc, 0x65, 0xfa, 0x08, 0x75, 0x73, 0x65, 0x64, 0x2d, 0x6d,
+        0x65, 0x6d, 0xc2, 0xb0, 0xc4, 0x10, 0x00, 0xfa, 0x08, 0x61, 0x6f, 0x66, 0x2d, 0x62, 0x61,
+        0x73, 0x65, 0xc0, 0x00, 0xff, 0xf0, 0x6e, 0x3b, 0xfe, 0xc0, 0xff, 0x5a, 0xa2};
 
-    std::string expected_rdb_header = "$41\r\n";
+    std::string expected_rdb_header = "$88\r\n";
     assert(rdb_part.starts_with(expected_rdb_header));
 
     std::string_view binary_part(rdb_part.data() + expected_rdb_header.size(),
                                  rdb_part.size() - expected_rdb_header.size());
-    assert(binary_part.size() == 41);
-    assert(std::memcmp(binary_part.data(), rdb_bytes.data(), 41) == 0);
+    assert(binary_part.size() == 88);
+    assert(std::memcmp(binary_part.data(), rdb_bytes.data(), 88) == 0);
 
     std::cout
         << "\u2713 Test passed: master PSYNC response includes empty RDB file after FULLRESYNC\n";
 }
 
 void test_replica_receives_rdb() {
-    std::array<unsigned char, 41> rdb_bytes{0x52, 0x45, 0x44, 0x49, 0x53, 0x30, 0x30, 0x31,
-                                            0x31, 0xfa, 0x09, 0x72, 0x65, 0x64, 0x69, 0x73,
-                                            0x2d, 0x76, 0x65, 0x72, 0x05, 0x37, 0x1e, 0x12,
-                                            0x52, 0x27, 0x0a, 0x3c, 0x83, 0x91, 0x00, 0xd3,
-                                            0x1d, 0x09, 0xbf, 0xb9, 0x1e, 0x19, 0xe5, 0x17,
-                                            0x6a};
+    std::array<unsigned char, 88> rdb_bytes{
+        0x52, 0x45, 0x44, 0x49, 0x53, 0x30, 0x30, 0x31, 0x31, 0xfa, 0x09, 0x72, 0x65, 0x64, 0x69,
+        0x73, 0x2d, 0x76, 0x65, 0x72, 0x05, 0x37, 0x2e, 0x32, 0x2e, 0x30, 0xfa, 0x0a, 0x72, 0x65,
+        0x64, 0x69, 0x73, 0x2d, 0x62, 0x69, 0x74, 0x73, 0xc0, 0x40, 0xfa, 0x05, 0x63, 0x74, 0x69,
+        0x6d, 0x65, 0xc2, 0x6d, 0x08, 0xbc, 0x65, 0xfa, 0x08, 0x75, 0x73, 0x65, 0x64, 0x2d, 0x6d,
+        0x65, 0x6d, 0xc2, 0xb0, 0xc4, 0x10, 0x00, 0xfa, 0x08, 0x61, 0x6f, 0x66, 0x2d, 0x62, 0x61,
+        0x73, 0x65, 0xc0, 0x00, 0xff, 0xf0, 0x6e, 0x3b, 0xfe, 0xc0, 0xff, 0x5a, 0xa2};
 
     std::string rdb_file(rdb_bytes.begin(), rdb_bytes.end());
-    std::string fullresync_resp =
-        "+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n";
-    std::string rdb_transfer = "$41\r\n" + rdb_file;
+    std::string fullresync_resp = "+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n";
+    std::string rdb_transfer = "$88\r\n" + rdb_file;
 
     MockMaster master;
     int port = master.port();
@@ -347,26 +348,21 @@ void test_replica_receives_rdb() {
         ::send(client_fd, fullresync_resp.c_str(), fullresync_resp.size(), 0);
         ::send(client_fd, rdb_transfer.c_str(), rdb_transfer.size(), 0);
 
-        char rdb_buf[256]{};
-        auto rdb_n = ::read(client_fd, rdb_buf, sizeof(rdb_buf));
-        if (rdb_n > 0) {
-            received_rdb = std::string(rdb_buf, static_cast<size_t>(rdb_n));
-        }
-
         ::close(client_fd);
     });
 
     ReplicaConnector connector("127.0.0.1", port);
     assert(connector.send_ping());
     assert(connector.send_replconf(6380));
+    assert(connector.send_psync());
 
     auto rdb_result = connector.receive_rdb();
 
     server_thread.join();
 
     assert(rdb_result.has_value());
-    assert(rdb_result->size() == 41);
-    assert(std::memcmp(rdb_result->data(), rdb_bytes.data(), 41) == 0);
+    assert(rdb_result->size() == 88);
+    assert(std::memcmp(rdb_result->data(), rdb_bytes.data(), 88) == 0);
 
     std::cout << "\u2713 Test passed: replica receives empty RDB file after PSYNC\n";
 }

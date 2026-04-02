@@ -47,6 +47,11 @@ int main(int argc, char* argv[]) {
             std::cerr << "Failed to complete PSYNC handshake with master\n";
             return 1;
         }
+        auto rdb = connector.receive_rdb();
+        if (!rdb) {
+            std::cerr << "Failed to receive RDB file from master\n";
+            return 1;
+        }
     }
 
     std::unordered_map<int, std::unique_ptr<Connection>> connections;
