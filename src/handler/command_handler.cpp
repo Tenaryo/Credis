@@ -6,6 +6,16 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <string_view>
+
+namespace {
+bool is_write_command(std::string_view cmd) {
+    using namespace std::string_view_literals;
+    static constexpr auto kWriteCommands =
+        std::array{"SET"sv, "DEL"sv, "INCR"sv, "RPUSH"sv, "LPUSH"sv, "LPOP"sv, "XADD"sv};
+    return std::ranges::find(kWriteCommands, cmd) != kWriteCommands.end();
+}
+} // namespace
 
 CommandHandler::CommandHandler(Store& store, const ServerConfig& config)
     : store_(store), config_(config) {}
@@ -69,7 +79,11 @@ CommandHandler::process_with_fd(int fd,
         return {false, RespParser::encode_simple_string("QUEUED")};
     }
 
-    return execute_command(args, fd, send_to_blocked);
+    auto result = execute_command(args, fd, send_to_blocked);
+    if (is_write_command(cmd)) {
+        result.propagate_args = args;
+    }
+    return result;
 }
 
 ProcessResult
@@ -207,7 +221,9 @@ CommandHandler::execute_command(const std::vector<std::string>& args,
                         std::to_string(config_.master_repl_offset) + "\r\n";
         response += "$88\r\n";
         response.append(kEmptyRdb.begin(), kEmptyRdb.end());
-        return {false, response};
+        ProcessResult psync_result(false, response);
+        psync_result.is_replica_handshake = true;
+        return psync_result;
     }
 
     return {false, RespParser::encode_error("ERR unknown command '" + cmd + "'")};

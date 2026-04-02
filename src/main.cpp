@@ -11,6 +11,8 @@
 #include <memory>
 #include <unordered_map>
 
+#include <unordered_set>
+
 int main(int argc, char* argv[]) {
     std::cout << std::unitbuf;
     std::cerr << std::unitbuf;
@@ -55,6 +57,7 @@ int main(int argc, char* argv[]) {
     }
 
     std::unordered_map<int, std::unique_ptr<Connection>> connections;
+    std::unordered_set<int> replica_fds;
 
     auto get_timeout = [&]() -> std::chrono::milliseconds {
         auto expired = blocking_manager.get_expired_clients();
@@ -93,7 +96,19 @@ int main(int argc, char* argv[]) {
                     if (!result.should_block) {
                         conn.send_data(result.response.c_str(), result.response.size());
                     }
+                    if (result.is_replica_handshake) {
+                        replica_fds.insert(fd);
+                    }
+                    if (!result.propagate_args.empty()) {
+                        auto msg = RespParser::encode_array(result.propagate_args);
+                        for (int rfd : replica_fds) {
+                            if (auto rit = connections.find(rfd); rit != connections.end()) {
+                                rit->second->send_data(msg.c_str(), msg.size());
+                            }
+                        }
+                    }
                 } else {
+                    replica_fds.erase(fd);
                     blocking_manager.unblock_client(fd);
                     event_loop.remove_fd(fd);
                     connections.erase(it);
