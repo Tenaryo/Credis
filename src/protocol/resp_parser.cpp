@@ -71,6 +71,28 @@ std::string RespParser::encode_array(const std::vector<std::string>& elements) {
     return result;
 }
 
+std::string RespParser::encode_raw_array(std::vector<std::string> raw_elements) {
+    std::string result = "*" + std::to_string(raw_elements.size()) + "\r\n";
+    for (auto& elem : raw_elements) {
+        result += std::move(elem);
+    }
+    return result;
+}
+
+std::string RespParser::encode_entries(const std::vector<Redis::StreamEntry>& entries) {
+    std::string result = "*" + std::to_string(entries.size()) + "\r\n";
+    for (const auto& entry : entries) {
+        result += "*2\r\n";
+        result += encode_bulk_string(entry.id);
+        result += "*" + std::to_string(entry.fields.size() * 2) + "\r\n";
+        for (const auto& [field, value] : entry.fields) {
+            result += encode_bulk_string(field);
+            result += encode_bulk_string(value);
+        }
+    }
+    return result;
+}
+
 std::string RespParser::encode_error(std::string_view s) { return "-" + std::string(s) + "\r\n"; }
 
 std::string RespParser::encode_null_array() { return "*-1\r\n"; }
@@ -81,16 +103,7 @@ std::string RespParser::encode_stream_entries(
     for (const auto& [key, entries] : streams) {
         result += "*2\r\n";
         result += encode_bulk_string(key);
-        result += "*" + std::to_string(entries.size()) + "\r\n";
-        for (const auto& entry : entries) {
-            result += "*2\r\n";
-            result += encode_bulk_string(entry.id);
-            result += "*" + std::to_string(entry.fields.size() * 2) + "\r\n";
-            for (const auto& [field, value] : entry.fields) {
-                result += encode_bulk_string(field);
-                result += encode_bulk_string(value);
-            }
-        }
+        result += encode_entries(entries);
     }
     return result;
 }
