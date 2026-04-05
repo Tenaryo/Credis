@@ -17,9 +17,14 @@ std::expected<RedisApp, std::string> RedisApp::create(const AppConfig& config) {
 
 bool RedisApp::perform_replica_handshake() {
     const auto& rc = handler_.config().replicaof;
-    ReplicaConnector connector(rc->host, rc->port);
-    return connector.send_ping() && connector.send_replconf(listening_port_) &&
-           connector.send_psync() && connector.receive_rdb().has_value();
+    auto connector = std::make_unique<ReplicaConnector>(rc->host, rc->port);
+    connector->set_handler(handler_);
+    if (!connector->send_ping() || !connector->send_replconf(listening_port_) ||
+        !connector->send_psync() || !connector->receive_rdb().has_value()) {
+        return false;
+    }
+    replica_connector_ = std::move(connector);
+    return true;
 }
 
 std::chrono::milliseconds RedisApp::compute_timeout() {
@@ -44,6 +49,13 @@ void RedisApp::send_to_blocked(int fd, const std::string& response) {
 }
 
 void RedisApp::on_event(int fd) {
+    if (replica_connector_ && fd == replica_connector_->master_fd()) {
+        if (!replica_connector_->process_propagated_commands()) {
+            event_loop_.stop();
+        }
+        return;
+    }
+
     if (fd == server_.fd()) {
         if (auto client = server_.accept_connection()) {
             connections_[*client] = std::make_unique<Connection>(*client);
@@ -91,6 +103,7 @@ int RedisApp::run() {
             std::cerr << "Failed to complete replica handshake\n";
             return 1;
         }
+        event_loop_.add_fd(replica_connector_->master_fd());
     }
 
     handler_.set_blocking_manager(&blocking_manager_);

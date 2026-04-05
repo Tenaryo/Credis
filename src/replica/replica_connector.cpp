@@ -1,4 +1,5 @@
 #include "replica_connector.hpp"
+#include "handler/command_handler.hpp"
 #include "protocol/resp_parser.hpp"
 #include <charconv>
 #include <cstring>
@@ -185,4 +186,28 @@ std::optional<std::string> ReplicaConnector::receive_rdb() {
             return std::nullopt;
         header_buf.append(buf, static_cast<size_t>(n));
     }
+}
+
+auto ReplicaConnector::process_propagated_commands() -> bool {
+    if (fd_ < 0 || !handler_)
+        return false;
+
+    char buf[4096];
+    auto n = ::read(fd_, buf, sizeof(buf));
+    if (n <= 0)
+        return false;
+
+    pending_buffer_.append(buf, static_cast<size_t>(n));
+
+    while (true) {
+        auto result = RespParser::parse_one(pending_buffer_);
+        if (!result)
+            break;
+
+        auto resp = std::string_view(pending_buffer_.data(), result->consumed);
+        handler_->process(resp);
+        pending_buffer_.erase(0, result->consumed);
+    }
+
+    return true;
 }

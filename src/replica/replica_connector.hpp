@@ -5,11 +5,14 @@
 #include <string_view>
 #include <vector>
 
+class CommandHandler;
+
 class ReplicaConnector {
     std::string host_;
     int port_;
     int fd_{-1};
     std::string pending_buffer_;
+    CommandHandler* handler_{nullptr};
 
     bool send_and_expect(const std::vector<std::string>& args, std::string_view expected_response);
 
@@ -28,4 +31,8 @@ class ReplicaConnector {
     bool send_replconf(int listening_port);
     bool send_psync();
     std::optional<std::string> receive_rdb();
+
+    void set_handler(CommandHandler& handler) { handler_ = &handler; }
+    auto process_propagated_commands() -> bool;
+    [[nodiscard]] auto master_fd() const noexcept -> int { return fd_; }
 };

@@ -8,7 +8,13 @@
 
 class RespParser {
   public:
+    struct ParsedCommand {
+        std::vector<std::string> args;
+        size_t consumed;
+    };
+
     static std::expected<std::vector<std::string>, std::string> parse(std::string_view input);
+    static auto parse_one(std::string_view input) -> std::expected<ParsedCommand, std::string>;
 
     static std::string encode_simple_string(std::string_view s);
     static std::string encode_bulk_string(std::string_view s);
