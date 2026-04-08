@@ -51,7 +51,8 @@ void RedisApp::send_to_blocked(int fd, const std::string& response) {
 void RedisApp::on_event(int fd) {
     if (replica_connector_ && fd == replica_connector_->master_fd()) {
         if (!replica_connector_->process_propagated_commands()) {
-            event_loop_.stop();
+            event_loop_.remove_fd(replica_connector_->master_fd());
+            replica_connector_.reset();
         }
         return;
     }
