@@ -1,7 +1,10 @@
 #include "../src/handler/command_handler.hpp"
 #include "../src/protocol/resp_parser.hpp"
+#include "../src/replica/replica_connector.hpp"
+#include "../src/server/server_config.hpp"
 #include "../src/store/store.hpp"
 #include <arpa/inet.h>
+#include <array>
 #include <atomic>
 #include <cassert>
 #include <cstring>
@@ -319,6 +322,90 @@ void test_replica_handles_various_command_types() {
     std::cout << "\u2713 Test passed: replica handles various command types\n";
 }
 
+void test_replica_continues_after_master_disconnect() {
+    constexpr std::array<unsigned char, 88> kRdbBytes{
+        0x52, 0x45, 0x44, 0x49, 0x53, 0x30, 0x30, 0x31, 0x31, 0xfa, 0x09, 0x72, 0x65, 0x64, 0x69,
+        0x73, 0x2d, 0x76, 0x65, 0x72, 0x05, 0x37, 0x2e, 0x32, 0x2e, 0x30, 0xfa, 0x0a, 0x72, 0x65,
+        0x64, 0x69, 0x73, 0x2d, 0x62, 0x69, 0x74, 0x73, 0xc0, 0x40, 0xfa, 0x05, 0x63, 0x74, 0x69,
+        0x6d, 0x65, 0xc2, 0x6d, 0x08, 0xbc, 0x65, 0xfa, 0x08, 0x75, 0x73, 0x65, 0x64, 0x2d, 0x6d,
+        0x65, 0x6d, 0xc2, 0xb0, 0xc4, 0x10, 0x00, 0xfa, 0x08, 0x61, 0x6f, 0x66, 0x2d, 0x62, 0x61,
+        0x73, 0x65, 0xc0, 0x00, 0xff, 0xf0, 0x6e, 0x3b, 0xfe, 0xc0, 0xff, 0x5a, 0xa2};
+
+    int server_fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    assert(server_fd >= 0);
+    int reuse = 1;
+    ::setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+    struct sockaddr_in addr {};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = htons(0);
+    assert(::bind(server_fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) == 0);
+    assert(::listen(server_fd, 1) == 0);
+    socklen_t len = sizeof(addr);
+    ::getsockname(server_fd, reinterpret_cast<struct sockaddr*>(&addr), &len);
+    int master_port = ntohs(addr.sin_port);
+
+    std::string rdb_file(kRdbBytes.begin(), kRdbBytes.end());
+
+    std::thread master_thread([&]() {
+        int client_fd = ::accept(server_fd, nullptr, nullptr);
+        assert(client_fd >= 0);
+
+        auto read_msg = [&]() -> std::string {
+            char buf[512]{};
+            auto n = ::read(client_fd, buf, sizeof(buf));
+            return n > 0 ? std::string(buf, static_cast<size_t>(n)) : std::string{};
+        };
+
+        read_msg();
+        ::send(client_fd, "+PONG\r\n", 7, 0);
+        read_msg();
+        ::send(client_fd, "+OK\r\n", 5, 0);
+        read_msg();
+        ::send(client_fd, "+OK\r\n", 5, 0);
+        read_msg();
+        std::string fullresync = "+FULLRESYNC abc 0\r\n";
+        ::send(client_fd, fullresync.c_str(), fullresync.size(), 0);
+        std::string rdb_transfer = "$88\r\n" + rdb_file;
+        ::send(client_fd, rdb_transfer.c_str(), rdb_transfer.size(), 0);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+        auto set_cmd = RespParser::encode_array({"SET", "key1", "val1"});
+        ::send(client_fd, set_cmd.c_str(), set_cmd.size(), MSG_NOSIGNAL);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        ::close(client_fd);
+    });
+
+    ReplicaConnector connector("127.0.0.1", master_port);
+    Store store;
+    ServerConfig config;
+    CommandHandler handler(store, config);
+    connector.set_handler(handler);
+
+    assert(connector.send_ping());
+    assert(connector.send_replconf(6380));
+    assert(connector.send_psync());
+    assert(connector.receive_rdb().has_value());
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    assert(connector.process_propagated_commands());
+    auto val = store.get("key1");
+    assert(val.has_value() && *val == "val1");
+
+    bool eof_result = connector.process_propagated_commands();
+    assert(!eof_result);
+
+    auto val_after = store.get("key1");
+    assert(val_after.has_value() && *val_after == "val1");
+
+    master_thread.join();
+    ::close(server_fd);
+
+    std::cout << "\u2713 Test passed: replica store remains intact after master EOF\n";
+}
+
 int main() {
     std::cout << "Running replica command processing tests...\n\n";
 
@@ -329,6 +416,7 @@ int main() {
     test_replica_applies_multiple_commands_in_one_read();
     test_replica_does_not_reply_to_master();
     test_replica_handles_various_command_types();
+    test_replica_continues_after_master_disconnect();
 
     std::cout << "\n\u2713 All tests passed!\n";
     return 0;
