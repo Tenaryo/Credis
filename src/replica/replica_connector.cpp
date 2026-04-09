@@ -179,6 +179,12 @@ std::optional<std::string> ReplicaConnector::receive_rdb() {
                 copied += static_cast<size_t>(rd);
             }
 
+            if (available > static_cast<size_t>(len)) {
+                size_t extra_offset = header_size + static_cast<size_t>(len);
+                pending_buffer_.assign(header_buf.data() + extra_offset,
+                                       header_buf.size() - extra_offset);
+            }
+
             return rdb_data;
         }
 

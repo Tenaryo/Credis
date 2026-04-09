@@ -212,6 +212,11 @@ int RedisApp::run() {
             return 1;
         }
         event_loop_.add_fd(replica_connector_->master_fd());
+
+        auto responses = replica_connector_->process_pending_buffer();
+        if (!responses.empty()) {
+            replica_connector_->send_response(responses);
+        }
     }
 
     handler_.set_blocking_manager(&blocking_manager_);
