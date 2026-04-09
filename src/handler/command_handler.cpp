@@ -227,8 +227,11 @@ CommandHandler::execute_command(const std::vector<std::string>& args,
         if (!numreplicas || !timeout) {
             return {false, RespParser::encode_error("ERR value is not an integer or out of range")};
         }
-        size_t count = replica_count_fn_ ? replica_count_fn_() : 0;
-        return {false, RespParser::encode_integer(static_cast<int64_t>(count))};
+        ProcessResult result;
+        result.is_wait = true;
+        result.wait_numreplicas = *numreplicas;
+        result.wait_timeout_ms = *timeout;
+        return result;
     }
     if (cmd == "PSYNC") {
         auto response = "+FULLRESYNC " + config_.master_replid + " " +

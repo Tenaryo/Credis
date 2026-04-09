@@ -288,60 +288,65 @@ int handshake_replica(int port) {
     return fd;
 }
 
-void consume_propagated(int replica_fd) { recv_all(replica_fd, 50); }
+struct ReplicaState {
+    int fd;
+    int64_t offset{0};
+    std::string buffer;
 
-void send_ack_for_replicated(int replica_fd) {
-    std::string accumulated;
-    char buf[4096];
-    while (true) {
-        struct timeval tv {
-            .tv_sec = 0, .tv_usec = 50000
-        };
-        fd_set set;
-        FD_ZERO(&set);
-        FD_SET(replica_fd, &set);
-        int n = ::select(replica_fd + 1, &set, nullptr, nullptr, &tv);
-        if (n <= 0)
-            break;
-        auto rd = ::read(replica_fd, buf, sizeof(buf));
-        if (rd <= 0)
-            break;
-        accumulated.append(buf, static_cast<size_t>(rd));
+    explicit ReplicaState(int fd) : fd(fd) {}
+
+    void drain_and_respond(int timeout_ms = 50) {
+        char buf[4096];
+        while (true) {
+            struct timeval tv {
+                .tv_sec = 0, .tv_usec = timeout_ms * 1000
+            };
+            fd_set set;
+            FD_ZERO(&set);
+            FD_SET(fd, &set);
+            int n = ::select(fd + 1, &set, nullptr, nullptr, &tv);
+            if (n <= 0)
+                break;
+            auto rd = ::read(fd, buf, sizeof(buf));
+            if (rd <= 0)
+                break;
+            buffer.append(buf, static_cast<size_t>(rd));
+        }
+
+        while (auto result = RespParser::parse_one(buffer)) {
+            offset += static_cast<int64_t>(result->consumed);
+            auto& args = result->args;
+            if (args.size() >= 2 && to_upper(args[0]) == "REPLCONF" &&
+                to_upper(args[1]) == "GETACK") {
+                send_resp(fd, {"REPLCONF", "ACK", std::to_string(offset)});
+            }
+            buffer.erase(0, result->consumed);
+        }
     }
-
-    int64_t offset = 0;
-    auto view = std::string_view(accumulated);
-    while (auto result = RespParser::parse_one(view)) {
-        offset += static_cast<int64_t>(result->consumed);
-        view = view.substr(result->consumed);
-    }
-
-    send_resp(replica_fd, {"REPLCONF", "ACK", std::to_string(offset)});
-}
+};
 
 } // namespace
 
 void test_wait_with_replica_ack() {
     TestServer server;
 
-    int replica_fd = handshake_replica(server.port());
+    ReplicaState replica(handshake_replica(server.port()));
     int client_fd = tcp_connect(server.port());
 
     send_resp(client_fd, {"SET", "foo", "123"});
-    auto resp = recv_all(client_fd);
-    assert(resp == "+OK\r\n");
+    assert(recv_all(client_fd) == "+OK\r\n");
+
+    replica.drain_and_respond();
 
     send_resp(client_fd, {"WAIT", "1", "5000"});
 
-    consume_propagated(replica_fd);
-
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    send_ack_for_replicated(replica_fd);
+    replica.drain_and_respond();
 
-    resp = recv_all(client_fd, 3000);
+    auto resp = recv_all(client_fd, 3000);
     assert(resp == ":1\r\n");
 
-    ::close(replica_fd);
+    ::close(replica.fd);
     ::close(client_fd);
 
     std::cout << "\u2713 Test passed: WAIT with replica ACK returns confirmed count\n";
@@ -350,22 +355,23 @@ void test_wait_with_replica_ack() {
 void test_wait_timeout_returns_partial() {
     TestServer server;
 
-    int replica_fd = handshake_replica(server.port());
+    ReplicaState replica(handshake_replica(server.port()));
     int client_fd = tcp_connect(server.port());
 
     send_resp(client_fd, {"SET", "foo", "bar"});
     recv_all(client_fd);
 
+    replica.drain_and_respond();
+
     send_resp(client_fd, {"WAIT", "2", "200"});
 
-    consume_propagated(replica_fd);
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    send_ack_for_replicated(replica_fd);
+    replica.drain_and_respond();
 
     auto resp = recv_all(client_fd, 2000);
     assert(resp == ":1\r\n");
 
-    ::close(replica_fd);
+    ::close(replica.fd);
     ::close(client_fd);
 
     std::cout << "\u2713 Test passed: WAIT timeout returns partial acknowledgment count\n";
@@ -374,7 +380,7 @@ void test_wait_timeout_returns_partial() {
 void test_wait_no_writes_returns_replica_count() {
     TestServer server;
 
-    int replica_fd = handshake_replica(server.port());
+    ReplicaState replica(handshake_replica(server.port()));
     int client_fd = tcp_connect(server.port());
 
     send_resp(client_fd, {"WAIT", "1", "5000"});
@@ -382,7 +388,7 @@ void test_wait_no_writes_returns_replica_count() {
     auto resp = recv_all(client_fd, 1000);
     assert(resp == ":1\r\n");
 
-    ::close(replica_fd);
+    ::close(replica.fd);
     ::close(client_fd);
 
     std::cout << "\u2713 Test passed: WAIT without writes returns replica count immediately\n";
