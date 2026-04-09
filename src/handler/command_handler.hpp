@@ -17,6 +17,9 @@ struct ProcessResult {
     std::string response;
     bool is_replica_handshake{false};
     std::vector<std::string> propagate_args;
+    bool is_wait{false};
+    int64_t wait_numreplicas{0};
+    int64_t wait_timeout_ms{0};
 
     ProcessResult() = default;
     ProcessResult(bool block, std::string resp) : should_block(block), response(std::move(resp)) {}
