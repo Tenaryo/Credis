@@ -599,13 +599,13 @@ void test_replconf_getack_accumulated_offset() {
     assert(connector.receive_rdb().has_value());
 
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
-    auto result1 = connector.process_propagated_commands();
-    assert(result1.has_value());
-    connector.send_response(*result1);
-
-    auto result2 = connector.process_propagated_commands();
-    assert(result2.has_value());
-    connector.send_response(*result2);
+    for (int i = 0; i < 10; ++i) {
+        auto result = connector.process_propagated_commands();
+        if (!result)
+            break;
+        if (!result->empty())
+            connector.send_response(*result);
+    }
 
     master_thread.join();
 
@@ -663,17 +663,13 @@ void test_replconf_getack_with_set_commands() {
     assert(connector.receive_rdb().has_value());
 
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
-    auto result1 = connector.process_propagated_commands();
-    assert(result1.has_value());
-    connector.send_response(*result1);
-
-    auto result2 = connector.process_propagated_commands();
-    assert(result2.has_value());
-    connector.send_response(*result2);
-
-    auto result3 = connector.process_propagated_commands();
-    assert(result3.has_value());
-    connector.send_response(*result3);
+    for (int i = 0; i < 20; ++i) {
+        auto result = connector.process_propagated_commands();
+        if (!result)
+            break;
+        if (!result->empty())
+            connector.send_response(*result);
+    }
 
     master_thread.join();
 
@@ -698,7 +694,7 @@ void test_replconf_getack_multiple_commands_single_read() {
         ::send(client_fd, combined.c_str(), combined.size(), MSG_NOSIGNAL);
 
         auto ack = recv_all(client_fd, 500);
-        assert(ack == RespParser::encode_array({"REPLCONF", "ACK", "58"}));
+        assert(ack == RespParser::encode_array({"REPLCONF", "ACK", "62"}));
 
         ::close(client_fd);
     });

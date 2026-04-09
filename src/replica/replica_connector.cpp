@@ -19,7 +19,7 @@ ReplicaConnector::~ReplicaConnector() {
 
 ReplicaConnector::ReplicaConnector(ReplicaConnector&& other) noexcept
     : host_(std::move(other.host_)), port_(other.port_), fd_(other.fd_),
-      pending_buffer_(std::move(other.pending_buffer_)) {
+      pending_buffer_(std::move(other.pending_buffer_)), offset_(other.offset_) {
     other.fd_ = -1;
 }
 
@@ -31,6 +31,7 @@ ReplicaConnector& ReplicaConnector::operator=(ReplicaConnector&& other) noexcept
         port_ = other.port_;
         fd_ = other.fd_;
         pending_buffer_ = std::move(other.pending_buffer_);
+        offset_ = other.offset_;
         other.fd_ = -1;
     }
     return *this;
@@ -206,15 +207,16 @@ auto ReplicaConnector::process_propagated_commands() -> std::optional<std::strin
         if (!result)
             break;
 
-        auto resp = std::string_view(pending_buffer_.data(), result->consumed);
         bool is_getack = result->args.size() >= 2 && to_upper(result->args[0]) == "REPLCONF" &&
                          to_upper(result->args[1]) == "GETACK";
 
         if (is_getack) {
-            responses += handler_->process(resp);
+            responses += RespParser::encode_array({"REPLCONF", "ACK", std::to_string(offset_)});
         } else {
+            auto resp = std::string_view(pending_buffer_.data(), result->consumed);
             handler_->process(resp);
         }
+        offset_ += result->consumed;
         pending_buffer_.erase(0, result->consumed);
     }
 

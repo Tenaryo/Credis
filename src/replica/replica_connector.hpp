@@ -12,6 +12,7 @@ class ReplicaConnector {
     int port_;
     int fd_{-1};
     std::string pending_buffer_;
+    int64_t offset_{0};
     CommandHandler* handler_{nullptr};
 
     bool send_and_expect(const std::vector<std::string>& args, std::string_view expected_response);
