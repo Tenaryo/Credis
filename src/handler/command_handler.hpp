@@ -62,6 +62,7 @@ class CommandHandler {
     std::string handle_lpop(const std::vector<std::string>& args);
     std::string handle_lrange(const std::vector<std::string>& args);
     std::string handle_info(const std::vector<std::string>& args);
+    std::string handle_config_get(const std::string& param);
     std::string handle_xadd(const std::vector<std::string>& args);
     std::string handle_xrange(const std::vector<std::string>& args);
     std::string handle_xread(const std::vector<std::string>& args);

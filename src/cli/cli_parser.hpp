@@ -29,3 +29,21 @@ inline std::optional<ReplicaOfConfig> parse_replicaof(int argc, char* argv[]) {
     }
     return std::nullopt;
 }
+
+inline std::string parse_dir(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i) {
+        if (std::string_view(argv[i]) == "--dir" && i + 1 < argc) {
+            return argv[i + 1];
+        }
+    }
+    return "";
+}
+
+inline std::string parse_dbfilename(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i) {
+        if (std::string_view(argv[i]) == "--dbfilename" && i + 1 < argc) {
+            return argv[i + 1];
+        }
+    }
+    return "";
+}

@@ -211,6 +211,13 @@ CommandHandler::execute_command(const std::vector<std::string>& args,
     if (cmd == "INFO") {
         return {false, handle_info(args)};
     }
+    if (cmd == "CONFIG") {
+        if (args.size() < 3 || to_upper(args[1]) != "GET") {
+            return {false,
+                    RespParser::encode_error("ERR wrong number of arguments for 'config' command")};
+        }
+        return {false, handle_config_get(args[2])};
+    }
     if (cmd == "REPLCONF") {
         if (args.size() >= 2 && to_upper(args[1]) == "GETACK") {
             return {false, RespParser::encode_array({"REPLCONF", "ACK", "0"})};
@@ -598,4 +605,20 @@ ProcessResult CommandHandler::handle_xadd_with_blocking(
     }
 
     return {false, RespParser::encode_bulk_string(new_id)};
+}
+
+std::string CommandHandler::handle_config_get(const std::string& param) {
+    auto upper = to_upper(param);
+    if (upper == "DIR") {
+        auto value = config_.dir.empty() ? RespParser::encode_null_bulk_string()
+                                         : RespParser::encode_bulk_string(config_.dir);
+        return "*2\r\n$3\r\ndir\r\n" + value;
+    }
+    if (upper == "DBFILENAME") {
+        auto value = config_.dbfilename.empty()
+                         ? RespParser::encode_null_bulk_string()
+                         : RespParser::encode_bulk_string(config_.dbfilename);
+        return "*2\r\n$10\r\ndbfilename\r\n" + value;
+    }
+    return RespParser::encode_array({});
 }

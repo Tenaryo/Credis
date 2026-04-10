@@ -9,6 +9,8 @@ int main(int argc, char* argv[]) {
     AppConfig config;
     config.port = parse_port(argc, argv);
     config.server_config.replicaof = parse_replicaof(argc, argv);
+    config.server_config.dir = parse_dir(argc, argv);
+    config.server_config.dbfilename = parse_dbfilename(argc, argv);
 
     auto app = RedisApp::create(config);
     if (!app) {
