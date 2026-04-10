@@ -13,4 +13,9 @@ class PubSubManager {
     }
 
     void unsubscribe(int fd) { subscriptions_.erase(fd); }
+
+    [[nodiscard]] bool is_subscribed(int fd) const noexcept {
+        auto it = subscriptions_.find(fd);
+        return it != subscriptions_.end() && !it->second.empty();
+    }
 };

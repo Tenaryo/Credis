@@ -52,6 +52,20 @@ CommandHandler::process_with_fd(int fd,
     std::string& cmd = args[0];
     cmd = to_upper(std::move(cmd));
 
+    if (pubsub_manager_ && pubsub_manager_->is_subscribed(fd)) {
+        static constexpr auto kSubscribedAllowed = std::array{"SUBSCRIBE"sv,
+                                                              "UNSUBSCRIBE"sv,
+                                                              "PSUBSCRIBE"sv,
+                                                              "PUNSUBSCRIBE"sv,
+                                                              "PING"sv,
+                                                              "QUIT"sv,
+                                                              "RESET"sv};
+        if (std::ranges::find(kSubscribedAllowed, cmd) == kSubscribedAllowed.end()) {
+            return {false,
+                    RespParser::encode_error("ERR Can't execute '" + cmd + "' in subscribed mode")};
+        }
+    }
+
     if (cmd == "MULTI") {
         transactions_[fd].in_multi = true;
         return {false, RespParser::encode_simple_string("OK")};
