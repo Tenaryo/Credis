@@ -69,6 +69,7 @@ class CommandHandler {
     std::string handle_xadd(const std::vector<std::string>& args);
     std::string handle_xrange(const std::vector<std::string>& args);
     std::string handle_xread(const std::vector<std::string>& args);
+    std::string handle_zadd(const std::vector<std::string>& args);
     ProcessResult handle_xread_with_blocking(int fd, const std::vector<std::string>& args);
     ProcessResult
     handle_xadd_with_blocking(const std::vector<std::string>& args,
