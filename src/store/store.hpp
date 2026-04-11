@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <deque>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -24,7 +25,25 @@ struct StreamEntry {
 
 using Stream = std::deque<StreamEntry>;
 
-using Value = std::variant<String, List, Stream>;
+struct SortedSet {
+    std::set<std::pair<double, std::string>> entries;
+    std::unordered_map<std::string, double> member_scores;
+
+    int64_t add(double score, std::string member) {
+        auto it = member_scores.find(member);
+        if (it != member_scores.end()) {
+            entries.erase({it->second, member});
+            it->second = score;
+            entries.emplace(score, member);
+            return 0;
+        }
+        member_scores.emplace(member, score);
+        entries.emplace(score, std::move(member));
+        return 1;
+    }
+};
+
+using Value = std::variant<String, List, Stream, SortedSet>;
 } // namespace Redis
 
 class Store {
@@ -42,6 +61,7 @@ class Store {
     Redis::List* get_or_create_list(std::string key);
     Redis::Stream* get_stream(std::string_view key);
     Redis::Stream* get_or_create_stream(std::string key);
+    Redis::SortedSet* get_or_create_zset(std::string key);
 
     static size_t lower_bound(const Redis::Stream& stream, const StreamId& target);
     static size_t upper_bound(const Redis::Stream& stream, const StreamId& target);
@@ -69,6 +89,8 @@ class Store {
     std::vector<Redis::StreamEntry> xread(std::string_view key, std::string id);
 
     std::optional<std::string> get_stream_max_id(std::string_view key);
+
+    int64_t zadd(std::string key, double score, std::string member);
 
     std::string get_type(std::string_view key);
     std::vector<std::string> keys();

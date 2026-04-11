@@ -12,7 +12,7 @@ using namespace std::string_view_literals;
 
 bool is_write_command(std::string_view cmd) {
     static constexpr auto kWriteCommands =
-        std::array{"SET"sv, "DEL"sv, "INCR"sv, "RPUSH"sv, "LPUSH"sv, "LPOP"sv, "XADD"sv};
+        std::array{"SET"sv, "DEL"sv, "INCR"sv, "RPUSH"sv, "LPUSH"sv, "LPOP"sv, "XADD"sv, "ZADD"sv};
     return std::ranges::find(kWriteCommands, cmd) != kWriteCommands.end();
 }
 
@@ -218,6 +218,13 @@ CommandHandler::execute_command(const std::vector<std::string>& args,
                     RespParser::encode_error("ERR wrong number of arguments for 'xadd' command")};
         }
         return handle_xadd_with_blocking(args, send_to_client);
+    }
+    if (cmd == "ZADD") {
+        if (args.size() < 4) {
+            return {false,
+                    RespParser::encode_error("ERR wrong number of arguments for 'zadd' command")};
+        }
+        return {false, handle_zadd(args)};
     }
     if (cmd == "XRANGE") {
         if (args.size() < 4) {
@@ -499,6 +506,18 @@ ProcessResult CommandHandler::handle_lpush_with_blocking(
         count = store_.lpush(key, args[i]);
     }
     return {false, RespParser::encode_integer(count)};
+}
+
+std::string CommandHandler::handle_zadd(const std::vector<std::string>& args) {
+    const std::string& key = args[1];
+    double score;
+    try {
+        score = std::stod(args[2]);
+    } catch (...) {
+        return RespParser::encode_error("ERR value is not a valid float");
+    }
+    auto added = store_.zadd(key, score, args[3]);
+    return RespParser::encode_integer(added);
 }
 
 std::string CommandHandler::handle_xadd(const std::vector<std::string>& args) {
