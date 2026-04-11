@@ -47,4 +47,11 @@ class PubSubManager {
         auto it = channel_subscribers_.find(channel);
         return it != channel_subscribers_.end() ? it->second.size() : 0;
     }
+
+    [[nodiscard]] const std::unordered_set<int>&
+    get_subscribers(std::string_view channel) const noexcept {
+        static const std::unordered_set<int> kEmpty;
+        auto it = channel_subscribers_.find(channel);
+        return it != channel_subscribers_.end() ? it->second : kEmpty;
+    }
 };

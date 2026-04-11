@@ -59,7 +59,7 @@ std::chrono::milliseconds RedisApp::compute_timeout() {
                : std::chrono::duration_cast<std::chrono::milliseconds>(*earliest - now);
 }
 
-void RedisApp::send_to_blocked(int fd, const std::string& response) {
+void RedisApp::send_to_client(int fd, const std::string& response) {
     if (auto it = connections_.find(fd); it != connections_.end()) {
         it->second->send_data(response.c_str(), response.size());
     }
@@ -155,7 +155,7 @@ void RedisApp::on_event(int fd) {
     Connection& conn = *it->second;
     if (auto data = conn.handle_read()) {
         auto result = handler_.process_with_fd(
-            fd, *data, [this](int fd, const std::string& resp) { send_to_blocked(fd, resp); });
+            fd, *data, [this](int fd, const std::string& resp) { send_to_client(fd, resp); });
 
         if (result.is_wait) {
             int acked = count_acked_replicas_for(master_offset_);

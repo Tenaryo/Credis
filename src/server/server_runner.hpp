@@ -47,7 +47,7 @@ class RedisApp {
 
     void on_event(int fd);
     std::chrono::milliseconds compute_timeout();
-    void send_to_blocked(int fd, const std::string& response);
+    void send_to_client(int fd, const std::string& response);
     bool perform_replica_handshake();
     void handle_replica_ack(int fd);
     int count_acked_replicas() const;

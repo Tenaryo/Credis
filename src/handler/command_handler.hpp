@@ -49,11 +49,11 @@ class CommandHandler {
     std::string process(std::string_view input);
     ProcessResult process_with_fd(int fd,
                                   std::string_view input,
-                                  std::function<void(int, const std::string&)> send_to_blocked);
+                                  std::function<void(int, const std::string&)> send_to_client);
   private:
     ProcessResult execute_command(const std::vector<std::string>& args,
                                   int fd,
-                                  std::function<void(int, const std::string&)> send_to_blocked);
+                                  std::function<void(int, const std::string&)> send_to_client);
 
     static std::string handle_ping();
     static std::string handle_echo(std::string_view args);
@@ -72,13 +72,13 @@ class CommandHandler {
     ProcessResult handle_xread_with_blocking(int fd, const std::vector<std::string>& args);
     ProcessResult
     handle_xadd_with_blocking(const std::vector<std::string>& args,
-                              std::function<void(int, const std::string&)> send_to_blocked);
+                              std::function<void(int, const std::string&)> send_to_client);
 
     ProcessResult handle_blpop(int fd, const std::vector<std::string>& args);
     ProcessResult
     handle_rpush_with_blocking(const std::vector<std::string>& args,
-                               std::function<void(int, const std::string&)> send_to_blocked);
+                               std::function<void(int, const std::string&)> send_to_client);
     ProcessResult
     handle_lpush_with_blocking(const std::vector<std::string>& args,
-                               std::function<void(int, const std::string&)> send_to_blocked);
+                               std::function<void(int, const std::string&)> send_to_client);
 };

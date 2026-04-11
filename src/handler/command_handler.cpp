@@ -38,7 +38,7 @@ std::string CommandHandler::process(std::string_view input) {
 ProcessResult
 CommandHandler::process_with_fd(int fd,
                                 std::string_view input,
-                                std::function<void(int, const std::string&)> send_to_blocked) {
+                                std::function<void(int, const std::string&)> send_to_client) {
     auto parsed = RespParser::parse(input);
     if (!parsed) {
         return {false, RespParser::encode_error("ERR " + parsed.error())};
@@ -81,7 +81,7 @@ CommandHandler::process_with_fd(int fd,
         std::vector<std::string> results;
         results.reserve(tx.queued_commands.size());
         for (const auto& queued_args : tx.queued_commands) {
-            auto cmd_result = execute_command(queued_args, fd, send_to_blocked);
+            auto cmd_result = execute_command(queued_args, fd, send_to_client);
             results.push_back(std::move(cmd_result.response));
         }
         transactions_.erase(it);
@@ -103,7 +103,7 @@ CommandHandler::process_with_fd(int fd,
         return {false, RespParser::encode_simple_string("QUEUED")};
     }
 
-    auto result = execute_command(args, fd, send_to_blocked);
+    auto result = execute_command(args, fd, send_to_client);
     if (is_write_command(cmd)) {
         result.propagate_args = args;
     }
@@ -113,7 +113,7 @@ CommandHandler::process_with_fd(int fd,
 ProcessResult
 CommandHandler::execute_command(const std::vector<std::string>& args,
                                 int fd,
-                                std::function<void(int, const std::string&)> send_to_blocked) {
+                                std::function<void(int, const std::string&)> send_to_client) {
     const std::string& cmd = args[0];
 
     if (cmd == "PING") {
@@ -155,8 +155,8 @@ CommandHandler::execute_command(const std::vector<std::string>& args,
             return {false,
                     RespParser::encode_error("ERR wrong number of arguments for 'rpush' command")};
         }
-        if (send_to_blocked) {
-            return handle_rpush_with_blocking(args, send_to_blocked);
+        if (send_to_client) {
+            return handle_rpush_with_blocking(args, send_to_client);
         }
         return {false, handle_rpush(args)};
     }
@@ -165,8 +165,8 @@ CommandHandler::execute_command(const std::vector<std::string>& args,
             return {false,
                     RespParser::encode_error("ERR wrong number of arguments for 'lpush' command")};
         }
-        if (send_to_blocked) {
-            return handle_lpush_with_blocking(args, send_to_blocked);
+        if (send_to_client) {
+            return handle_lpush_with_blocking(args, send_to_client);
         }
         return {false, handle_lpush(args)};
     }
@@ -217,7 +217,7 @@ CommandHandler::execute_command(const std::vector<std::string>& args,
             return {false,
                     RespParser::encode_error("ERR wrong number of arguments for 'xadd' command")};
         }
-        return handle_xadd_with_blocking(args, send_to_blocked);
+        return handle_xadd_with_blocking(args, send_to_client);
     }
     if (cmd == "XRANGE") {
         if (args.size() < 4) {
@@ -292,8 +292,17 @@ CommandHandler::execute_command(const std::vector<std::string>& args,
                 false,
                 RespParser::encode_error("ERR wrong number of arguments for 'publish' command")};
         }
-        auto count = pubsub_manager_ ? pubsub_manager_->subscriber_count(args[1]) : 0;
-        return {false, RespParser::encode_integer(static_cast<int64_t>(count))};
+        const auto& channel = args[1];
+        const auto& message = args[2];
+        if (pubsub_manager_) {
+            const auto& subs = pubsub_manager_->get_subscribers(channel);
+            if (send_to_client) {
+                auto msg = RespParser::encode_array({"message", channel, message});
+                std::ranges::for_each(subs, [&](int fd) { send_to_client(fd, msg); });
+            }
+            return {false, RespParser::encode_integer(static_cast<int64_t>(subs.size()))};
+        }
+        return {false, RespParser::encode_integer(0)};
     }
 
     return {false, RespParser::encode_error("ERR unknown command '" + cmd + "'")};
@@ -439,7 +448,7 @@ ProcessResult CommandHandler::handle_blpop(int fd, const std::vector<std::string
 
 ProcessResult CommandHandler::handle_rpush_with_blocking(
     const std::vector<std::string>& args,
-    std::function<void(int, const std::string&)> send_to_blocked) {
+    std::function<void(int, const std::string&)> send_to_client) {
     const std::string& key = args[1];
     int64_t count = 0;
 
@@ -450,7 +459,7 @@ ProcessResult CommandHandler::handle_rpush_with_blocking(
                 count = store_.rpush(key, args[i]);
                 auto elements = store_.lpop(key, 1);
                 if (!elements.empty()) {
-                    send_to_blocked(blocked->fd, RespParser::encode_array({key, elements[0]}));
+                    send_to_client(blocked->fd, RespParser::encode_array({key, elements[0]}));
                 }
                 continue;
             }
@@ -462,7 +471,7 @@ ProcessResult CommandHandler::handle_rpush_with_blocking(
 
 ProcessResult CommandHandler::handle_lpush_with_blocking(
     const std::vector<std::string>& args,
-    std::function<void(int, const std::string&)> send_to_blocked) {
+    std::function<void(int, const std::string&)> send_to_client) {
     const std::string& key = args[1];
     int64_t count = store_.llen(key);
 
@@ -470,7 +479,7 @@ ProcessResult CommandHandler::handle_lpush_with_blocking(
         if (blocking_manager_) {
             auto blocked = blocking_manager_->wake_client(key);
             if (blocked) {
-                send_to_blocked(blocked->fd, RespParser::encode_array({key, args[i]}));
+                send_to_client(blocked->fd, RespParser::encode_array({key, args[i]}));
                 ++count;
                 continue;
             }
@@ -627,7 +636,7 @@ ProcessResult CommandHandler::handle_xread_with_blocking(int fd,
 
 ProcessResult CommandHandler::handle_xadd_with_blocking(
     const std::vector<std::string>& args,
-    std::function<void(int, const std::string&)> send_to_blocked) {
+    std::function<void(int, const std::string&)> send_to_client) {
     const std::string& key = args[1];
     const std::string& id = args[2];
 
@@ -646,7 +655,7 @@ ProcessResult CommandHandler::handle_xadd_with_blocking(
         while (auto blocked = blocking_manager_->wake_client_for_stream(key, new_id)) {
             auto entries = store_.xread(key, blocked->last_id.to_string());
             auto response = RespParser::encode_stream_entries({{key, std::move(entries)}});
-            send_to_blocked(blocked->fd, response);
+            send_to_client(blocked->fd, response);
         }
     }
 
