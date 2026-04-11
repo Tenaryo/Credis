@@ -68,13 +68,62 @@ void test_ping_in_normal_mode() {
     std::cout << "Test 4 passed: PING in normal mode returns +PONG\r\n";
 }
 
+void test_publish_returns_subscriber_count() {
+    Store store;
+    CommandHandler handler(store);
+    PubSubManager pubsub;
+    handler.set_pubsub_manager(&pubsub);
+
+    handler.process_with_fd(1, "*2\r\n$9\r\nsubscribe\r\n$3\r\nbar\r\n", nullptr);
+    handler.process_with_fd(2, "*2\r\n$9\r\nsubscribe\r\n$3\r\nbar\r\n", nullptr);
+    handler.process_with_fd(3, "*2\r\n$9\r\nsubscribe\r\n$3\r\nfoo\r\n", nullptr);
+
+    auto bar_result =
+        handler.process_with_fd(10, "*3\r\n$7\r\nPUBLISH\r\n$3\r\nbar\r\n$3\r\nmsg\r\n", nullptr);
+    assert(bar_result.response == RespParser::encode_integer(2));
+    std::cout << "Test 5 passed: PUBLISH bar returns 2 (two subscribers)\n";
+
+    auto foo_result =
+        handler.process_with_fd(10, "*3\r\n$7\r\nPUBLISH\r\n$3\r\nfoo\r\n$3\r\nmsg\r\n", nullptr);
+    assert(foo_result.response == RespParser::encode_integer(1));
+    std::cout << "Test 6 passed: PUBLISH foo returns 1 (one subscriber)\n";
+}
+
+void test_publish_no_subscribers() {
+    Store store;
+    CommandHandler handler(store);
+    PubSubManager pubsub;
+    handler.set_pubsub_manager(&pubsub);
+
+    auto result = handler.process_with_fd(
+        10, "*3\r\n$7\r\nPUBLISH\r\n$10\r\nnonexistent\r\n$3\r\nmsg\r\n", nullptr);
+    assert(result.response == RespParser::encode_integer(0));
+    std::cout << "Test 7 passed: PUBLISH nonexistent returns 0\n";
+}
+
+void test_publish_wrong_number_of_args() {
+    Store store;
+    CommandHandler handler(store);
+
+    auto no_args = handler.process("*1\r\n$7\r\nPUBLISH\r\n");
+    assert(no_args.starts_with("-ERR wrong number of arguments for 'publish' command"));
+    std::cout << "Test 8a passed: PUBLISH with no args returns error\n";
+
+    auto one_arg = handler.process("*2\r\n$7\r\nPUBLISH\r\n$3\r\nfoo\r\n");
+    assert(one_arg.starts_with("-ERR wrong number of arguments for 'publish' command"));
+    std::cout << "Test 8b passed: PUBLISH with only channel returns error\n";
+}
+
 int main() {
-    std::cout << "Running SUBSCRIBE tests...\n\n";
+    std::cout << "Running SUBSCRIBE/PUBLISH tests...\n\n";
 
     test_subscribe_single_channel();
     test_subscribed_mode_rejects_disallowed_commands();
     test_ping_in_subscribed_mode();
     test_ping_in_normal_mode();
+    test_publish_returns_subscriber_count();
+    test_publish_no_subscribers();
+    test_publish_wrong_number_of_args();
 
     std::cout << "\nAll tests passed!\n";
     return 0;
