@@ -4,6 +4,8 @@
 #include "../src/store/store.hpp"
 #include <cassert>
 #include <iostream>
+#include <unordered_map>
+#include <vector>
 
 void test_subscribe_single_channel() {
     Store store;
@@ -114,6 +116,59 @@ void test_publish_wrong_number_of_args() {
     std::cout << "Test 8b passed: PUBLISH with only channel returns error\n";
 }
 
+void test_publish_delivers_message_to_subscribers() {
+    Store store;
+    CommandHandler handler(store);
+    PubSubManager pubsub;
+    handler.set_pubsub_manager(&pubsub);
+
+    handler.process_with_fd(1, "*2\r\n$9\r\nsubscribe\r\n$3\r\nfoo\r\n", nullptr);
+    handler.process_with_fd(2, "*2\r\n$9\r\nsubscribe\r\n$3\r\nfoo\r\n", nullptr);
+
+    std::unordered_map<int, std::vector<std::string>> delivered;
+    auto send_fn = [&delivered](int fd, const std::string& msg) { delivered[fd].push_back(msg); };
+
+    auto result =
+        handler.process_with_fd(10, "*3\r\n$7\r\nPUBLISH\r\n$3\r\nfoo\r\n$5\r\nhello\r\n", send_fn);
+
+    assert(result.response == RespParser::encode_integer(2));
+    assert(delivered.size() == 2);
+    assert(delivered.contains(1));
+    assert(delivered.contains(2));
+
+    auto expected_msg = "*3\r\n$7\r\nmessage\r\n$3\r\nfoo\r\n$5\r\nhello\r\n";
+    assert(delivered[1][0] == expected_msg);
+    assert(delivered[2][0] == expected_msg);
+
+    std::cout << "Test 9 passed: PUBLISH delivers message to all subscribers of the channel\n";
+}
+
+void test_publish_only_delivers_to_matching_channel() {
+    Store store;
+    CommandHandler handler(store);
+    PubSubManager pubsub;
+    handler.set_pubsub_manager(&pubsub);
+
+    handler.process_with_fd(1, "*2\r\n$9\r\nsubscribe\r\n$3\r\nfoo\r\n", nullptr);
+    handler.process_with_fd(2, "*2\r\n$9\r\nsubscribe\r\n$3\r\nbar\r\n", nullptr);
+
+    std::unordered_map<int, std::vector<std::string>> delivered;
+    auto send_fn = [&delivered](int fd, const std::string& msg) { delivered[fd].push_back(msg); };
+
+    auto result =
+        handler.process_with_fd(10, "*3\r\n$7\r\nPUBLISH\r\n$3\r\nfoo\r\n$5\r\nhello\r\n", send_fn);
+
+    assert(result.response == RespParser::encode_integer(1));
+    assert(delivered.size() == 1);
+    assert(delivered.contains(1));
+    assert(!delivered.contains(2));
+
+    auto expected_msg = "*3\r\n$7\r\nmessage\r\n$3\r\nfoo\r\n$5\r\nhello\r\n";
+    assert(delivered[1][0] == expected_msg);
+
+    std::cout << "Test 10 passed: PUBLISH only delivers to subscribers of the matching channel\n";
+}
+
 int main() {
     std::cout << "Running SUBSCRIBE/PUBLISH tests...\n\n";
 
@@ -124,6 +179,8 @@ int main() {
     test_publish_returns_subscriber_count();
     test_publish_no_subscribers();
     test_publish_wrong_number_of_args();
+    test_publish_delivers_message_to_subscribers();
+    test_publish_only_delivers_to_matching_channel();
 
     std::cout << "\nAll tests passed!\n";
     return 0;
