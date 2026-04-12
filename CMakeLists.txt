@@ -31,6 +31,21 @@ target_compile_options(redis_core PRIVATE
     $<$<CONFIG:Release>:-O2>
 )
 
+target_precompile_headers(redis_core PUBLIC
+    <charconv>
+    <chrono>
+    <deque>
+    <expected>
+    <functional>
+    <optional>
+    <set>
+    <string>
+    <unordered_map>
+    <unordered_set>
+    <variant>
+    <vector>
+)
+
 add_executable(redis src/main.cpp)
 target_link_libraries(redis PRIVATE redis_core)
 
