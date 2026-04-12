@@ -439,6 +439,18 @@ int64_t Store::zcard(std::string_view key) {
     return zset ? static_cast<int64_t>(zset->member_scores.size()) : 0;
 }
 
+std::optional<double> Store::zscore(std::string_view key, std::string_view member) {
+    auto* zset = get_zset(key);
+    if (!zset)
+        return std::nullopt;
+
+    auto it = zset->member_scores.find(std::string(member));
+    if (it == zset->member_scores.end())
+        return std::nullopt;
+
+    return it->second;
+}
+
 std::vector<std::string> Store::keys() {
     std::vector<std::string> result;
     for (auto it = data_.begin(); it != data_.end();) {

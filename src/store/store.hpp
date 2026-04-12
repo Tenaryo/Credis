@@ -95,6 +95,7 @@ class Store {
     std::optional<int64_t> zrank(std::string_view key, std::string_view member);
     std::vector<std::string> zrange(std::string_view key, int64_t start, int64_t stop);
     int64_t zcard(std::string_view key);
+    std::optional<double> zscore(std::string_view key, std::string_view member);
 
     std::string get_type(std::string_view key);
     std::vector<std::string> keys();

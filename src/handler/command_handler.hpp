@@ -73,6 +73,7 @@ class CommandHandler {
     std::string handle_zrank(const std::vector<std::string>& args);
     std::string handle_zrange(const std::vector<std::string>& args);
     std::string handle_zcard(const std::string& key);
+    std::string handle_zscore(const std::vector<std::string>& args);
     ProcessResult handle_xread_with_blocking(int fd, const std::vector<std::string>& args);
     ProcessResult
     handle_xadd_with_blocking(const std::vector<std::string>& args,

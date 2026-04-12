@@ -247,6 +247,13 @@ CommandHandler::execute_command(const std::vector<std::string>& args,
         }
         return {false, handle_zcard(args[1])};
     }
+    if (cmd == "ZSCORE") {
+        if (args.size() < 3) {
+            return {false,
+                    RespParser::encode_error("ERR wrong number of arguments for 'zscore' command")};
+        }
+        return {false, handle_zscore(args)};
+    }
     if (cmd == "XRANGE") {
         if (args.size() < 4) {
             return {false,
@@ -559,6 +566,21 @@ std::string CommandHandler::handle_zrange(const std::vector<std::string>& args) 
 
 std::string CommandHandler::handle_zcard(const std::string& key) {
     return RespParser::encode_integer(store_.zcard(key));
+}
+
+std::string CommandHandler::handle_zscore(const std::vector<std::string>& args) {
+    auto score = store_.zscore(args[1], args[2]);
+    if (!score)
+        return RespParser::encode_null_bulk_string();
+
+    auto s = std::to_string(*score);
+    if (s.find('.') != std::string::npos) {
+        while (s.back() == '0')
+            s.pop_back();
+        if (s.back() == '.')
+            s.pop_back();
+    }
+    return RespParser::encode_bulk_string(s);
 }
 
 std::string CommandHandler::handle_xadd(const std::vector<std::string>& args) {
