@@ -100,6 +100,38 @@ void test_zrange_single_element() {
     std::cout << "\u2713 Test 7 passed: ZRANGE single element set returns that element\n";
 }
 
+void test_zrange_negative_indexes() {
+    Store store;
+    store.zadd("zset_key", 100.0, "foo");
+    store.zadd("zset_key", 100.0, "bar");
+    store.zadd("zset_key", 20.0, "baz");
+    store.zadd("zset_key", 30.1, "caz");
+    store.zadd("zset_key", 40.2, "paz");
+
+    auto neg_last2 = store.zrange("zset_key", -2, -1);
+    assert(neg_last2.size() == 2);
+    assert(neg_last2[0] == "bar");
+    assert(neg_last2[1] == "foo");
+
+    auto mixed = store.zrange("zset_key", 2, -1);
+    assert(mixed.size() == 3);
+    assert(mixed[0] == "paz");
+    assert(mixed[1] == "bar");
+    assert(mixed[2] == "foo");
+
+    auto all_except_last2 = store.zrange("zset_key", 0, -3);
+    assert(all_except_last2.size() == 3);
+    assert(all_except_last2[0] == "baz");
+    assert(all_except_last2[1] == "caz");
+    assert(all_except_last2[2] == "paz");
+
+    auto neg_oor = store.zrange("zset_key", -100, 0);
+    assert(neg_oor.size() == 1);
+    assert(neg_oor[0] == "baz");
+
+    std::cout << "\u2713 Test 8 passed: ZRANGE negative index range query\n";
+}
+
 void test_zrange_handler_resp_protocol() {
     Store store;
     ServerConfig config;
@@ -150,6 +182,7 @@ int main() {
     test_zrange_start_greater_than_stop();
     test_zrange_start_equals_stop();
     test_zrange_single_element();
+    test_zrange_negative_indexes();
     test_zrange_handler_resp_protocol();
     test_zrange_handler_nonexistent_key();
     test_zrange_handler_wrong_number_of_args();
