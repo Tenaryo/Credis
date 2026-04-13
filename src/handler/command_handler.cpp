@@ -294,6 +294,14 @@ CommandHandler::execute_command(const std::vector<std::string>& args,
         }
         return {false, handle_geodist(args)};
     }
+    if (cmd == "GEOSEARCH") {
+        if (args.size() < 8) {
+            return {
+                false,
+                RespParser::encode_error("ERR wrong number of arguments for 'geosearch' command")};
+        }
+        return {false, handle_geosearch(args)};
+    }
     if (cmd == "XRANGE") {
         if (args.size() < 4) {
             return {false,
@@ -685,6 +693,52 @@ std::string CommandHandler::handle_geodist(const std::vector<std::string>& args)
     char buf[32];
     std::snprintf(buf, sizeof(buf), "%.4f", dist);
     return RespParser::encode_bulk_string(buf);
+}
+
+std::string CommandHandler::handle_geosearch(const std::vector<std::string>& args) {
+    const auto& key = args[1];
+
+    if (to_upper(args[2]) != "FROMLONLAT")
+        return RespParser::encode_error("ERR syntax error");
+
+    double search_lon, search_lat;
+    try {
+        search_lon = std::stod(args[3]);
+        search_lat = std::stod(args[4]);
+    } catch (...) {
+        return RespParser::encode_error("ERR value is not a valid float");
+    }
+
+    if (to_upper(args[5]) != "BYRADIUS")
+        return RespParser::encode_error("ERR syntax error");
+
+    double radius;
+    try {
+        radius = std::stod(args[6]);
+    } catch (...) {
+        return RespParser::encode_error("ERR value is not a valid float");
+    }
+
+    auto unit = to_upper(args[7]);
+    static constexpr std::pair<std::string_view, double> kUnitFactors[] = {
+        {"M", 1.0}, {"KM", 1000.0}, {"MI", 1609.34}, {"FT", 0.3048}};
+    auto factor_it =
+        std::ranges::find_if(kUnitFactors, [&](const auto& p) { return p.first == unit; });
+    if (factor_it == std::end(kUnitFactors))
+        return RespParser::encode_error("ERR unsupported unit provided");
+
+    double radius_m = radius * factor_it->second;
+
+    auto all = store_.zgetall(key);
+    std::vector<std::string> matched;
+    for (const auto& [member, score] : all) {
+        auto coords = geo::decode(static_cast<uint64_t>(score));
+        auto dist = geo::distance(search_lat, search_lon, coords.lat, coords.lon);
+        if (dist <= radius_m)
+            matched.push_back(member);
+    }
+
+    return RespParser::encode_array(matched);
 }
 
 std::string CommandHandler::handle_xadd(const std::vector<std::string>& args) {

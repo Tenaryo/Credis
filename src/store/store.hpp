@@ -106,6 +106,7 @@ class Store {
     int64_t zcard(std::string_view key);
     std::optional<double> zscore(std::string_view key, std::string_view member);
     int64_t zrem(std::string_view key, std::string_view member);
+    std::vector<std::pair<std::string, double>> zgetall(std::string_view key);
 
     std::string get_type(std::string_view key);
     std::vector<std::string> keys();
