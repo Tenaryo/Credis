@@ -1,5 +1,6 @@
 #include "command_handler.hpp"
 #include "block_manager/blocking_manager.hpp"
+#include "geo/geo_score.hpp"
 #include "protocol/resp_parser.hpp"
 #include "pubsub/pubsub_manager.hpp"
 #include "store/store.hpp"
@@ -35,11 +36,6 @@ static constexpr std::array<char, 88> kEmptyRdb{
      's',    'e',    'd',    '-',    'm',    'e',    'm',    '\xc2', '\xb0', '\xc4', '\x10',
      '\x00', '\xfa', '\x08', 'a',    'o',    'f',    '-',    'b',    'a',    's',    'e',
      '\xc0', '\x00', '\xff', '\xf0', '\x6e', '\x3b', '\xfe', '\xc0', '\xff', '\x5a', '\xa2'}};
-
-static constexpr double kLonMin = -180.0;
-static constexpr double kLonMax = 180.0;
-static constexpr double kLatMin = -85.05112878;
-static constexpr double kLatMax = 85.05112878;
 } // namespace
 
 CommandHandler::CommandHandler(Store& store, const ServerConfig& config)
@@ -622,8 +618,8 @@ std::string CommandHandler::handle_geoadd(const std::vector<std::string>& args) 
         return RespParser::encode_error("ERR value is not a valid float");
     }
 
-    bool lon_invalid = !std::isfinite(lon) || lon < kLonMin || lon > kLonMax;
-    bool lat_invalid = !std::isfinite(lat) || lat < kLatMin || lat > kLatMax;
+    bool lon_invalid = !std::isfinite(lon) || lon < geo::kLonMin || lon > geo::kLonMax;
+    bool lat_invalid = !std::isfinite(lat) || lat < geo::kLatMin || lat > geo::kLatMax;
 
     if (lon_invalid || lat_invalid) {
         char buf[128];
@@ -631,7 +627,8 @@ std::string CommandHandler::handle_geoadd(const std::vector<std::string>& args) 
         return RespParser::encode_error(buf);
     }
 
-    auto added = store_.zadd(args[1], 0.0, args[4]);
+    auto score = static_cast<double>(geo::encode(lat, lon));
+    auto added = store_.zadd(args[1], score, args[4]);
     return RespParser::encode_integer(added);
 }
 
