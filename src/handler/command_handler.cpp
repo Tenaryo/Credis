@@ -286,6 +286,14 @@ CommandHandler::execute_command(const std::vector<std::string>& args,
         }
         return {false, handle_geopos(args)};
     }
+    if (cmd == "GEODIST") {
+        if (args.size() < 4) {
+            return {
+                false,
+                RespParser::encode_error("ERR wrong number of arguments for 'geodist' command")};
+        }
+        return {false, handle_geodist(args)};
+    }
     if (cmd == "XRANGE") {
         if (args.size() < 4) {
             return {false,
@@ -664,6 +672,19 @@ std::string CommandHandler::handle_geopos(const std::vector<std::string>& args) 
     }
 
     return resp;
+}
+
+std::string CommandHandler::handle_geodist(const std::vector<std::string>& args) {
+    auto score1 = store_.zscore(args[1], args[2]);
+    auto score2 = store_.zscore(args[1], args[3]);
+    if (!score1 || !score2)
+        return RespParser::encode_null_bulk_string();
+    auto c1 = geo::decode(static_cast<uint64_t>(*score1));
+    auto c2 = geo::decode(static_cast<uint64_t>(*score2));
+    auto dist = geo::distance(c1.lat, c1.lon, c2.lat, c2.lon);
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%.4f", dist);
+    return RespParser::encode_bulk_string(buf);
 }
 
 std::string CommandHandler::handle_xadd(const std::vector<std::string>& args) {

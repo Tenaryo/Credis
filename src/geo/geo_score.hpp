@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cmath>
 #include <cstdint>
+#include <numbers>
 
 namespace geo {
 
@@ -11,6 +13,7 @@ static constexpr double kLonMax = 180.0;
 static constexpr double kLatRange = kLatMax - kLatMin;
 static constexpr double kLonRange = kLonMax - kLonMin;
 static constexpr uint32_t kGeoStep = 1u << 26;
+static constexpr double kEarthRadius = 6372797.560856;
 
 inline auto spread(uint32_t v) -> uint64_t {
     auto x = static_cast<uint64_t>(v);
@@ -49,6 +52,16 @@ inline auto decode(uint64_t score) -> Coordinates {
     auto lat = (static_cast<double>(lat_hash) + 0.5) * kLatRange / kGeoStep + kLatMin;
     auto lon = (static_cast<double>(lon_hash) + 0.5) * kLonRange / kGeoStep + kLonMin;
     return {lat, lon};
+}
+
+inline auto distance(double lat1, double lon1, double lat2, double lon2) -> double {
+    auto to_rad = [](double deg) { return deg * std::numbers::pi / 180.0; };
+    auto dlat = to_rad(lat2 - lat1);
+    auto dlon = to_rad(lon2 - lon1);
+    auto a = std::sin(dlat / 2) * std::sin(dlat / 2) + std::cos(to_rad(lat1)) *
+                                                           std::cos(to_rad(lat2)) *
+                                                           std::sin(dlon / 2) * std::sin(dlon / 2);
+    return kEarthRadius * 2 * std::asin(std::sqrt(a));
 }
 
 } // namespace geo

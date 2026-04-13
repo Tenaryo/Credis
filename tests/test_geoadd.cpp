@@ -304,6 +304,56 @@ void test_geopos_nonexistent_key() {
     std::cout << "\u2713 Test passed: GEOPOS returns null arrays for non-existent key\r\n";
 }
 
+static std::string
+make_geodist_resp(std::string_view key, std::string_view member1, std::string_view member2) {
+    return "*4\r\n$7\r\nGEODIST\r\n$" + std::to_string(key.size()) + "\r\n" + std::string(key) +
+           "\r\n$" + std::to_string(member1.size()) + "\r\n" + std::string(member1) + "\r\n$" +
+           std::to_string(member2.size()) + "\r\n" + std::string(member2) + "\r\n";
+}
+
+static double parse_geodist_value(const std::string& resp) {
+    auto bulk = extract_bulk_string(resp);
+    assert(!bulk.empty());
+    return std::stod(bulk);
+}
+
+void test_geodist_munich_paris() {
+    Store store;
+    CommandHandler handler(store);
+
+    handler.process(make_geoadd_resp("places", "11.5030378", "48.164271", "Munich"));
+    handler.process(make_geoadd_resp("places", "2.2944692", "48.8584625", "Paris"));
+
+    auto resp = handler.process(make_geodist_resp("places", "Munich", "Paris"));
+    auto dist = parse_geodist_value(resp);
+
+    assert(std::abs(dist - 682477.7582) < 0.1);
+
+    std::cout << "\u2713 Test passed: GEODIST Munich-Paris returns ~682477.7582 meters\r\n";
+}
+
+void test_geodist_missing_member() {
+    Store store;
+    CommandHandler handler(store);
+
+    handler.process(make_geoadd_resp("places", "11.5030378", "48.164271", "Munich"));
+
+    auto resp = handler.process(make_geodist_resp("places", "Munich", "Berlin"));
+    assert(resp == RespParser::encode_null_bulk_string());
+
+    std::cout << "\u2713 Test passed: GEODIST missing member returns null bulk string\r\n";
+}
+
+void test_geodist_nonexistent_key() {
+    Store store;
+    CommandHandler handler(store);
+
+    auto resp = handler.process(make_geodist_resp("missing_key", "A", "B"));
+    assert(resp == RespParser::encode_null_bulk_string());
+
+    std::cout << "\u2713 Test passed: GEODIST non-existent key returns null bulk string\r\n";
+}
+
 static void assert_roundtrip(double orig_lat, double orig_lon, double tolerance) {
     auto score = geo::encode(orig_lat, orig_lon);
     auto coords = geo::decode(score);
@@ -343,6 +393,12 @@ int main() {
     std::cout << "\nRunning geo::decode unit tests...\n\n";
 
     test_geo_decode_roundtrip();
+
+    std::cout << "\nRunning GEODIST command tests...\n\n";
+
+    test_geodist_munich_paris();
+    test_geodist_missing_member();
+    test_geodist_nonexistent_key();
 
     std::cout << "\n\u2713 All tests passed!\n";
     return 0;
