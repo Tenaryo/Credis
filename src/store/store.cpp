@@ -458,6 +458,17 @@ int64_t Store::zrem(std::string_view key, std::string_view member) {
     return zset->remove(member);
 }
 
+std::vector<std::pair<std::string, double>> Store::zgetall(std::string_view key) {
+    auto* zset = get_zset(key);
+    if (!zset)
+        return {};
+    std::vector<std::pair<std::string, double>> result;
+    result.reserve(zset->member_scores.size());
+    for (const auto& [member, score] : zset->member_scores)
+        result.emplace_back(member, score);
+    return result;
+}
+
 std::vector<std::string> Store::keys() {
     std::vector<std::string> result;
     for (auto it = data_.begin(); it != data_.end();) {
