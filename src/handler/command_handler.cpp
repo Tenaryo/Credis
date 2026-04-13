@@ -5,6 +5,7 @@
 #include "store/store.hpp"
 #include "util/parse.hpp"
 #include <array>
+#include <cmath>
 #include <cstdio>
 #include <string_view>
 
@@ -34,6 +35,11 @@ static constexpr std::array<char, 88> kEmptyRdb{
      's',    'e',    'd',    '-',    'm',    'e',    'm',    '\xc2', '\xb0', '\xc4', '\x10',
      '\x00', '\xfa', '\x08', 'a',    'o',    'f',    '-',    'b',    'a',    's',    'e',
      '\xc0', '\x00', '\xff', '\xf0', '\x6e', '\x3b', '\xfe', '\xc0', '\xff', '\x5a', '\xa2'}};
+
+static constexpr double kLonMin = -180.0;
+static constexpr double kLonMax = 180.0;
+static constexpr double kLatMin = -85.05112878;
+static constexpr double kLatMax = 85.05112878;
 } // namespace
 
 CommandHandler::CommandHandler(Store& store, const ServerConfig& config)
@@ -606,7 +612,25 @@ std::string CommandHandler::handle_zrem(const std::vector<std::string>& args) {
     return RespParser::encode_integer(removed);
 }
 
-std::string CommandHandler::handle_geoadd(const std::vector<std::string>& /* args */) {
+std::string CommandHandler::handle_geoadd(const std::vector<std::string>& args) {
+    double lon;
+    double lat;
+    try {
+        lon = std::stod(args[2]);
+        lat = std::stod(args[3]);
+    } catch (...) {
+        return RespParser::encode_error("ERR value is not a valid float");
+    }
+
+    bool lon_invalid = !std::isfinite(lon) || lon < kLonMin || lon > kLonMax;
+    bool lat_invalid = !std::isfinite(lat) || lat < kLatMin || lat > kLatMax;
+
+    if (lon_invalid || lat_invalid) {
+        char buf[128];
+        std::snprintf(buf, sizeof(buf), "ERR invalid longitude,latitude pair %.6f,%.6f", lon, lat);
+        return RespParser::encode_error(buf);
+    }
+
     return RespParser::encode_integer(1);
 }
 
