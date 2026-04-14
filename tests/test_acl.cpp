@@ -104,8 +104,7 @@ void test_auth_nonexistent_user_returns_wrongpass() {
     Store store;
     ServerConfig config;
     CommandHandler handler(store, config);
-
-    std::string auth_input = "*3\r\n$4\r\nAUTH\r\n$10\r\nnonexistent\r\n$10\r\nmypassword\r\n";
+    std::string auth_input = "*3\r\n$4\r\nAUTH\r\n$11\r\nnonexistent\r\n$10\r\nmypassword\r\n";
     auto response = handler.process(auth_input);
 
     assert(response.starts_with("-WRONGPASS"));

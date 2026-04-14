@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -26,5 +27,13 @@ class AclManager {
         auto& user = users_[std::string(username)];
         user.passwords.push_back(util::sha256(password));
         user.nopass = false;
+    }
+
+    auto authenticate(std::string_view username, std::string_view password) const -> bool {
+        auto* user = get_user(username);
+        if (!user)
+            return false;
+        auto hash = util::sha256(password);
+        return std::ranges::find(user->passwords, hash) != user->passwords.end();
     }
 };

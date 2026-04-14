@@ -353,6 +353,18 @@ CommandHandler::execute_command(const std::vector<std::string>& args,
         }
         return {false, RespParser::encode_error("ERR unknown subcommand for 'ACL'. Try ACL HELP.")};
     }
+    if (cmd == "AUTH") {
+        if (args.size() < 3) {
+            return {false,
+                    RespParser::encode_error("ERR wrong number of arguments for 'auth' command")};
+        }
+        if (acl_manager_.authenticate(args[1], args[2])) {
+            return {false, RespParser::encode_simple_string("OK")};
+        }
+        return {false,
+                RespParser::encode_error(
+                    "WRONGPASS invalid username-password pair or user is disabled.")};
+    }
     if (cmd == "REPLCONF") {
         if (args.size() >= 2 && to_upper(args[1]) == "GETACK") {
             return {false, RespParser::encode_array({"REPLCONF", "ACK", "0"})};
