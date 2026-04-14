@@ -85,6 +85,104 @@ void test_exec_empty_transaction() {
     std::cout << "\u2713 Test 5 passed: EXEC empty transaction returns empty array\n";
 }
 
+void test_exec_aborts_when_watched_key_modified() {
+    Store store;
+    CommandHandler handler(store);
+
+    handler.process_with_fd(1, "*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n100\r\n", nullptr);
+    handler.process_with_fd(1, "*3\r\n$3\r\nSET\r\n$3\r\nbar\r\n$3\r\n200\r\n", nullptr);
+
+    handler.process_with_fd(1, "*2\r\n$5\r\nWATCH\r\n$3\r\nfoo\r\n", nullptr);
+
+    handler.process_with_fd(1, "*1\r\n$5\r\nMULTI\r\n", nullptr);
+    handler.process_with_fd(1, "*3\r\n$3\r\nSET\r\n$3\r\nbar\r\n$3\r\n300\r\n", nullptr);
+
+    handler.process_with_fd(2, "*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n200\r\n", nullptr);
+
+    auto result = handler.process_with_fd(1, "*1\r\n$4\r\nEXEC\r\n", nullptr);
+    assert(result.response == "*-1\r\n");
+
+    auto bar_val = store.get("bar");
+    assert(bar_val.has_value());
+    assert(bar_val.value() == "200");
+
+    std::cout << "\u2713 Test 6 passed: EXEC aborts when watched key modified by another client\n";
+}
+
+void test_exec_succeeds_when_watched_key_not_modified() {
+    Store store;
+    CommandHandler handler(store);
+
+    handler.process_with_fd(1, "*3\r\n$3\r\nSET\r\n$3\r\nbaz\r\n$3\r\n100\r\n", nullptr);
+    handler.process_with_fd(1, "*3\r\n$3\r\nSET\r\n$3\r\ncaz\r\n$3\r\n200\r\n", nullptr);
+
+    handler.process_with_fd(1, "*2\r\n$5\r\nWATCH\r\n$3\r\nbaz\r\n", nullptr);
+
+    handler.process_with_fd(1, "*1\r\n$5\r\nMULTI\r\n", nullptr);
+    handler.process_with_fd(1, "*3\r\n$3\r\nSET\r\n$3\r\ncaz\r\n$3\r\n400\r\n", nullptr);
+
+    handler.process_with_fd(2, "*3\r\n$3\r\nSET\r\n$3\r\ncaz\r\n$3\r\n300\r\n", nullptr);
+
+    auto result = handler.process_with_fd(1, "*1\r\n$4\r\nEXEC\r\n", nullptr);
+    assert(result.response == "*1\r\n+OK\r\n");
+
+    auto caz_val = store.get("caz");
+    assert(caz_val.has_value());
+    assert(caz_val.value() == "400");
+
+    std::cout << "\u2713 Test 7 passed: EXEC succeeds when watched key not modified\n";
+}
+
+void test_exec_aborts_when_watched_key_modified_and_restored() {
+    Store store;
+    CommandHandler handler(store);
+
+    handler.process_with_fd(1, "*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n100\r\n", nullptr);
+
+    handler.process_with_fd(1, "*2\r\n$5\r\nWATCH\r\n$3\r\nfoo\r\n", nullptr);
+
+    handler.process_with_fd(1, "*1\r\n$5\r\nMULTI\r\n", nullptr);
+    handler.process_with_fd(1, "*3\r\n$3\r\nSET\r\n$3\r\nbar\r\n$3\r\n999\r\n", nullptr);
+
+    handler.process_with_fd(2, "*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n200\r\n", nullptr);
+    handler.process_with_fd(2, "*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n100\r\n", nullptr);
+
+    auto result = handler.process_with_fd(1, "*1\r\n$4\r\nEXEC\r\n", nullptr);
+    assert(result.response == "*-1\r\n");
+
+    std::cout << "\u2713 Test 8 passed: EXEC aborts when watched key modified and restored\n";
+}
+
+void test_exec_clears_watch_state_after_abort() {
+    Store store;
+    CommandHandler handler(store);
+
+    handler.process_with_fd(1, "*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n100\r\n", nullptr);
+    handler.process_with_fd(1, "*3\r\n$3\r\nSET\r\n$3\r\nbar\r\n$3\r\n200\r\n", nullptr);
+
+    handler.process_with_fd(1, "*2\r\n$5\r\nWATCH\r\n$3\r\nfoo\r\n", nullptr);
+
+    handler.process_with_fd(1, "*1\r\n$5\r\nMULTI\r\n", nullptr);
+    handler.process_with_fd(1, "*3\r\n$3\r\nSET\r\n$3\r\nbar\r\n$3\r\n300\r\n", nullptr);
+
+    handler.process_with_fd(2, "*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n999\r\n", nullptr);
+
+    auto abort_result = handler.process_with_fd(1, "*1\r\n$4\r\nEXEC\r\n", nullptr);
+    assert(abort_result.response == "*-1\r\n");
+
+    handler.process_with_fd(1, "*1\r\n$5\r\nMULTI\r\n", nullptr);
+    handler.process_with_fd(1, "*3\r\n$3\r\nSET\r\n$3\r\nbar\r\n$3\r\n400\r\n", nullptr);
+
+    auto result = handler.process_with_fd(1, "*1\r\n$4\r\nEXEC\r\n", nullptr);
+    assert(result.response == "*1\r\n+OK\r\n");
+
+    auto bar_val = store.get("bar");
+    assert(bar_val.has_value());
+    assert(bar_val.value() == "400");
+
+    std::cout << "\u2713 Test 9 passed: EXEC clears watch state after abort\n";
+}
+
 int main() {
     std::cout << "Running EXEC command tests...\n\n";
 
@@ -93,6 +191,10 @@ int main() {
     test_exec_executes_and_returns_results();
     test_exec_clears_transaction_state();
     test_exec_empty_transaction();
+    test_exec_aborts_when_watched_key_modified();
+    test_exec_succeeds_when_watched_key_not_modified();
+    test_exec_aborts_when_watched_key_modified_and_restored();
+    test_exec_clears_watch_state_after_abort();
 
     std::cout << "\n\u2713 All tests passed!\n";
     return 0;
