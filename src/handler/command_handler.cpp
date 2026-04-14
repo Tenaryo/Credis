@@ -955,5 +955,5 @@ std::string CommandHandler::handle_acl_whoami() {
 
 std::string CommandHandler::handle_acl_getuser(const std::vector<std::string>& /* args */) {
     return RespParser::encode_raw_array(
-        {RespParser::encode_bulk_string("flags"), RespParser::encode_array({})});
+        {RespParser::encode_bulk_string("flags"), RespParser::encode_array({"nopass"})});
 }
