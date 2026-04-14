@@ -327,11 +327,23 @@ CommandHandler::execute_command(const std::vector<std::string>& args,
         return {false, handle_config_get(args[2])};
     }
     if (cmd == "ACL") {
-        if (args.size() < 2 || to_upper(args[1]) != "WHOAMI") {
+        if (args.size() < 2) {
             return {false,
                     RespParser::encode_error("ERR unknown subcommand for 'ACL'. Try ACL HELP.")};
         }
-        return {false, handle_acl_whoami()};
+        auto subcmd = to_upper(args[1]);
+        if (subcmd == "WHOAMI") {
+            return {false, handle_acl_whoami()};
+        }
+        if (subcmd == "GETUSER") {
+            if (args.size() < 3) {
+                return {false,
+                        RespParser::encode_error(
+                            "ERR wrong number of arguments for 'acl|getuser' command")};
+            }
+            return {false, handle_acl_getuser(args)};
+        }
+        return {false, RespParser::encode_error("ERR unknown subcommand for 'ACL'. Try ACL HELP.")};
     }
     if (cmd == "REPLCONF") {
         if (args.size() >= 2 && to_upper(args[1]) == "GETACK") {
@@ -939,4 +951,9 @@ std::string CommandHandler::handle_config_get(const std::string& param) {
 
 std::string CommandHandler::handle_acl_whoami() {
     return RespParser::encode_bulk_string("default");
+}
+
+std::string CommandHandler::handle_acl_getuser(const std::vector<std::string>& /* args */) {
+    return RespParser::encode_raw_array(
+        {RespParser::encode_bulk_string("flags"), RespParser::encode_array({})});
 }
