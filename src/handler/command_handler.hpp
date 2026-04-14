@@ -31,6 +31,7 @@ struct ProcessResult {
 struct TransactionState {
     bool in_multi{false};
     std::vector<std::vector<std::string>> queued_commands;
+    std::unordered_set<std::string> watched_keys;
 };
 
 class CommandHandler {
