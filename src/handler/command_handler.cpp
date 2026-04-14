@@ -127,6 +127,14 @@ CommandHandler::process_with_fd(int fd,
             return {false,
                     RespParser::encode_error("ERR wrong number of arguments for 'watch' command")};
         }
+        auto it = transactions_.find(fd);
+        if (it != transactions_.end() && it->second.in_multi) {
+            return {false, RespParser::encode_error("ERR WATCH inside MULTI is not allowed")};
+        }
+        auto& tx = transactions_[fd];
+        for (size_t i = 1; i < args.size(); ++i) {
+            tx.watched_keys.insert(args[i]);
+        }
         return {false, RespParser::encode_simple_string("OK")};
     }
 
