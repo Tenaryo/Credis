@@ -27,9 +27,10 @@ void test_acl_getuser_default_returns_flags_with_nopass() {
     std::string input = "*3\r\n$3\r\nACL\r\n$7\r\nGETUSER\r\n$7\r\ndefault\r\n";
     auto response = handler.process(input);
 
-    assert(response == "*2\r\n$5\r\nflags\r\n*1\r\n$6\r\nnopass\r\n");
+    assert(response == "*4\r\n$5\r\nflags\r\n*1\r\n$6\r\nnopass\r\n$9\r\npasswords\r\n*0\r\n");
 
-    std::cout << "\u2713 Test passed: ACL GETUSER default returns [\"flags\", [\"nopass\"]]\n";
+    std::cout << "\u2713 Test passed: ACL GETUSER default returns [\"flags\", [\"nopass\"], "
+                 "\"passwords\", []]\n";
 }
 
 int main() {
