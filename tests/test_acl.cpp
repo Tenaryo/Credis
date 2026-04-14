@@ -19,7 +19,7 @@ void test_acl_whoami_returns_default() {
     std::cout << "\u2713 Test passed: ACL WHOAMI returns 'default' as bulk string\n";
 }
 
-void test_acl_getuser_default_returns_flags_with_empty_array() {
+void test_acl_getuser_default_returns_flags_with_nopass() {
     Store store;
     ServerConfig config;
     CommandHandler handler(store, config);
@@ -27,16 +27,16 @@ void test_acl_getuser_default_returns_flags_with_empty_array() {
     std::string input = "*3\r\n$3\r\nACL\r\n$7\r\nGETUSER\r\n$7\r\ndefault\r\n";
     auto response = handler.process(input);
 
-    assert(response == "*2\r\n$5\r\nflags\r\n*0\r\n");
+    assert(response == "*2\r\n$5\r\nflags\r\n*1\r\n$6\r\nnopass\r\n");
 
-    std::cout << "\u2713 Test passed: ACL GETUSER default returns [\"flags\", []]\n";
+    std::cout << "\u2713 Test passed: ACL GETUSER default returns [\"flags\", [\"nopass\"]]\n";
 }
 
 int main() {
     std::cout << "Running ACL tests...\n\n";
 
     test_acl_whoami_returns_default();
-    test_acl_getuser_default_returns_flags_with_empty_array();
+    test_acl_getuser_default_returns_flags_with_nopass();
 
     std::cout << "\n\u2713 All tests passed!\n";
     return 0;
