@@ -122,6 +122,14 @@ CommandHandler::process_with_fd(int fd,
         return {false, RespParser::encode_simple_string("OK")};
     }
 
+    if (cmd == "WATCH") {
+        if (args.size() < 2) {
+            return {false,
+                    RespParser::encode_error("ERR wrong number of arguments for 'watch' command")};
+        }
+        return {false, RespParser::encode_simple_string("OK")};
+    }
+
     auto it = transactions_.find(fd);
     if (it != transactions_.end() && it->second.in_multi) {
         it->second.queued_commands.push_back(args);
