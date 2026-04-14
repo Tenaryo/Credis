@@ -152,6 +152,14 @@ CommandHandler::process_with_fd(int fd,
         return {false, RespParser::encode_simple_string("OK")};
     }
 
+    if (cmd == "UNWATCH") {
+        auto uit = transactions_.find(fd);
+        if (uit != transactions_.end()) {
+            uit->second.watched_keys.clear();
+        }
+        return {false, RespParser::encode_simple_string("OK")};
+    }
+
     auto it = transactions_.find(fd);
     if (it != transactions_.end() && it->second.in_multi) {
         it->second.queued_commands.push_back(args);

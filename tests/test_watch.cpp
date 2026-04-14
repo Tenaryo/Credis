@@ -52,7 +52,7 @@ void test_unwatch_returns_ok() {
     Store store;
     CommandHandler handler(store);
 
-    auto result = handler.process_with_fd(1, "*1\r\n$8\r\nUNWATCH\r\n", nullptr);
+    auto result = handler.process_with_fd(1, "*1\r\n$7\r\nUNWATCH\r\n", nullptr);
 
     assert(!result.should_block);
     assert(result.response == "+OK\r\n");
@@ -71,7 +71,7 @@ void test_unwatch_clears_watched_keys_then_exec_succeeds() {
 
     handler.process_with_fd(2, "*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n200\r\n", nullptr);
 
-    handler.process_with_fd(1, "*1\r\n$8\r\nUNWATCH\r\n", nullptr);
+    handler.process_with_fd(1, "*1\r\n$7\r\nUNWATCH\r\n", nullptr);
 
     handler.process_with_fd(1, "*1\r\n$5\r\nMULTI\r\n", nullptr);
     handler.process_with_fd(1, "*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n400\r\n", nullptr);
