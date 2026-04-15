@@ -10,7 +10,7 @@ bool Store::is_expired(const Entry& entry) const {
 }
 
 Store::Entry* Store::find_valid_entry(std::string_view key) {
-    auto it = data_.find(std::string(key));
+    auto it = data_.find(key);
     if (it == data_.end()) {
         return nullptr;
     }
@@ -19,66 +19,6 @@ Store::Entry* Store::find_valid_entry(std::string_view key) {
         return nullptr;
     }
     return &it->second;
-}
-
-Redis::List* Store::get_list(std::string_view key) {
-    Entry* entry = find_valid_entry(key);
-    if (!entry || !std::holds_alternative<Redis::List>(entry->value)) {
-        return nullptr;
-    }
-    return &std::get<Redis::List>(entry->value);
-}
-
-Redis::List* Store::get_or_create_list(std::string key) {
-    Entry* entry = find_valid_entry(key);
-    if (!entry) {
-        auto [it, _] = data_.emplace(std::move(key), Entry{Redis::List{}, {}});
-        entry = &it->second;
-    }
-    if (!std::holds_alternative<Redis::List>(entry->value)) {
-        entry->value = Redis::List{};
-    }
-    return &std::get<Redis::List>(entry->value);
-}
-
-Redis::Stream* Store::get_stream(std::string_view key) {
-    Entry* entry = find_valid_entry(key);
-    if (!entry || !std::holds_alternative<Redis::Stream>(entry->value)) {
-        return nullptr;
-    }
-    return &std::get<Redis::Stream>(entry->value);
-}
-
-Redis::Stream* Store::get_or_create_stream(std::string key) {
-    Entry* entry = find_valid_entry(key);
-    if (!entry) {
-        auto [it, _] = data_.emplace(std::move(key), Entry{Redis::Stream{}, {}});
-        entry = &it->second;
-    }
-    if (!std::holds_alternative<Redis::Stream>(entry->value)) {
-        entry->value = Redis::Stream{};
-    }
-    return &std::get<Redis::Stream>(entry->value);
-}
-
-Redis::SortedSet* Store::get_zset(std::string_view key) {
-    Entry* entry = find_valid_entry(key);
-    if (!entry || !std::holds_alternative<Redis::SortedSet>(entry->value)) {
-        return nullptr;
-    }
-    return &std::get<Redis::SortedSet>(entry->value);
-}
-
-Redis::SortedSet* Store::get_or_create_zset(std::string key) {
-    Entry* entry = find_valid_entry(key);
-    if (!entry) {
-        auto [it, _] = data_.emplace(std::move(key), Entry{Redis::SortedSet{}, {}});
-        entry = &it->second;
-    }
-    if (!std::holds_alternative<Redis::SortedSet>(entry->value)) {
-        entry->value = Redis::SortedSet{};
-    }
-    return &std::get<Redis::SortedSet>(entry->value);
 }
 
 size_t Store::lower_bound(const Redis::Stream& stream, const StreamId& target) {
@@ -152,7 +92,11 @@ bool Store::exists(std::string_view key) { return find_valid_entry(key) != nullp
 
 bool Store::del(std::string_view key) {
     touch_key(key);
-    return data_.erase(std::string(key)) > 0;
+    auto it = data_.find(key);
+    if (it == data_.end())
+        return false;
+    data_.erase(it);
+    return true;
 }
 
 int64_t Store::rpush(std::string key, std::string value) {
@@ -337,49 +281,43 @@ std::string Store::xadd(std::string key,
     return final_id;
 }
 
-std::vector<Redis::StreamEntry>
-Store::xrange(std::string_view key, std::string start, std::string end) {
+std::span<const Redis::StreamEntry>
+Store::xrange(std::string_view key, std::string_view start, std::string_view end) {
     auto* stream = get_stream(key);
     if (!stream || stream->empty())
         return {};
 
     auto start_sid = start == "-" ? StreamId{0, 0}
-                     : start.find('-') == std::string::npos
+                     : start.find('-') == std::string_view::npos
                          ? StreamId{parse_int<int64_t>(start).value_or(0), 0}
                          : StreamId::parse(start).value_or(StreamId{INT64_MAX, INT64_MAX});
     auto end_sid = end == "+" ? StreamId{INT64_MAX, INT64_MAX}
-                   : end.find('-') == std::string::npos
+                   : end.find('-') == std::string_view::npos
                        ? StreamId{parse_int<int64_t>(end).value_or(0), INT64_MAX}
                        : StreamId::parse(end).value_or(StreamId{-1, -1});
 
     auto lo = lower_bound(*stream, start_sid);
     auto hi = upper_bound(*stream, end_sid);
 
-    std::vector<Redis::StreamEntry> result;
-    result.reserve(hi > lo ? hi - lo : 0);
-    for (size_t i = lo; i < hi; ++i) {
-        result.push_back((*stream)[i]);
-    }
-    return result;
+    if (hi <= lo)
+        return {};
+    return std::span<const Redis::StreamEntry>(stream->data() + lo, hi - lo);
 }
 
-std::vector<Redis::StreamEntry> Store::xread(std::string_view key, std::string id) {
+std::span<const Redis::StreamEntry> Store::xread(std::string_view key, std::string_view id) {
     auto* stream = get_stream(key);
     if (!stream || stream->empty())
         return {};
 
-    auto threshold_sid = id.find('-') == std::string::npos
+    auto threshold_sid = id.find('-') == std::string_view::npos
                              ? StreamId{parse_int<int64_t>(id).value_or(0), 0}
                              : StreamId::parse(id).value_or(StreamId{INT64_MAX, INT64_MAX});
 
     auto lo = upper_bound(*stream, threshold_sid);
 
-    std::vector<Redis::StreamEntry> result;
-    result.reserve(stream->size() - lo);
-    for (size_t i = lo; i < stream->size(); ++i) {
-        result.push_back((*stream)[i]);
-    }
-    return result;
+    if (lo >= stream->size())
+        return {};
+    return std::span<const Redis::StreamEntry>(stream->data() + lo, stream->size() - lo);
 }
 
 std::optional<std::string> Store::get_stream_max_id(std::string_view key) {

@@ -1,10 +1,11 @@
 #pragma once
 
 #include <expected>
+#include <span>
 #include <string>
 #include <vector>
 
-#include "store/store.hpp"
+#include "protocol/stream_entry.hpp"
 
 class RespParser {
   public:
@@ -22,9 +23,9 @@ class RespParser {
     static std::string encode_integer(int64_t n);
     static std::string encode_array(const std::vector<std::string>& elements);
     static std::string encode_raw_array(std::vector<std::string> raw_elements);
-    static std::string encode_entries(const std::vector<Redis::StreamEntry>& entries);
+    static std::string encode_entries(std::span<const Redis::StreamEntry> entries);
     static std::string encode_error(std::string_view s);
     static std::string encode_null_array();
     static std::string encode_stream_entries(
-        const std::vector<std::pair<std::string, std::vector<Redis::StreamEntry>>>& streams);
+        const std::vector<std::pair<std::string, std::span<const Redis::StreamEntry>>>& streams);
 };
