@@ -3,9 +3,9 @@
 #include "geo/geo_score.hpp"
 #include "protocol/resp_parser.hpp"
 #include "pubsub/pubsub_manager.hpp"
+#include "rdb/rdb_constants.hpp"
 #include "store/store.hpp"
 #include "util/parse.hpp"
-#include <array>
 #include <cmath>
 #include <cstdio>
 #include <string_view>
@@ -27,28 +27,225 @@ bool is_write_command(std::string_view cmd) {
     return std::ranges::find(kWriteCommands, cmd) != kWriteCommands.end();
 }
 
-static constexpr std::array<char, 88> kEmptyRdb{
-    {'R',    'E',    'D',    'I',    'S',    '0',    '0',    '1',    '1',    '\xfa', '\x09',
-     'r',    'e',    'd',    'i',    's',    '-',    'v',    'e',    'r',    '\x05', '7',
-     '.',    '2',    '.',    '0',    '\xfa', '\x0a', 'r',    'e',    'd',    'i',    's',
-     '-',    'b',    'i',    't',    's',    '\xc0', '\x40', '\xfa', '\x05', 'c',    't',
-     'i',    'm',    'e',    '\xc2', '\x6d', '\x08', '\xbc', '\x65', '\xfa', '\x08', 'u',
-     's',    'e',    'd',    '-',    'm',    'e',    'm',    '\xc2', '\xb0', '\xc4', '\x10',
-     '\x00', '\xfa', '\x08', 'a',    'o',    'f',    '-',    'b',    'a',    's',    'e',
-     '\xc0', '\x00', '\xff', '\xf0', '\x6e', '\x3b', '\xfe', '\xc0', '\xff', '\x5a', '\xa2'}};
 } // namespace
 
 CommandHandler::CommandHandler(Store& store, const ServerConfig& config)
-    : store_(store), config_(config) {}
+    : store_(store), config_(config) {
+    register_commands();
+}
 
 void CommandHandler::remove_connection(int fd) {
     authenticated_fds_.erase(fd);
     transactions_.erase(fd);
 }
 
+void CommandHandler::register_commands() {
+    command_table_ = {
+        {"PING",
+         {[this](const std::vector<std::string>&,
+                 int fd,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              if (pubsub_manager_ && pubsub_manager_->is_subscribed(fd)) {
+                  return ProcessResult::normal(RespParser::encode_array({"pong", ""}));
+              }
+              return ProcessResult::normal(handle_ping());
+          },
+          1}},
+        {"ECHO",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return ProcessResult::normal(handle_echo(args[1]));
+          },
+          2}},
+        {"SET",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return ProcessResult::normal(handle_set(args));
+          },
+          3}},
+        {"GET",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return ProcessResult::normal(handle_get(args[1]));
+          },
+          2}},
+        {"INCR",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return ProcessResult::normal(handle_incr(args[1]));
+          },
+          2}},
+        {"RPUSH",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)> send) -> ProcessResult {
+              if (send)
+                  return handle_rpush_with_blocking(args, send);
+              return ProcessResult::normal(handle_rpush(args));
+          },
+          3}},
+        {"LPUSH",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)> send) -> ProcessResult {
+              if (send)
+                  return handle_lpush_with_blocking(args, send);
+              return ProcessResult::normal(handle_lpush(args));
+          },
+          3}},
+        {"LLEN",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return ProcessResult::normal(RespParser::encode_integer(store_.llen(args[1])));
+          },
+          2}},
+        {"LPOP",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return ProcessResult::normal(handle_lpop(args));
+          },
+          2}},
+        {"LRANGE",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return ProcessResult::normal(handle_lrange(args));
+          },
+          4}},
+        {"BLPOP",
+         {[this](const std::vector<std::string>& args,
+                 int fd,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return handle_blpop(fd, args);
+          },
+          3}},
+        {"TYPE",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return ProcessResult::normal(
+                  RespParser::encode_simple_string(store_.get_type(args[1])));
+          },
+          2}},
+        {"KEYS",
+         {[this](const std::vector<std::string>&, int, std::function<void(int, const std::string&)>)
+              -> ProcessResult {
+              return ProcessResult::normal(RespParser::encode_array(store_.keys()));
+          },
+          2}},
+        {"XADD",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)> send) -> ProcessResult {
+              return handle_xadd_with_blocking(args, send);
+          },
+          4}},
+        {"ZADD",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return ProcessResult::normal(handle_zadd(args));
+          },
+          4}},
+        {"ZRANK",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return ProcessResult::normal(handle_zrank(args));
+          },
+          3}},
+        {"ZRANGE",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return ProcessResult::normal(handle_zrange(args));
+          },
+          4}},
+        {"ZCARD",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return ProcessResult::normal(handle_zcard(args[1]));
+          },
+          2}},
+        {"ZSCORE",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return ProcessResult::normal(handle_zscore(args));
+          },
+          3}},
+        {"ZREM",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return ProcessResult::normal(handle_zrem(args));
+          },
+          3}},
+        {"GEOADD",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return ProcessResult::normal(handle_geoadd(args));
+          },
+          5}},
+        {"GEOPOS",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return ProcessResult::normal(handle_geopos(args));
+          },
+          3}},
+        {"GEODIST",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return ProcessResult::normal(handle_geodist(args));
+          },
+          4}},
+        {"GEOSEARCH",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return ProcessResult::normal(handle_geosearch(args));
+          },
+          8}},
+        {"XRANGE",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return ProcessResult::normal(handle_xrange(args));
+          },
+          4}},
+        {"XREAD",
+         {[this](const std::vector<std::string>& args,
+                 int fd,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return handle_xread_with_blocking(fd, args);
+          },
+          4}},
+        {"INFO",
+         {[this](const std::vector<std::string>& args,
+                 int,
+                 std::function<void(int, const std::string&)>) -> ProcessResult {
+              return ProcessResult::normal(handle_info(args));
+          },
+          1}},
+    };
+}
+
 std::string CommandHandler::process(std::string_view input) {
     auto result = process_with_fd(-1, input, nullptr);
-    return result.response;
+    if (std::holds_alternative<ProcessResult::Normal>(result.state)) {
+        return std::get<ProcessResult::Normal>(result.state).response;
+    }
+    return std::get<ProcessResult::ReplicaHandshake>(result.state).response;
 }
 
 ProcessResult
@@ -57,12 +254,12 @@ CommandHandler::process_with_fd(int fd,
                                 std::function<void(int, const std::string&)> send_to_client) {
     auto parsed = RespParser::parse(input);
     if (!parsed) {
-        return {false, RespParser::encode_error("ERR " + parsed.error())};
+        return ProcessResult::normal(RespParser::encode_error("ERR " + parsed.error()));
     }
 
     auto& args = *parsed;
     if (args.empty()) {
-        return {false, RespParser::encode_error("ERR empty command")};
+        return ProcessResult::normal(RespParser::encode_error("ERR empty command"));
     }
 
     std::string& cmd = args[0];
@@ -77,8 +274,8 @@ CommandHandler::process_with_fd(int fd,
                                                               "QUIT"sv,
                                                               "RESET"sv};
         if (std::ranges::find(kSubscribedAllowed, cmd) == kSubscribedAllowed.end()) {
-            return {false,
-                    RespParser::encode_error("ERR Can't execute '" + cmd + "' in subscribed mode")};
+            return ProcessResult::normal(
+                RespParser::encode_error("ERR Can't execute '" + cmd + "' in subscribed mode"));
         }
     }
 
@@ -87,19 +284,20 @@ CommandHandler::process_with_fd(int fd,
         if (user && user->nopass) {
             authenticated_fds_.insert(fd);
         } else {
-            return {false, RespParser::encode_error("NOAUTH Authentication required.")};
+            return ProcessResult::normal(
+                RespParser::encode_error("NOAUTH Authentication required."));
         }
     }
 
     if (cmd == "MULTI") {
         transactions_[fd].in_multi = true;
-        return {false, RespParser::encode_simple_string("OK")};
+        return ProcessResult::normal(RespParser::encode_simple_string("OK"));
     }
 
     if (cmd == "EXEC") {
         auto it = transactions_.find(fd);
         if (it == transactions_.end() || !it->second.in_multi) {
-            return {false, RespParser::encode_error("ERR EXEC without MULTI")};
+            return ProcessResult::normal(RespParser::encode_error("ERR EXEC without MULTI"));
         }
 
         auto& tx = it->second;
@@ -114,42 +312,44 @@ CommandHandler::process_with_fd(int fd,
 
         if (dirty) {
             transactions_.erase(it);
-            return {false, RespParser::encode_null_array()};
+            return ProcessResult::normal(RespParser::encode_null_array());
         }
 
         std::vector<std::string> results;
         results.reserve(tx.queued_commands.size());
         for (const auto& queued_args : tx.queued_commands) {
             auto cmd_result = execute_command(queued_args, fd, send_to_client);
-            results.push_back(std::move(cmd_result.response));
+            results.push_back(
+                std::move(std::get<ProcessResult::Normal>(cmd_result.state).response));
         }
         transactions_.erase(it);
-        return {false, RespParser::encode_raw_array(std::move(results))};
+        return ProcessResult::normal(RespParser::encode_raw_array(std::move(results)));
     }
 
     if (cmd == "DISCARD") {
         auto dit = transactions_.find(fd);
         if (dit == transactions_.end() || !dit->second.in_multi) {
-            return {false, RespParser::encode_error("ERR DISCARD without MULTI")};
+            return ProcessResult::normal(RespParser::encode_error("ERR DISCARD without MULTI"));
         }
         transactions_.erase(dit);
-        return {false, RespParser::encode_simple_string("OK")};
+        return ProcessResult::normal(RespParser::encode_simple_string("OK"));
     }
 
     if (cmd == "WATCH") {
         if (args.size() < 2) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'watch' command")};
+            return ProcessResult::normal(
+                RespParser::encode_error("ERR wrong number of arguments for 'watch' command"));
         }
         auto it = transactions_.find(fd);
         if (it != transactions_.end() && it->second.in_multi) {
-            return {false, RespParser::encode_error("ERR WATCH inside MULTI is not allowed")};
+            return ProcessResult::normal(
+                RespParser::encode_error("ERR WATCH inside MULTI is not allowed"));
         }
         auto& tx = transactions_[fd];
         for (size_t i = 1; i < args.size(); ++i) {
             tx.watched_keys[args[i]] = store_.get_key_version(args[i]);
         }
-        return {false, RespParser::encode_simple_string("OK")};
+        return ProcessResult::normal(RespParser::encode_simple_string("OK"));
     }
 
     if (cmd == "UNWATCH") {
@@ -157,13 +357,13 @@ CommandHandler::process_with_fd(int fd,
         if (uit != transactions_.end()) {
             uit->second.watched_keys.clear();
         }
-        return {false, RespParser::encode_simple_string("OK")};
+        return ProcessResult::normal(RespParser::encode_simple_string("OK"));
     }
 
     auto it = transactions_.find(fd);
     if (it != transactions_.end() && it->second.in_multi) {
         it->second.queued_commands.push_back(args);
-        return {false, RespParser::encode_simple_string("QUEUED")};
+        return ProcessResult::normal(RespParser::encode_simple_string("QUEUED"));
     }
 
     auto result = execute_command(args, fd, send_to_client);
@@ -173,311 +373,109 @@ CommandHandler::process_with_fd(int fd,
     return result;
 }
 
-ProcessResult
-CommandHandler::execute_command(const std::vector<std::string>& args,
-                                int fd,
-                                std::function<void(int, const std::string&)> send_to_client) {
+template <typename SendFn>
+ProcessResult CommandHandler::execute_command(const std::vector<std::string>& args,
+                                              int fd,
+                                              SendFn&& send_to_client) {
     const std::string& cmd = args[0];
 
-    if (cmd == "PING") {
-        if (pubsub_manager_ && pubsub_manager_->is_subscribed(fd)) {
-            return {false, RespParser::encode_array({"pong", ""})};
-        }
-        return {false, handle_ping()};
-    }
-    if (cmd == "ECHO") {
-        if (args.size() < 2) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'echo' command")};
-        }
-        return {false, handle_echo(args[1])};
-    }
-    if (cmd == "SET") {
-        if (args.size() < 3) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'set' command")};
-        }
-        return {false, handle_set(args)};
-    }
-    if (cmd == "GET") {
-        if (args.size() < 2) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'get' command")};
-        }
-        return {false, handle_get(args[1])};
-    }
-    if (cmd == "INCR") {
-        if (args.size() < 2) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'incr' command")};
-        }
-        return {false, handle_incr(args[1])};
-    }
-    if (cmd == "RPUSH") {
-        if (args.size() < 3) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'rpush' command")};
-        }
-        if (send_to_client) {
-            return handle_rpush_with_blocking(args, send_to_client);
-        }
-        return {false, handle_rpush(args)};
-    }
-    if (cmd == "LPUSH") {
-        if (args.size() < 3) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'lpush' command")};
-        }
-        if (send_to_client) {
-            return handle_lpush_with_blocking(args, send_to_client);
-        }
-        return {false, handle_lpush(args)};
-    }
-    if (cmd == "LLEN") {
-        if (args.size() < 2) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'llen' command")};
-        }
-        return {false, RespParser::encode_integer(store_.llen(args[1]))};
-    }
-    if (cmd == "LPOP") {
-        if (args.size() < 2) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'lpop' command")};
-        }
-        return {false, handle_lpop(args)};
-    }
-    if (cmd == "LRANGE") {
-        if (args.size() < 4) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'lrange' command")};
-        }
-        return {false, handle_lrange(args)};
-    }
-    if (cmd == "BLPOP") {
-        if (args.size() < 3) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'blpop' command")};
-        }
-        return handle_blpop(fd, args);
-    }
-    if (cmd == "TYPE") {
-        if (args.size() < 2) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'type' command")};
-        }
-        return {false, RespParser::encode_simple_string(store_.get_type(args[1]))};
-    }
-    if (cmd == "KEYS") {
-        if (args.size() < 2) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'keys' command")};
-        }
-        return {false, RespParser::encode_array(store_.keys())};
-    }
-    if (cmd == "XADD") {
-        if (args.size() < 4 || (args.size() - 3) % 2 != 0) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'xadd' command")};
-        }
-        return handle_xadd_with_blocking(args, send_to_client);
-    }
-    if (cmd == "ZADD") {
-        if (args.size() < 4) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'zadd' command")};
-        }
-        return {false, handle_zadd(args)};
-    }
-    if (cmd == "ZRANK") {
-        if (args.size() < 3) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'zrank' command")};
-        }
-        return {false, handle_zrank(args)};
-    }
-    if (cmd == "ZRANGE") {
-        if (args.size() < 4) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'zrange' command")};
-        }
-        return {false, handle_zrange(args)};
-    }
-    if (cmd == "ZCARD") {
-        if (args.size() < 2) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'zcard' command")};
-        }
-        return {false, handle_zcard(args[1])};
-    }
-    if (cmd == "ZSCORE") {
-        if (args.size() < 3) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'zscore' command")};
-        }
-        return {false, handle_zscore(args)};
-    }
-    if (cmd == "ZREM") {
-        if (args.size() < 3) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'zrem' command")};
-        }
-        return {false, handle_zrem(args)};
-    }
-    if (cmd == "GEOADD") {
-        if (args.size() < 5) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'geoadd' command")};
-        }
-        return {false, handle_geoadd(args)};
-    }
-    if (cmd == "GEOPOS") {
-        if (args.size() < 3) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'geopos' command")};
-        }
-        return {false, handle_geopos(args)};
-    }
-    if (cmd == "GEODIST") {
-        if (args.size() < 4) {
-            return {
-                false,
-                RespParser::encode_error("ERR wrong number of arguments for 'geodist' command")};
-        }
-        return {false, handle_geodist(args)};
-    }
-    if (cmd == "GEOSEARCH") {
-        if (args.size() < 8) {
-            return {
-                false,
-                RespParser::encode_error("ERR wrong number of arguments for 'geosearch' command")};
-        }
-        return {false, handle_geosearch(args)};
-    }
-    if (cmd == "XRANGE") {
-        if (args.size() < 4) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'xrange' command")};
-        }
-        return {false, handle_xrange(args)};
-    }
-    if (cmd == "XREAD") {
-        if (args.size() < 4) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'xread' command")};
-        }
-        return handle_xread_with_blocking(fd, args);
-    }
-    if (cmd == "INFO") {
-        return {false, handle_info(args)};
-    }
     if (cmd == "CONFIG") {
         if (args.size() < 3 || to_upper(args[1]) != "GET") {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'config' command")};
+            return ProcessResult::normal(
+                RespParser::encode_error("ERR wrong number of arguments for 'config' command"));
         }
-        return {false, handle_config_get(args[2])};
+        return ProcessResult::normal(handle_config_get(args[2]));
     }
     if (cmd == "ACL") {
         if (args.size() < 2) {
-            return {false,
-                    RespParser::encode_error("ERR unknown subcommand for 'ACL'. Try ACL HELP.")};
+            return ProcessResult::normal(
+                RespParser::encode_error("ERR unknown subcommand for 'ACL'. Try ACL HELP."));
         }
         auto subcmd = to_upper(args[1]);
         if (subcmd == "WHOAMI") {
-            return {false, handle_acl_whoami()};
+            return ProcessResult::normal(handle_acl_whoami());
         }
         if (subcmd == "GETUSER") {
             if (args.size() < 3) {
-                return {false,
-                        RespParser::encode_error(
-                            "ERR wrong number of arguments for 'acl|getuser' command")};
+                return ProcessResult::normal(RespParser::encode_error(
+                    "ERR wrong number of arguments for 'acl|getuser' command"));
             }
-            return {false, handle_acl_getuser(args)};
+            return ProcessResult::normal(handle_acl_getuser(args));
         }
         if (subcmd == "SETUSER") {
             if (args.size() < 3) {
-                return {false,
-                        RespParser::encode_error(
-                            "ERR wrong number of arguments for 'acl|setuser' command")};
+                return ProcessResult::normal(RespParser::encode_error(
+                    "ERR wrong number of arguments for 'acl|setuser' command"));
             }
-            return {false, handle_acl_setuser(args)};
+            return ProcessResult::normal(handle_acl_setuser(args));
         }
-        return {false, RespParser::encode_error("ERR unknown subcommand for 'ACL'. Try ACL HELP.")};
+        return ProcessResult::normal(
+            RespParser::encode_error("ERR unknown subcommand for 'ACL'. Try ACL HELP."));
     }
     if (cmd == "AUTH") {
         if (args.size() < 3) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'auth' command")};
+            return ProcessResult::normal(
+                RespParser::encode_error("ERR wrong number of arguments for 'auth' command"));
         }
         if (acl_manager_.authenticate(args[1], args[2])) {
             authenticated_fds_.insert(fd);
-            return {false, RespParser::encode_simple_string("OK")};
+            return ProcessResult::normal(RespParser::encode_simple_string("OK"));
         }
-        return {false,
-                RespParser::encode_error(
-                    "WRONGPASS invalid username-password pair or user is disabled.")};
+        return ProcessResult::normal(RespParser::encode_error(
+            "WRONGPASS invalid username-password pair or user is disabled."));
     }
     if (cmd == "REPLCONF") {
         if (args.size() >= 2 && to_upper(args[1]) == "GETACK") {
-            return {false, RespParser::encode_array({"REPLCONF", "ACK", "0"})};
+            return ProcessResult::normal(RespParser::encode_array({"REPLCONF", "ACK", "0"}));
         }
-        return {false, RespParser::encode_simple_string("OK")};
+        return ProcessResult::normal(RespParser::encode_simple_string("OK"));
     }
     if (cmd == "WAIT") {
         if (args.size() < 3) {
-            return {false,
-                    RespParser::encode_error("ERR wrong number of arguments for 'wait' command")};
+            return ProcessResult::normal(
+                RespParser::encode_error("ERR wrong number of arguments for 'wait' command"));
         }
         auto numreplicas = parse_int<int64_t>(args[1]);
         auto timeout = parse_int<int64_t>(args[2]);
         if (!numreplicas || !timeout) {
-            return {false, RespParser::encode_error("ERR value is not an integer or out of range")};
+            return ProcessResult::normal(
+                RespParser::encode_error("ERR value is not an integer or out of range"));
         }
-        ProcessResult result;
-        result.is_wait = true;
-        result.wait_numreplicas = *numreplicas;
-        result.wait_timeout_ms = *timeout;
-        return result;
+        return ProcessResult::wait(*numreplicas, *timeout);
     }
     if (cmd == "PSYNC") {
         auto response = "+FULLRESYNC " + config_.master_replid + " " +
                         std::to_string(config_.master_repl_offset) + "\r\n";
         response += "$88\r\n";
         response.append(kEmptyRdb.begin(), kEmptyRdb.end());
-        ProcessResult psync_result(false, response);
-        psync_result.is_replica_handshake = true;
-        return psync_result;
+        return ProcessResult::replica_handshake(response);
     }
     if (cmd == "SUBSCRIBE") {
         if (args.size() < 2) {
-            return {
-                false,
-                RespParser::encode_error("ERR wrong number of arguments for 'subscribe' command")};
+            return ProcessResult::normal(
+                RespParser::encode_error("ERR wrong number of arguments for 'subscribe' command"));
         }
         size_t count = pubsub_manager_ ? pubsub_manager_->subscribe(fd, args[1]) : 1;
         auto resp = "*3\r\n" + RespParser::encode_bulk_string("subscribe") +
                     RespParser::encode_bulk_string(args[1]) +
                     RespParser::encode_integer(static_cast<int64_t>(count));
-        return {false, std::move(resp)};
+        return ProcessResult::normal(std::move(resp));
     }
     if (cmd == "UNSUBSCRIBE") {
         if (args.size() < 2) {
-            return {false,
-                    RespParser::encode_error(
-                        "ERR wrong number of arguments for 'unsubscribe' command")};
+            return ProcessResult::normal(RespParser::encode_error(
+                "ERR wrong number of arguments for 'unsubscribe' command"));
         }
         size_t count = pubsub_manager_ ? pubsub_manager_->unsubscribe(fd, args[1]) : 0;
         auto resp = "*3\r\n" + RespParser::encode_bulk_string("unsubscribe") +
                     RespParser::encode_bulk_string(args[1]) +
                     RespParser::encode_integer(static_cast<int64_t>(count));
-        return {false, std::move(resp)};
+        return ProcessResult::normal(std::move(resp));
     }
     if (cmd == "PUBLISH") {
         if (args.size() < 3) {
-            return {
-                false,
-                RespParser::encode_error("ERR wrong number of arguments for 'publish' command")};
+            return ProcessResult::normal(
+                RespParser::encode_error("ERR wrong number of arguments for 'publish' command"));
         }
         const auto& channel = args[1];
         const auto& message = args[2];
@@ -485,14 +483,23 @@ CommandHandler::execute_command(const std::vector<std::string>& args,
             const auto& subs = pubsub_manager_->get_subscribers(channel);
             if (send_to_client) {
                 auto msg = RespParser::encode_array({"message", channel, message});
-                std::ranges::for_each(subs, [&](int fd) { send_to_client(fd, msg); });
+                std::ranges::for_each(subs, [&](int cfd) { send_to_client(cfd, msg); });
             }
-            return {false, RespParser::encode_integer(static_cast<int64_t>(subs.size()))};
+            return ProcessResult::normal(
+                RespParser::encode_integer(static_cast<int64_t>(subs.size())));
         }
-        return {false, RespParser::encode_integer(0)};
+        return ProcessResult::normal(RespParser::encode_integer(0));
     }
 
-    return {false, RespParser::encode_error("ERR unknown command '" + cmd + "'")};
+    auto it = command_table_.find(cmd);
+    if (it == command_table_.end()) {
+        return ProcessResult::normal(RespParser::encode_error("ERR unknown command '" + cmd + "'"));
+    }
+    if (args.size() < it->second.min_args) {
+        return ProcessResult::normal(RespParser::encode_error(
+            "ERR wrong number of arguments for '" + to_lower(cmd) + "' command"));
+    }
+    return it->second.handler(args, fd, send_to_client);
 }
 
 std::string CommandHandler::handle_ping() { return RespParser::encode_simple_string("PONG"); }
@@ -609,28 +616,26 @@ std::string CommandHandler::handle_info(const std::vector<std::string>& /* args 
 ProcessResult CommandHandler::handle_blpop(int fd, const std::vector<std::string>& args) {
     const std::string& key = args[1];
 
-    double timeout_sec = 0;
-    try {
-        timeout_sec = std::stod(args[2]);
-        if (timeout_sec < 0) {
-            return {false, RespParser::encode_error("ERR timeout is negative")};
-        }
-    } catch (...) {
-        return {false, RespParser::encode_error("ERR value is not an integer or out of range")};
-    }
+    auto timeout_opt = parse_double(args[2]);
+    if (!timeout_opt)
+        return ProcessResult::normal(
+            RespParser::encode_error("ERR value is not an integer or out of range"));
+    if (*timeout_opt < 0)
+        return ProcessResult::normal(RespParser::encode_error("ERR timeout is negative"));
+    double timeout_sec = *timeout_opt;
 
     auto elements = store_.lpop(key, 1);
     if (!elements.empty()) {
-        return {false, RespParser::encode_array({key, elements[0]})};
+        return ProcessResult::normal(RespParser::encode_array({key, elements[0]}));
     }
 
     if (blocking_manager_) {
         auto timeout_ms = std::chrono::milliseconds(static_cast<int64_t>(timeout_sec * 1000));
         blocking_manager_->block_client(fd, key, timeout_ms);
-        return {true, ""};
+        return ProcessResult::block();
     }
 
-    return {false, RespParser::encode_error("ERR blocking not available")};
+    return ProcessResult::normal(RespParser::encode_error("ERR blocking not available"));
 }
 
 ProcessResult CommandHandler::handle_rpush_with_blocking(
@@ -653,7 +658,7 @@ ProcessResult CommandHandler::handle_rpush_with_blocking(
         }
         count = store_.rpush(key, args[i]);
     }
-    return {false, RespParser::encode_integer(count)};
+    return ProcessResult::normal(RespParser::encode_integer(count));
 }
 
 ProcessResult CommandHandler::handle_lpush_with_blocking(
@@ -673,18 +678,15 @@ ProcessResult CommandHandler::handle_lpush_with_blocking(
         }
         count = store_.lpush(key, args[i]);
     }
-    return {false, RespParser::encode_integer(count)};
+    return ProcessResult::normal(RespParser::encode_integer(count));
 }
 
 std::string CommandHandler::handle_zadd(const std::vector<std::string>& args) {
     const std::string& key = args[1];
-    double score;
-    try {
-        score = std::stod(args[2]);
-    } catch (...) {
+    auto score = parse_double(args[2]);
+    if (!score)
         return RespParser::encode_error("ERR value is not a valid float");
-    }
-    auto added = store_.zadd(key, score, args[3]);
+    auto added = store_.zadd(key, *score, args[3]);
     return RespParser::encode_integer(added);
 }
 
@@ -724,25 +726,22 @@ std::string CommandHandler::handle_zrem(const std::vector<std::string>& args) {
 }
 
 std::string CommandHandler::handle_geoadd(const std::vector<std::string>& args) {
-    double lon;
-    double lat;
-    try {
-        lon = std::stod(args[2]);
-        lat = std::stod(args[3]);
-    } catch (...) {
+    auto lon = parse_double(args[2]);
+    auto lat = parse_double(args[3]);
+    if (!lon || !lat)
         return RespParser::encode_error("ERR value is not a valid float");
-    }
 
-    bool lon_invalid = !std::isfinite(lon) || lon < geo::kLonMin || lon > geo::kLonMax;
-    bool lat_invalid = !std::isfinite(lat) || lat < geo::kLatMin || lat > geo::kLatMax;
+    bool lon_invalid = !std::isfinite(*lon) || *lon < geo::kLonMin || *lon > geo::kLonMax;
+    bool lat_invalid = !std::isfinite(*lat) || *lat < geo::kLatMin || *lat > geo::kLatMax;
 
     if (lon_invalid || lat_invalid) {
         char buf[128];
-        std::snprintf(buf, sizeof(buf), "ERR invalid longitude,latitude pair %.6f,%.6f", lon, lat);
+        std::snprintf(
+            buf, sizeof(buf), "ERR invalid longitude,latitude pair %.6f,%.6f", *lon, *lat);
         return RespParser::encode_error(buf);
     }
 
-    auto score = static_cast<double>(geo::encode(lat, lon));
+    auto score = static_cast<double>(geo::encode(*lat, *lon));
     auto added = store_.zadd(args[1], score, args[4]);
     return RespParser::encode_integer(added);
 }
@@ -793,23 +792,17 @@ std::string CommandHandler::handle_geosearch(const std::vector<std::string>& arg
     if (to_upper(args[2]) != "FROMLONLAT")
         return RespParser::encode_error("ERR syntax error");
 
-    double search_lon, search_lat;
-    try {
-        search_lon = std::stod(args[3]);
-        search_lat = std::stod(args[4]);
-    } catch (...) {
+    auto search_lon = parse_double(args[3]);
+    auto search_lat = parse_double(args[4]);
+    if (!search_lon || !search_lat)
         return RespParser::encode_error("ERR value is not a valid float");
-    }
 
     if (to_upper(args[5]) != "BYRADIUS")
         return RespParser::encode_error("ERR syntax error");
 
-    double radius;
-    try {
-        radius = std::stod(args[6]);
-    } catch (...) {
+    auto radius = parse_double(args[6]);
+    if (!radius)
         return RespParser::encode_error("ERR value is not a valid float");
-    }
 
     auto unit = to_upper(args[7]);
     static constexpr std::pair<std::string_view, double> kUnitFactors[] = {
@@ -819,13 +812,13 @@ std::string CommandHandler::handle_geosearch(const std::vector<std::string>& arg
     if (factor_it == std::end(kUnitFactors))
         return RespParser::encode_error("ERR unsupported unit provided");
 
-    double radius_m = radius * factor_it->second;
+    double radius_m = *radius * factor_it->second;
 
     auto all = store_.zgetall(key);
     std::vector<std::string> matched;
     for (const auto& [member, score] : all) {
         auto coords = geo::decode(static_cast<uint64_t>(score));
-        auto dist = geo::distance(search_lat, search_lon, coords.lat, coords.lon);
+        auto dist = geo::distance(*search_lat, *search_lon, coords.lat, coords.lon);
         if (dist <= radius_m)
             matched.push_back(member);
     }
@@ -879,14 +872,14 @@ std::string CommandHandler::handle_xread(const std::vector<std::string>& args) {
     }
 
     size_t num_streams = num_pairs / 2;
-    std::vector<std::pair<std::string, std::vector<Redis::StreamEntry>>> results;
+    std::vector<std::pair<std::string, std::span<const Redis::StreamEntry>>> results;
 
     for (size_t i = 0; i < num_streams; ++i) {
         const std::string& key = args[streams_idx + 1 + i];
         const std::string& id = args[streams_idx + 1 + num_streams + i];
 
         auto entries = store_.xread(key, id);
-        results.emplace_back(key, std::move(entries));
+        results.emplace_back(key, entries);
     }
 
     return RespParser::encode_stream_entries(results);
@@ -902,12 +895,12 @@ ProcessResult CommandHandler::handle_xread_with_blocking(int fd,
         if (to_upper(args[start_idx]) == "BLOCK") {
             has_block = true;
             if (start_idx + 1 >= args.size()) {
-                return {false, RespParser::encode_error("ERR syntax error")};
+                return ProcessResult::normal(RespParser::encode_error("ERR syntax error"));
             }
             auto parsed = parse_int<int64_t>(args[start_idx + 1]);
             if (!parsed) {
-                return {false,
-                        RespParser::encode_error("ERR value is not an integer or out of range")};
+                return ProcessResult::normal(
+                    RespParser::encode_error("ERR value is not an integer or out of range"));
             }
             timeout_ms = *parsed;
             start_idx += 2;
@@ -923,21 +916,22 @@ ProcessResult CommandHandler::handle_xread_with_blocking(int fd,
     }
 
     if (streams_idx == 0) {
-        return {false, RespParser::encode_error("ERR syntax error")};
+        return ProcessResult::normal(RespParser::encode_error("ERR syntax error"));
     }
 
     size_t num_pairs = args.size() - streams_idx - 1;
     if (num_pairs == 0 || num_pairs % 2 != 0) {
-        return {false,
-                RespParser::encode_error("ERR wrong number of arguments for 'xread' command")};
+        return ProcessResult::normal(
+            RespParser::encode_error("ERR wrong number of arguments for 'xread' command"));
     }
 
     size_t num_streams = num_pairs / 2;
     if (has_block && num_streams != 1) {
-        return {false, RespParser::encode_error("ERR BLOCK only supports single stream")};
+        return ProcessResult::normal(
+            RespParser::encode_error("ERR BLOCK only supports single stream"));
     }
 
-    std::vector<std::pair<std::string, std::vector<Redis::StreamEntry>>> results;
+    std::vector<std::pair<std::string, std::span<const Redis::StreamEntry>>> results;
 
     for (size_t i = 0; i < num_streams; ++i) {
         const std::string& key = args[streams_idx + 1 + i];
@@ -950,13 +944,13 @@ ProcessResult CommandHandler::handle_xread_with_blocking(int fd,
         }
 
         auto entries = store_.xread(key, id);
-        results.emplace_back(key, std::move(entries));
+        results.emplace_back(key, entries);
     }
 
     bool has_data = std::ranges::any_of(results, [](const auto& p) { return !p.second.empty(); });
 
     if (has_data || !has_block) {
-        return {false, RespParser::encode_stream_entries(results)};
+        return ProcessResult::normal(RespParser::encode_stream_entries(results));
     }
 
     if (blocking_manager_) {
@@ -972,10 +966,10 @@ ProcessResult CommandHandler::handle_xread_with_blocking(int fd,
         auto sid = StreamId::parse(id).value_or(StreamId{0, 0});
         blocking_manager_->block_client_for_stream(
             fd, key, sid, std::chrono::milliseconds(timeout_ms));
-        return {true, ""};
+        return ProcessResult::block();
     }
 
-    return {false, RespParser::encode_error("ERR blocking not available")};
+    return ProcessResult::normal(RespParser::encode_error("ERR blocking not available"));
 }
 
 ProcessResult CommandHandler::handle_xadd_with_blocking(
@@ -992,18 +986,18 @@ ProcessResult CommandHandler::handle_xadd_with_blocking(
     std::string new_id = store_.xadd(key, id, fields);
 
     if (new_id.starts_with("ERR")) {
-        return {false, RespParser::encode_error(new_id)};
+        return ProcessResult::normal(RespParser::encode_error(new_id));
     }
 
     if (blocking_manager_) {
         while (auto blocked = blocking_manager_->wake_client_for_stream(key, new_id)) {
             auto entries = store_.xread(key, blocked->last_id.to_string());
-            auto response = RespParser::encode_stream_entries({{key, std::move(entries)}});
+            auto response = RespParser::encode_stream_entries({{key, entries}});
             send_to_client(blocked->fd, response);
         }
     }
 
-    return {false, RespParser::encode_bulk_string(new_id)};
+    return ProcessResult::normal(RespParser::encode_bulk_string(new_id));
 }
 
 std::string CommandHandler::handle_config_get(const std::string& param) {
@@ -1050,3 +1044,9 @@ std::string CommandHandler::handle_acl_setuser(const std::vector<std::string>& a
     }
     return RespParser::encode_simple_string("OK");
 }
+
+template ProcessResult
+CommandHandler::execute_command<std::function<void(int, const std::string&)>>(
+    const std::vector<std::string>&,
+    int,
+    std::function<void(int, const std::string&)>&&);
