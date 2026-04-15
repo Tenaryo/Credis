@@ -1,17 +1,11 @@
 #pragma once
 
+#include "util/string_hash.hpp"
+
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
-
-struct StringHash {
-    using is_transparent = void;
-    using hash_type = std::hash<std::string_view>;
-
-    size_t operator()(std::string_view sv) const noexcept { return hash_type{}(sv); }
-    size_t operator()(const std::string& s) const noexcept { return hash_type{}(s); }
-};
 
 class PubSubManager {
     std::unordered_map<int, std::unordered_set<std::string>> subscriptions_;
