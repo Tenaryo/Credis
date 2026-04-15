@@ -1,0 +1,55 @@
+# Doxyfile - Doxygen configuration for Redis_Cpp
+
+# Project settings
+PROJECT_NAME           = "Redis_Cpp"
+PROJECT_NUMBER         = 1.0.0
+PROJECT_BRIEF          = "Redis server implementation in C++23 with epoll, RESP, replication, Pub/Sub, Streams, and more"
+OUTPUT_DIRECTORY       = docs
+
+# Language
+OPTIMIZE_OUTPUT_FOR_C  = NO
+OPTIMIZE_OUTPUT_CPP    = YES
+
+# Input
+INPUT                  = src
+RECURSIVE              = YES
+FILE_PATTERNS          = *.hpp *.cpp
+EXTENSION_MAPPING      = hpp=C++ cpp=C++
+
+# Output
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+HTML_OUTPUT            = html
+
+# Source browsing
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+
+# Extraction
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+EXTRACT_LOCAL_CLASSES  = YES
+
+# Graphs (requires graphviz)
+HAVE_DOT               = NO
+CLASS_DIAGRAMS          = YES
+HIDE_UNDOC_CLASSES      = NO
+HIDE_UNDOC_MEMBERS      = NO
+
+# Miscellaneous
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = NO
+WARN_IF_DOC_ERROR      = YES
+
+# Preprocessor
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = NO
+
+# Layout
+SORT_MEMBER_DOCS       = YES
+SORT_BRIEF_DOCS        = YES
+SORT_MEMBERS_CTORS_1ST = YES
