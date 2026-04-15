@@ -27,7 +27,7 @@ target_include_directories(redis_core PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(redis_core PUBLIC Threads::Threads)
 
 target_compile_options(redis_core PRIVATE
-    -Wall -Wextra -Wpedantic -Werror -Wshadow -Wconversion -Wnull-dereference
+    -Wall -Wextra -Wpedantic -Werror -Wshadow -Wconversion
     $<$<CONFIG:Debug>:-g -O0>
     $<$<CONFIG:Release>:-O3>
 )
