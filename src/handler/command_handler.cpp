@@ -319,8 +319,11 @@ CommandHandler::process_with_fd(int fd,
         results.reserve(tx.queued_commands.size());
         for (const auto& queued_args : tx.queued_commands) {
             auto cmd_result = execute_command(queued_args, fd, send_to_client);
-            results.push_back(
-                std::move(std::get<ProcessResult::Normal>(cmd_result.state).response));
+            if (auto* normal = std::get_if<ProcessResult::Normal>(&cmd_result.state)) {
+                results.push_back(std::move(normal->response));
+            } else {
+                results.push_back(RespParser::encode_error("ERR command in EXEC not allowed"));
+            }
         }
         transactions_.erase(it);
         return ProcessResult::normal(RespParser::encode_raw_array(std::move(results)));
@@ -830,6 +833,10 @@ std::string CommandHandler::handle_xadd(const std::vector<std::string>& args) {
     const std::string& key = args[1];
     const std::string& id = args[2];
 
+    if ((args.size() - 3) % 2 != 0) {
+        return RespParser::encode_error("ERR wrong number of arguments for 'xadd' command");
+    }
+
     std::vector<std::pair<std::string, std::string>> fields;
     for (size_t i = 3; i < args.size(); i += 2) {
         fields.emplace_back(args[i], args[i + 1]);
@@ -977,6 +984,11 @@ ProcessResult CommandHandler::handle_xadd_with_blocking(
     std::function<void(int, const std::string&)> send_to_client) {
     const std::string& key = args[1];
     const std::string& id = args[2];
+
+    if ((args.size() - 3) % 2 != 0) {
+        return ProcessResult::normal(
+            RespParser::encode_error("ERR wrong number of arguments for 'xadd' command"));
+    }
 
     std::vector<std::pair<std::string, std::string>> fields;
     for (size_t i = 3; i < args.size(); i += 2) {
