@@ -6,6 +6,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <variant>
 #include <vector>
 
 #include "server/acl_manager.hpp"
@@ -16,16 +17,27 @@ class PubSubManager;
 class Store;
 
 struct ProcessResult {
-    bool should_block{false};
-    std::string response;
-    bool is_replica_handshake{false};
-    std::vector<std::string> propagate_args;
-    bool is_wait{false};
-    int64_t wait_numreplicas{0};
-    int64_t wait_timeout_ms{0};
+    struct Normal {
+        std::string response;
+    };
+    struct Block {};
+    struct ReplicaHandshake {
+        std::string response;
+    };
+    struct Wait {
+        int64_t numreplicas{0};
+        int64_t timeout_ms{0};
+    };
 
-    ProcessResult() = default;
-    ProcessResult(bool block, std::string resp) : should_block(block), response(std::move(resp)) {}
+    std::variant<Normal, Block, ReplicaHandshake, Wait> state;
+    std::vector<std::string> propagate_args;
+
+    static ProcessResult normal(std::string resp) { return {Normal{std::move(resp)}, {}}; }
+    static ProcessResult block() { return {Block{}, {}}; }
+    static ProcessResult replica_handshake(std::string resp) {
+        return {ReplicaHandshake{std::move(resp)}, {}};
+    }
+    static ProcessResult wait(int64_t num, int64_t timeout) { return {Wait{num, timeout}, {}}; }
 };
 
 struct TransactionState {
@@ -58,9 +70,21 @@ class CommandHandler {
                                   std::string_view input,
                                   std::function<void(int, const std::string&)> send_to_client);
   private:
-    ProcessResult execute_command(const std::vector<std::string>& args,
-                                  int fd,
-                                  std::function<void(int, const std::string&)> send_to_client);
+    template <typename SendFn>
+    ProcessResult
+    execute_command(const std::vector<std::string>& args, int fd, SendFn&& send_to_client);
+
+    using CmdHandler = std::function<ProcessResult(const std::vector<std::string>&,
+                                                   int,
+                                                   std::function<void(int, const std::string&)>)>;
+
+    struct CommandEntry {
+        CmdHandler handler;
+        size_t min_args;
+    };
+
+    std::unordered_map<std::string_view, CommandEntry> command_table_;
+    void register_commands();
 
     static std::string handle_ping();
     static std::string handle_echo(std::string_view args);
