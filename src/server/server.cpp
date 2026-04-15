@@ -17,7 +17,7 @@ std::expected<Server, std::string> Server::create(int port) {
     struct sockaddr_in addr {};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port = htons(port);
+    addr.sin_port = htons(static_cast<uint16_t>(port));
 
     if (bind(fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) != 0) {
         close(fd);

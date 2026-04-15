@@ -22,7 +22,7 @@ class Reader {
     }
 
     uint16_t read_be16() {
-        auto v = (uint16_t(data_[pos_]) << 8) | uint16_t(data_[pos_ + 1]);
+        uint16_t v = (uint16_t(data_[pos_]) << 8) | uint16_t(data_[pos_ + 1]);
         pos_ += 2;
         return v;
     }
@@ -35,7 +35,7 @@ class Reader {
     }
 
     uint16_t read_le16() {
-        auto v = uint16_t(data_[pos_]) | (uint16_t(data_[pos_ + 1]) << 8);
+        uint16_t v = uint16_t(data_[pos_]) | (uint16_t(data_[pos_ + 1]) << 8);
         pos_ += 2;
         return v;
     }
