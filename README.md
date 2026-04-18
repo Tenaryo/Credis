@@ -1,6 +1,6 @@
-# Rredis
+# Credis
 
-[![CI](https://github.com/Tenaryo/Rredis/actions/workflows/ci.yml/badge.svg)](https://github.com/Tenaryo/Rredis/actions/workflows/ci.yml)
+[![CI](https://github.com/Tenaryo/Credis/actions/workflows/ci.yml/badge.svg)](https://github.com/Tenaryo/Credis/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![C++23](https://img.shields.io/badge/C%2B%2B-23-blue.svg)](https://en.cppreference.com/w/cpp/23)
 
@@ -263,7 +263,7 @@ Tests are built alongside the main binary. Each test file in `tests/` is compile
 
 ## Replication
 
-Rredis supports master-replica replication:
+Credis supports master-replica replication:
 
 1. **Master** starts normally, accepting connections.
 2. **Replica** starts with `--replicaof "<master-host> <master-port>"` and performs a full handshake (PING -> REPLCONF -> PSYNC).
@@ -276,7 +276,7 @@ Benchmarked against Redis 6.0.16 using `redis-benchmark` (50 concurrent connecti
 
 ### Throughput vs Redis 6.0
 
-| Command | Rredis | Redis 6.0 | Delta |
+| Command | Credis | Redis 6.0 | Delta |
 |---------|-----------|-----------|-------|
 | SET | 312,989 | 303,030 | **+3.3%** |
 | GET | 325,733 | 297,619 | **+9.4%** |
@@ -291,7 +291,7 @@ Core String/List operations outperform Redis 6.0 by 2.7%~10.6%. Overall throughp
 
 ### Latency (single connection)
 
-| Percentile | Rredis | Redis 6.0 |
+| Percentile | Credis | Redis 6.0 |
 |------------|-----------|-----------|
 | P50 | 0.024ms | 0.024ms |
 | P99 | 0.110ms | 0.112ms |
@@ -302,7 +302,7 @@ Tail latency is 38% lower than Redis (0.186ms vs 0.299ms max).
 
 ### Concurrency Scaling
 
-| Connections | Rredis | Redis 6.0 |
+| Connections | Credis | Redis 6.0 |
 |-------------|-----------|-----------|
 | 1 | 39,172 | 38,880 |
 | 10 | 289,855 | 288,184 |
@@ -314,7 +314,7 @@ Near-identical scaling curve to Redis, saturating at ~322K ops/s.
 
 ### Binary Size
 
-| | Rredis | Redis 6.0 |
+| | Credis | Redis 6.0 |
 |--|-----------|-----------|
 | Stripped binary | **291 KB** | 1.5 MB |
 
