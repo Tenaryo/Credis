@@ -13,8 +13,8 @@
 #include <variant>
 #include <vector>
 
-#include "protocol/stream_entry.hpp"
-#include "protocol/stream_id.hpp"
+#include "store/stream_entry.hpp"
+#include "store/stream_id.hpp"
 #include "util/string_hash.hpp"
 
 namespace credis::store {

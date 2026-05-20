@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "protocol/stream_id.hpp"
+#include "store/stream_id.hpp"
 
 namespace credis::blocking {
 

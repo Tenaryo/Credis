@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "protocol/stream_entry.hpp"
+#include "store/stream_entry.hpp"
 
 namespace credis::protocol {
 
