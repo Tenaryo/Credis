@@ -27,7 +27,7 @@ struct SortedSet {
     std::set<std::pair<double, std::string>> entries;
     std::unordered_map<std::string, double> member_scores;
 
-    int64_t add(double score, std::string member) {
+    auto add(double score, std::string member) -> int64_t {
         auto it = member_scores.find(member);
         if (it != member_scores.end()) {
             entries.erase({it->second, member});
@@ -40,10 +40,11 @@ struct SortedSet {
         return 1;
     }
 
-    int64_t remove(std::string_view member) {
+    auto remove(std::string_view member) -> int64_t {
         auto it = member_scores.find(std::string(member));
-        if (it == member_scores.end())
+        if (it == member_scores.end()) {
             return 0;
+        }
         entries.erase({it->second, std::string(member)});
         member_scores.erase(it);
         return 1;
@@ -73,17 +74,20 @@ class Store {
         }
     }
 
-    static std::chrono::steady_clock::time_point get_current_time();
-    bool is_expired(const Entry& entry) const;
-    Entry* find_valid_entry(std::string_view key);
-    template <typename T> T* get_typed(std::string_view key) {
+    static auto get_current_time() -> std::chrono::steady_clock::time_point;
+    static auto is_expired(const Entry& entry) -> bool;
+    auto find_valid_entry(std::string_view key) -> Entry*;
+    template <typename T>
+    auto get_typed(std::string_view key) -> T* {
         Entry* entry = find_valid_entry(key);
-        if (!entry)
+        if (!entry) {
             return nullptr;
+        }
         return std::get_if<T>(&entry->value);
     }
 
-    template <typename T> T* get_or_create_typed(std::string key) {
+    template <typename T>
+    auto get_or_create_typed(std::string key) -> T* {
         Entry* entry = find_valid_entry(key);
         if (!entry) {
             auto [it, _] = data_.emplace(std::move(key), Entry{T{}, {}});
@@ -95,58 +99,65 @@ class Store {
         return &std::get<T>(entry->value);
     }
 
-    Redis::List* get_list(std::string_view key) { return get_typed<Redis::List>(key); }
-    Redis::List* get_or_create_list(std::string key) {
+    auto get_list(std::string_view key) -> Redis::List* {
+        return get_typed<Redis::List>(key);
+    }
+    auto get_or_create_list(std::string key) -> Redis::List* {
         return get_or_create_typed<Redis::List>(std::move(key));
     }
-    Redis::Stream* get_stream(std::string_view key) { return get_typed<Redis::Stream>(key); }
-    Redis::Stream* get_or_create_stream(std::string key) {
+    auto get_stream(std::string_view key) -> Redis::Stream* {
+        return get_typed<Redis::Stream>(key);
+    }
+    auto get_or_create_stream(std::string key) -> Redis::Stream* {
         return get_or_create_typed<Redis::Stream>(std::move(key));
     }
-    Redis::SortedSet* get_zset(std::string_view key) { return get_typed<Redis::SortedSet>(key); }
-    Redis::SortedSet* get_or_create_zset(std::string key) {
+    auto get_zset(std::string_view key) -> Redis::SortedSet* {
+        return get_typed<Redis::SortedSet>(key);
+    }
+    auto get_or_create_zset(std::string key) -> Redis::SortedSet* {
         return get_or_create_typed<Redis::SortedSet>(std::move(key));
     }
 
-    static size_t lower_bound(const Redis::Stream& stream, const StreamId& target);
-    static size_t upper_bound(const Redis::Stream& stream, const StreamId& target);
+    static auto lower_bound(const Redis::Stream& stream, const StreamId& target) -> size_t;
+    static auto upper_bound(const Redis::Stream& stream, const StreamId& target) -> size_t;
+
   public:
     void set(std::string key, std::string value, std::optional<uint64_t> ttl_ms = std::nullopt);
-    std::optional<std::string> get(std::string_view key);
-    std::optional<int64_t> incr(std::string_view key);
-    bool exists(std::string_view key);
-    bool del(std::string_view key);
+    auto get(std::string_view key) -> std::optional<std::string>;
+    auto incr(std::string_view key) -> std::optional<int64_t>;
+    auto exists(std::string_view key) -> bool;
+    auto del(std::string_view key) -> bool;
 
-    int64_t rpush(std::string key, std::string value);
-    int64_t lpush(std::string key, std::string value);
-    int64_t llen(std::string_view key);
-    std::optional<std::string> lpop(std::string_view key);
-    std::vector<std::string> lpop(std::string_view key, int64_t count);
-    std::vector<std::string> lrange(std::string_view key, int64_t start, int64_t stop);
+    auto rpush(std::string key, std::string value) -> int64_t;
+    auto lpush(std::string key, std::string value) -> int64_t;
+    auto llen(std::string_view key) -> int64_t;
+    auto lpop(std::string_view key) -> std::optional<std::string>;
+    auto lpop(std::string_view key, int64_t count) -> std::vector<std::string>;
+    auto lrange(std::string_view key, int64_t start, int64_t stop) -> std::vector<std::string>;
 
-    std::string xadd(std::string key,
-                     std::string id,
-                     const std::vector<std::pair<std::string, std::string>>& fields);
+    auto xadd(std::string key,
+              const std::string& id,
+              const std::vector<std::pair<std::string, std::string>>& fields) -> std::string;
 
-    std::span<const Redis::StreamEntry>
-    xrange(std::string_view key, std::string_view start, std::string_view end);
+    auto
+    xrange(std::string_view key, std::string_view start, std::string_view end) -> std::span<const Redis::StreamEntry>;
 
-    std::span<const Redis::StreamEntry> xread(std::string_view key, std::string_view id);
+    auto xread(std::string_view key, std::string_view id) -> std::span<const Redis::StreamEntry>;
 
-    std::optional<std::string> get_stream_max_id(std::string_view key);
+    auto get_stream_max_id(std::string_view key) -> std::optional<std::string>;
 
-    int64_t zadd(std::string key, double score, std::string member);
-    std::optional<int64_t> zrank(std::string_view key, std::string_view member);
-    std::vector<std::string> zrange(std::string_view key, int64_t start, int64_t stop);
-    int64_t zcard(std::string_view key);
-    std::optional<double> zscore(std::string_view key, std::string_view member);
-    int64_t zrem(std::string_view key, std::string_view member);
-    std::vector<std::pair<std::string, double>> zgetall(std::string_view key);
+    auto zadd(std::string key, double score, std::string member) -> int64_t;
+    auto zrank(std::string_view key, std::string_view member) -> std::optional<int64_t>;
+    auto zrange(std::string_view key, int64_t start, int64_t stop) -> std::vector<std::string>;
+    auto zcard(std::string_view key) -> int64_t;
+    auto zscore(std::string_view key, std::string_view member) -> std::optional<double>;
+    auto zrem(std::string_view key, std::string_view member) -> int64_t;
+    auto zgetall(std::string_view key) -> std::vector<std::pair<std::string, double>>;
 
-    std::string get_type(std::string_view key);
-    std::vector<std::string> keys();
+    auto get_type(std::string_view key) -> std::string;
+    auto keys() -> std::vector<std::string>;
 
-    uint64_t get_key_version(std::string_view key) const {
+    auto get_key_version(std::string_view key) const -> uint64_t {
         auto it = key_versions_.find(key);
         return it != key_versions_.end() ? it->second : 0;
     }

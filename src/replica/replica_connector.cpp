@@ -1,20 +1,24 @@
 #include "replica_connector.hpp"
-#include "handler/command_handler.hpp"
-#include "protocol/resp_parser.hpp"
-#include "util/parse.hpp"
-#include <charconv>
-#include <cstring>
-#include <memory>
+
 #include <netdb.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
-ReplicaConnector::ReplicaConnector(std::string host, int port)
-    : host_(std::move(host)), port_(port) {}
+#include <charconv>
+#include <cstring>
+#include <memory>
+
+#include "handler/command_handler.hpp"
+#include "protocol/resp_parser.hpp"
+#include "util/parse.hpp"
+
+ReplicaConnector::ReplicaConnector(std::string host, int port) : host_(std::move(host)), port_(port) {
+}
 
 ReplicaConnector::~ReplicaConnector() {
-    if (fd_ >= 0)
+    if (fd_ >= 0) {
         ::close(fd_);
+    }
 }
 
 ReplicaConnector::ReplicaConnector(ReplicaConnector&& other) noexcept
@@ -23,10 +27,11 @@ ReplicaConnector::ReplicaConnector(ReplicaConnector&& other) noexcept
     other.fd_ = -1;
 }
 
-ReplicaConnector& ReplicaConnector::operator=(ReplicaConnector&& other) noexcept {
+auto ReplicaConnector::operator=(ReplicaConnector&& other) noexcept -> ReplicaConnector& {
     if (this != &other) {
-        if (fd_ >= 0)
+        if (fd_ >= 0) {
             ::close(fd_);
+        }
         host_ = std::move(other.host_);
         port_ = other.port_;
         fd_ = other.fd_;
@@ -37,20 +42,22 @@ ReplicaConnector& ReplicaConnector::operator=(ReplicaConnector&& other) noexcept
     return *this;
 }
 
-bool ReplicaConnector::connect_to_master() {
+auto ReplicaConnector::connect_to_master() -> bool {
     struct addrinfo hints {};
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
 
     struct addrinfo* result = nullptr;
-    if (::getaddrinfo(host_.c_str(), std::to_string(port_).c_str(), &hints, &result) != 0)
+    if (::getaddrinfo(host_.c_str(), std::to_string(port_).c_str(), &hints, &result) != 0) {
         return false;
+    }
 
     auto guard = std::unique_ptr<addrinfo, decltype(&freeaddrinfo)>(result, &freeaddrinfo);
 
     fd_ = ::socket(result->ai_family, result->ai_socktype, result->ai_protocol);
-    if (fd_ < 0)
+    if (fd_ < 0) {
         return false;
+    }
 
     if (::connect(fd_, result->ai_addr, result->ai_addrlen) < 0) {
         ::close(fd_);
@@ -61,89 +68,99 @@ bool ReplicaConnector::connect_to_master() {
     return true;
 }
 
-bool ReplicaConnector::send_and_expect(const std::vector<std::string>& args,
-                                       std::string_view expected_response) {
-    return send_and_check(
-        args, [expected_response](std::string_view resp) { return resp == expected_response; });
+auto ReplicaConnector::send_and_expect(const std::vector<std::string>& args,
+                                       std::string_view expected_response) -> bool {
+    return send_and_check(args, [expected_response](std::string_view resp) { return resp == expected_response; });
 }
 
 template <typename Pred>
-bool ReplicaConnector::send_and_check(const std::vector<std::string>& args, Pred&& pred) {
-    if (fd_ < 0 && !connect_to_master())
+auto ReplicaConnector::send_and_check(const std::vector<std::string>& args, Pred&& pred) -> bool {
+    if (fd_ < 0 && !connect_to_master()) {
         return false;
+    }
 
     auto msg = RespParser::encode_array(args);
     size_t sent = 0;
     while (sent < msg.size()) {
         auto n = ::send(fd_, msg.data() + sent, msg.size() - sent, MSG_NOSIGNAL);
-        if (n <= 0)
+        if (n <= 0) {
             return false;
+        }
         sent += static_cast<size_t>(n);
     }
 
     char buf[256]{};
     auto n = ::read(fd_, buf, sizeof(buf));
-    if (n <= 0)
+    if (n <= 0) {
         return false;
+    }
 
     std::string_view resp(buf, static_cast<size_t>(n));
-    if (!pred(resp))
-        return false;
-
-    return true;
+    return static_cast<bool>(pred(resp));
 }
 
-bool ReplicaConnector::send_ping() { return send_and_expect({"PING"}, "+PONG\r\n"); }
+auto ReplicaConnector::send_ping() -> bool {
+    return send_and_expect({"PING"}, "+PONG\r\n");
+}
 
-bool ReplicaConnector::send_replconf(int listening_port) {
-    if (!send_and_expect({"REPLCONF", "listening-port", std::to_string(listening_port)}, "+OK\r\n"))
+auto ReplicaConnector::send_replconf(int listening_port) -> bool {
+    if (!send_and_expect({"REPLCONF", "listening-port", std::to_string(listening_port)}, "+OK\r\n")) {
         return false;
+    }
     return send_and_expect({"REPLCONF", "capa", "psync2"}, "+OK\r\n");
 }
 
-bool ReplicaConnector::send_psync() {
-    if (fd_ < 0 && !connect_to_master())
+auto ReplicaConnector::send_psync() -> bool {
+    if (fd_ < 0 && !connect_to_master()) {
         return false;
+    }
 
     auto msg = RespParser::encode_array({"PSYNC", "?", "-1"});
     size_t sent = 0;
     while (sent < msg.size()) {
         auto n = ::send(fd_, msg.data() + sent, msg.size() - sent, MSG_NOSIGNAL);
-        if (n <= 0)
+        if (n <= 0) {
             return false;
+        }
         sent += static_cast<size_t>(n);
     }
 
     char buf[512]{};
     auto n = ::read(fd_, buf, sizeof(buf));
-    if (n <= 0)
+    if (n <= 0) {
         return false;
+    }
 
     std::string_view all(buf, static_cast<size_t>(n));
-    if (!all.starts_with("+FULLRESYNC"))
+    if (!all.starts_with("+FULLRESYNC")) {
         return false;
+    }
 
     auto crlf = all.find("\r\n");
-    if (crlf == std::string_view::npos)
+    if (crlf == std::string_view::npos) {
         return false;
+    }
 
     size_t remaining = all.size() - crlf - 2;
-    if (remaining > 0)
+    if (remaining > 0) {
         pending_buffer_.assign(buf + crlf + 2, remaining);
+    }
 
     return true;
 }
 
-std::optional<std::string> ReplicaConnector::receive_rdb() {
-    if (fd_ < 0)
+auto ReplicaConnector::receive_rdb() -> std::optional<std::string> {
+    if (fd_ < 0) {
         return std::nullopt;
+    }
 
     std::string header_buf;
 
     auto find_crlf = [&]() -> size_t {
         for (size_t i = 0; i + 1 < header_buf.size(); ++i) {
-            if (header_buf[i] == '\r' && header_buf[i + 1] == '\n')
+            if (header_buf[i] == '\r' && header_buf[i + 1] == '\n') {
                 return i;
+            }
         }
         return std::string::npos;
     };
@@ -156,33 +173,34 @@ std::optional<std::string> ReplicaConnector::receive_rdb() {
     while (true) {
         auto crlf_pos = find_crlf();
         if (crlf_pos != std::string::npos) {
-            if (header_buf.empty() || header_buf[0] != '$')
+            if (header_buf.empty() || header_buf[0] != '$') {
                 return std::nullopt;
+            }
 
             int len = 0;
-            auto [ptr, ec] =
-                std::from_chars(header_buf.data() + 1, header_buf.data() + crlf_pos, len);
-            if (ec != std::errc{} || len <= 0)
+            auto [ptr, ec] = std::from_chars(header_buf.data() + 1, header_buf.data() + crlf_pos, len);
+            if (ec != std::errc{} || len <= 0) {
                 return std::nullopt;
+            }
 
             size_t header_size = crlf_pos + 2;
             size_t available = header_buf.size() - header_size;
 
-            std::string rdb_data(len, '\0');
+            std::string rdb_data(static_cast<size_t>(len), '\0');
             size_t copied = std::min(available, static_cast<size_t>(len));
             std::memcpy(rdb_data.data(), header_buf.data() + header_size, copied);
 
             while (copied < static_cast<size_t>(len)) {
-                auto rd = ::read(fd_, rdb_data.data() + copied, len - copied);
-                if (rd <= 0)
+                auto rd = ::read(fd_, rdb_data.data() + copied, static_cast<size_t>(len) - copied);
+                if (rd <= 0) {
                     return std::nullopt;
+                }
                 copied += static_cast<size_t>(rd);
             }
 
             if (available > static_cast<size_t>(len)) {
                 size_t extra_offset = header_size + static_cast<size_t>(len);
-                pending_buffer_.assign(header_buf.data() + extra_offset,
-                                       header_buf.size() - extra_offset);
+                pending_buffer_.assign(header_buf.data() + extra_offset, header_buf.size() - extra_offset);
             }
 
             return rdb_data;
@@ -190,21 +208,23 @@ std::optional<std::string> ReplicaConnector::receive_rdb() {
 
         char buf[256]{};
         auto n = ::read(fd_, buf, sizeof(buf));
-        if (n <= 0)
+        if (n <= 0) {
             return std::nullopt;
+        }
         header_buf.append(buf, static_cast<size_t>(n));
     }
 }
 
-std::string ReplicaConnector::process_buffer_impl() {
+auto ReplicaConnector::process_buffer_impl() -> std::string {
     std::string responses;
     while (true) {
         auto result = RespParser::parse_one(pending_buffer_);
-        if (!result)
+        if (!result) {
             break;
+        }
 
-        bool is_getack = result->args.size() >= 2 && to_upper(result->args[0]) == "REPLCONF" &&
-                         to_upper(result->args[1]) == "GETACK";
+        bool is_getack = result->args.size() >= 2 && to_upper(result->args[0]) == "REPLCONF"
+                         && to_upper(result->args[1]) == "GETACK";
 
         if (is_getack) {
             responses += RespParser::encode_array({"REPLCONF", "ACK", std::to_string(offset_)});
@@ -212,33 +232,38 @@ std::string ReplicaConnector::process_buffer_impl() {
             auto resp = std::string_view(pending_buffer_.data(), result->consumed);
             handler_->process(resp);
         }
-        offset_ += result->consumed;
+        offset_ += static_cast<int64_t>(result->consumed);
         pending_buffer_.erase(0, result->consumed);
     }
     return responses;
 }
 
 auto ReplicaConnector::process_propagated_commands() -> std::optional<std::string> {
-    if (fd_ < 0 || !handler_)
+    if (fd_ < 0 || (handler_ == nullptr)) {
         return std::nullopt;
+    }
 
     char buf[4096];
     auto n = ::read(fd_, buf, sizeof(buf));
-    if (n <= 0)
+    if (n <= 0) {
         return std::nullopt;
+    }
 
     pending_buffer_.append(buf, static_cast<size_t>(n));
     return process_buffer_impl();
 }
 
-auto ReplicaConnector::process_pending_buffer() -> std::string { return process_buffer_impl(); }
+auto ReplicaConnector::process_pending_buffer() -> std::string {
+    return process_buffer_impl();
+}
 
-void ReplicaConnector::send_response(std::string_view data) {
+void ReplicaConnector::send_response(std::string_view data) const {
     size_t sent = 0;
     while (sent < data.size()) {
         auto n = ::send(fd_, data.data() + sent, data.size() - sent, MSG_NOSIGNAL);
-        if (n <= 0)
+        if (n <= 0) {
             break;
+        }
         sent += static_cast<size_t>(n);
     }
 }

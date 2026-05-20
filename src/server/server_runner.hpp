@@ -1,5 +1,12 @@
 #pragma once
 
+#include <chrono>
+#include <expected>
+#include <memory>
+#include <optional>
+#include <unordered_map>
+#include <unordered_set>
+
 #include "block_manager/blocking_manager.hpp"
 #include "connection/connection.hpp"
 #include "event_loop/event_loop.hpp"
@@ -9,13 +16,6 @@
 #include "server/server.hpp"
 #include "server/server_config.hpp"
 #include "store/store.hpp"
-
-#include <chrono>
-#include <expected>
-#include <memory>
-#include <optional>
-#include <unordered_map>
-#include <unordered_set>
 
 struct AppConfig {
     int port{6379};
@@ -46,21 +46,22 @@ class RedisApp {
     std::optional<WaitState> wait_state_;
 
     void on_event(int fd);
-    std::chrono::milliseconds compute_timeout();
+    auto compute_timeout() -> std::chrono::milliseconds;
     void send_to_client(int fd, const std::string& response);
-    bool perform_replica_handshake();
+    auto perform_replica_handshake() -> bool;
     void handle_replica_ack(int fd);
-    int count_acked_replicas() const;
-    int count_acked_replicas_for(int64_t target) const;
+    auto count_acked_replicas() const -> int;
+    auto count_acked_replicas_for(int64_t target) const -> int;
     void finish_wait(int count);
     void load_rdb();
+
   public:
     RedisApp(Server server, int listening_port, const ServerConfig& config);
     RedisApp(const RedisApp&) = delete;
-    RedisApp& operator=(const RedisApp&) = delete;
+    auto operator=(const RedisApp&) -> RedisApp& = delete;
     RedisApp(RedisApp&&) = delete;
-    RedisApp& operator=(RedisApp&&) = delete;
+    auto operator=(RedisApp&&) -> RedisApp& = delete;
 
     static std::expected<RedisApp, std::string> create(const AppConfig& config);
-    int run();
+    auto run() -> int;
 };

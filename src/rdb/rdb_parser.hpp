@@ -15,6 +15,6 @@ struct RdbEntry {
 
 class RdbParser {
   public:
-    static std::unordered_map<std::string, RdbEntry> parse(const std::vector<uint8_t>& data);
-    static std::unordered_map<std::string, RdbEntry> load_file(const std::string& path);
+    static auto parse(const std::vector<uint8_t>& data) -> std::unordered_map<std::string, RdbEntry>;
+    static auto load_file(const std::string& path) -> std::unordered_map<std::string, RdbEntry>;
 };

@@ -17,15 +17,15 @@ class RespParser {
     static std::expected<std::vector<std::string>, std::string> parse(std::string_view input);
     static auto parse_one(std::string_view input) -> std::expected<ParsedCommand, std::string>;
 
-    static std::string encode_simple_string(std::string_view s);
-    static std::string encode_bulk_string(std::string_view s);
-    static std::string encode_null_bulk_string();
-    static std::string encode_integer(int64_t n);
-    static std::string encode_array(const std::vector<std::string>& elements);
-    static std::string encode_raw_array(std::vector<std::string> raw_elements);
-    static std::string encode_entries(std::span<const Redis::StreamEntry> entries);
-    static std::string encode_error(std::string_view s);
-    static std::string encode_null_array();
-    static std::string encode_stream_entries(
-        const std::vector<std::pair<std::string, std::span<const Redis::StreamEntry>>>& streams);
+    static auto encode_simple_string(std::string_view s) -> std::string;
+    static auto encode_bulk_string(std::string_view s) -> std::string;
+    static auto encode_null_bulk_string() -> std::string;
+    static auto encode_integer(int64_t n) -> std::string;
+    static auto encode_array(const std::vector<std::string>& elements) -> std::string;
+    static auto encode_raw_array(const std::vector<std::string>& raw_elements) -> std::string;
+    static auto encode_entries(std::span<const Redis::StreamEntry> entries) -> std::string;
+    static auto encode_error(std::string_view s) -> std::string;
+    static auto encode_null_array() -> std::string;
+    static auto encode_stream_entries(
+        const std::vector<std::pair<std::string, std::span<const Redis::StreamEntry>>>& streams) -> std::string;
 };

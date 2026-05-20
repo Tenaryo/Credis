@@ -10,52 +10,57 @@ class Reader {
     const uint8_t* data_;
     size_t size_;
     size_t pos_{0};
+
   public:
-    Reader(const uint8_t* data, size_t size) : data_(data), size_(size) {}
+    Reader(const uint8_t* data, size_t size) : data_(data), size_(size) {
+    }
 
-    uint8_t read_byte() { return data_[pos_++]; }
+    auto read_byte() -> uint8_t {
+        return data_[pos_++];
+    }
 
-    std::vector<uint8_t> read_bytes(size_t n) {
-        auto start = data_ + pos_;
+    auto read_bytes(size_t n) -> std::vector<uint8_t> {
+        const auto* start = data_ + pos_;
         pos_ += n;
         return {start, start + n};
     }
 
-    uint16_t read_be16() {
-        uint16_t v = (uint16_t(data_[pos_]) << 8) | uint16_t(data_[pos_ + 1]);
+    auto read_be16() -> uint16_t {
+        uint16_t v = static_cast<uint16_t>((static_cast<uint16_t>(data_[pos_]) << 8) | static_cast<uint16_t>(data_[pos_ + 1]));
         pos_ += 2;
         return v;
     }
 
-    uint32_t read_be32() {
-        auto v = (uint32_t(data_[pos_]) << 24) | (uint32_t(data_[pos_ + 1]) << 16) |
-                 (uint32_t(data_[pos_ + 2]) << 8) | uint32_t(data_[pos_ + 3]);
+    auto read_be32() -> uint32_t {
+        auto v = (uint32_t(data_[pos_]) << 24) | (uint32_t(data_[pos_ + 1]) << 16) | (uint32_t(data_[pos_ + 2]) << 8)
+                 | uint32_t(data_[pos_ + 3]);
         pos_ += 4;
         return v;
     }
 
-    uint16_t read_le16() {
-        uint16_t v = uint16_t(data_[pos_]) | (uint16_t(data_[pos_ + 1]) << 8);
+    auto read_le16() -> uint16_t {
+        uint16_t v = static_cast<uint16_t>(static_cast<uint16_t>(data_[pos_]) | (static_cast<uint16_t>(data_[pos_ + 1]) << 8));
         pos_ += 2;
         return v;
     }
 
-    uint32_t read_le32() {
-        auto v = uint32_t(data_[pos_]) | (uint32_t(data_[pos_ + 1]) << 8) |
-                 (uint32_t(data_[pos_ + 2]) << 16) | (uint32_t(data_[pos_ + 3]) << 24);
+    auto read_le32() -> uint32_t {
+        auto v = uint32_t(data_[pos_]) | (uint32_t(data_[pos_ + 1]) << 8) | (uint32_t(data_[pos_ + 2]) << 16)
+                 | (uint32_t(data_[pos_ + 3]) << 24);
         pos_ += 4;
         return v;
     }
 
-    uint64_t read_le64() {
+    auto read_le64() -> uint64_t {
         uint64_t v = 0;
-        for (int i = 7; i >= 0; --i)
-            v = (v << 8) | data_[pos_ + i];
+        for (int i = 7; i >= 0; --i) {
+            v = (v << 8) | static_cast<uint64_t>(data_[static_cast<size_t>(pos_ + i)]);
+        }
         pos_ += 8;
         return v;
     }
 
-    size_t read_length() {
+    auto read_length() -> size_t {
         auto first = read_byte();
         auto hi2 = (first & 0xC0) >> 6;
         switch (hi2) {
@@ -71,7 +76,7 @@ class Reader {
         }
     }
 
-    std::string read_string() {
+    auto read_string() -> std::string {
         auto first = data_[pos_];
         auto hi2 = (first & 0xC0) >> 6;
 
@@ -94,17 +99,24 @@ class Reader {
         return {bytes.begin(), bytes.end()};
     }
 
-    bool has_more() const { return pos_ < size_; }
-    size_t pos() const { return pos_; }
-    uint8_t peek() const { return data_[pos_]; }
+    [[nodiscard]] auto has_more() const -> bool {
+        return pos_ < size_;
+    }
+    [[nodiscard]] auto pos() const -> size_t {
+        return pos_;
+    }
+    [[nodiscard]] auto peek() const -> uint8_t {
+        return data_[pos_];
+    }
 };
 
-std::unordered_map<std::string, RdbEntry> RdbParser::parse(const std::vector<uint8_t>& data) {
+auto RdbParser::parse(const std::vector<uint8_t>& data) -> std::unordered_map<std::string, RdbEntry> {
     Reader reader(data.data(), data.size());
     std::unordered_map<std::string, RdbEntry> result;
 
-    for (int i = 0; i < 9; ++i)
+    for (int i = 0; i < 9; ++i) {
         reader.read_byte();
+    }
 
     while (reader.has_more()) {
         auto op = reader.read_byte();
@@ -123,8 +135,9 @@ std::unordered_map<std::string, RdbEntry> RdbParser::parse(const std::vector<uin
 
             while (reader.has_more()) {
                 auto peek = reader.peek();
-                if (peek == 0xFF || peek == 0xFE || peek == 0xFA)
+                if (peek == 0xFF || peek == 0xFE || peek == 0xFA) {
                     break;
+                }
 
                 std::optional<uint64_t> expire_ms;
 
@@ -140,8 +153,7 @@ std::unordered_map<std::string, RdbEntry> RdbParser::parse(const std::vector<uin
                 auto key = reader.read_string();
                 auto value = reader.read_string();
 
-                result.emplace(std::move(key),
-                               RdbEntry{Redis::String(std::move(value)), expire_ms});
+                result.emplace(std::move(key), RdbEntry{Redis::String(std::move(value)), expire_ms});
             }
         } else if (op == 0xFF) {
             break;
@@ -151,10 +163,11 @@ std::unordered_map<std::string, RdbEntry> RdbParser::parse(const std::vector<uin
     return result;
 }
 
-std::unordered_map<std::string, RdbEntry> RdbParser::load_file(const std::string& path) {
+auto RdbParser::load_file(const std::string& path) -> std::unordered_map<std::string, RdbEntry> {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
-    if (!file)
+    if (!file) {
         return {};
+    }
 
     auto size = file.tellg();
     file.seekg(0);

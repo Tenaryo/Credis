@@ -15,8 +15,11 @@ struct AclUser {
 
 class AclManager {
     std::unordered_map<std::string, AclUser> users_;
+
   public:
-    AclManager() { users_.emplace("default", AclUser{}); }
+    AclManager() {
+        users_.emplace("default", AclUser{});
+    }
 
     auto get_user(std::string_view username) const -> const AclUser* {
         auto it = users_.find(std::string(username));
@@ -30,9 +33,10 @@ class AclManager {
     }
 
     auto authenticate(std::string_view username, std::string_view password) const -> bool {
-        auto* user = get_user(username);
-        if (!user)
+        const auto* user = get_user(username);
+        if (user == nullptr) {
             return false;
+        }
         auto hash = util::sha256(password);
         return std::ranges::find(user->passwords, hash) != user->passwords.end();
     }

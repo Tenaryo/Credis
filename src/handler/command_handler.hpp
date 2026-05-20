@@ -32,12 +32,18 @@ struct ProcessResult {
     std::variant<Normal, Block, ReplicaHandshake, Wait> state;
     std::vector<std::string> propagate_args;
 
-    static ProcessResult normal(std::string resp) { return {Normal{std::move(resp)}, {}}; }
-    static ProcessResult block() { return {Block{}, {}}; }
-    static ProcessResult replica_handshake(std::string resp) {
+    static auto normal(std::string resp) -> ProcessResult {
+        return {Normal{std::move(resp)}, {}};
+    }
+    static auto block() -> ProcessResult {
+        return {Block{}, {}};
+    }
+    static auto replica_handshake(std::string resp) -> ProcessResult {
         return {ReplicaHandshake{std::move(resp)}, {}};
     }
-    static ProcessResult wait(int64_t num, int64_t timeout) { return {Wait{num, timeout}, {}}; }
+    static auto wait(int64_t num, int64_t timeout) -> ProcessResult {
+        return {Wait{num, timeout}, {}};
+    }
 };
 
 struct TransactionState {
@@ -55,28 +61,37 @@ class CommandHandler {
     AclManager acl_manager_;
     std::unordered_map<int, TransactionState> transactions_;
     std::unordered_set<int> authenticated_fds_;
-  public:
-    explicit CommandHandler(Store& store, const ServerConfig& config = {});
 
-    void set_blocking_manager(BlockingManager* manager) { blocking_manager_ = manager; }
-    void set_pubsub_manager(PubSubManager* manager) { pubsub_manager_ = manager; }
-    void set_replica_count_fn(std::function<size_t()> fn) { replica_count_fn_ = std::move(fn); }
-    const ServerConfig& config() const noexcept { return config_; }
+  public:
+    explicit CommandHandler(Store& store, ServerConfig config = {});
+
+    void set_blocking_manager(BlockingManager* manager) {
+        blocking_manager_ = manager;
+    }
+    void set_pubsub_manager(PubSubManager* manager) {
+        pubsub_manager_ = manager;
+    }
+    void set_replica_count_fn(std::function<size_t()> fn) {
+        replica_count_fn_ = std::move(fn);
+    }
+    auto config() const noexcept -> const ServerConfig& {
+        return config_;
+    }
 
     void remove_connection(int fd);
 
-    std::string process(std::string_view input);
-    ProcessResult process_with_fd(int fd,
-                                  std::string_view input,
-                                  std::function<void(int, const std::string&)> send_to_client);
+    auto process(std::string_view input) -> std::string;
+    auto process_with_fd(int fd,
+                         std::string_view input,
+                         std::function<void(int, const std::string&)> send_to_client) -> ProcessResult;
+
   private:
     template <typename SendFn>
-    ProcessResult
-    execute_command(const std::vector<std::string>& args, int fd, SendFn&& send_to_client);
+    auto execute_command(const std::vector<std::string>& args, int fd, SendFn&& send_to_client)
+        -> ProcessResult;
 
-    using CmdHandler = std::function<ProcessResult(const std::vector<std::string>&,
-                                                   int,
-                                                   std::function<void(int, const std::string&)>)>;
+    using CmdHandler = std::function<
+        ProcessResult(const std::vector<std::string>&, int, std::function<void(int, const std::string&)>)>;
 
     struct CommandEntry {
         CmdHandler handler;
@@ -86,43 +101,42 @@ class CommandHandler {
     std::unordered_map<std::string_view, CommandEntry> command_table_;
     void register_commands();
 
-    static std::string handle_ping();
-    static std::string handle_echo(std::string_view args);
-    std::string handle_set(const std::vector<std::string>& args);
-    std::string handle_get(const std::string& key);
-    std::string handle_incr(const std::string& key);
-    std::string handle_rpush(const std::vector<std::string>& args);
-    std::string handle_lpush(const std::vector<std::string>& args);
-    std::string handle_lpop(const std::vector<std::string>& args);
-    std::string handle_lrange(const std::vector<std::string>& args);
-    std::string handle_info(const std::vector<std::string>& args);
-    std::string handle_config_get(const std::string& param);
-    std::string handle_acl_whoami();
-    std::string handle_acl_getuser(const std::vector<std::string>& args);
-    std::string handle_acl_setuser(const std::vector<std::string>& args);
-    std::string handle_xadd(const std::vector<std::string>& args);
-    std::string handle_xrange(const std::vector<std::string>& args);
-    std::string handle_xread(const std::vector<std::string>& args);
-    std::string handle_zadd(const std::vector<std::string>& args);
-    std::string handle_zrank(const std::vector<std::string>& args);
-    std::string handle_zrange(const std::vector<std::string>& args);
-    std::string handle_zcard(const std::string& key);
-    std::string handle_zscore(const std::vector<std::string>& args);
-    std::string handle_zrem(const std::vector<std::string>& args);
-    std::string handle_geoadd(const std::vector<std::string>& args);
-    std::string handle_geopos(const std::vector<std::string>& args);
-    std::string handle_geodist(const std::vector<std::string>& args);
-    std::string handle_geosearch(const std::vector<std::string>& args);
-    ProcessResult handle_xread_with_blocking(int fd, const std::vector<std::string>& args);
-    ProcessResult
-    handle_xadd_with_blocking(const std::vector<std::string>& args,
-                              std::function<void(int, const std::string&)> send_to_client);
+    static auto handle_ping() -> std::string;
+    static auto handle_echo(std::string_view args) -> std::string;
+    auto handle_set(const std::vector<std::string>& args) -> std::string;
+    auto handle_get(const std::string& key) -> std::string;
+    auto handle_incr(const std::string& key) -> std::string;
+    auto handle_rpush(const std::vector<std::string>& args) -> std::string;
+    auto handle_lpush(const std::vector<std::string>& args) -> std::string;
+    auto handle_lpop(const std::vector<std::string>& args) -> std::string;
+    auto handle_lrange(const std::vector<std::string>& args) -> std::string;
+    auto handle_info(const std::vector<std::string>& args) -> std::string;
+    auto handle_config_get(const std::string& param) const -> std::string;
+    static auto handle_acl_whoami() -> std::string;
+    auto handle_acl_getuser(const std::vector<std::string>& args) -> std::string;
+    auto handle_acl_setuser(const std::vector<std::string>& args) -> std::string;
+    auto handle_xadd(const std::vector<std::string>& args) -> std::string;
+    auto handle_xrange(const std::vector<std::string>& args) -> std::string;
+    auto handle_xread(const std::vector<std::string>& args) -> std::string;
+    auto handle_zadd(const std::vector<std::string>& args) -> std::string;
+    auto handle_zrank(const std::vector<std::string>& args) -> std::string;
+    auto handle_zrange(const std::vector<std::string>& args) -> std::string;
+    auto handle_zcard(const std::string& key) -> std::string;
+    auto handle_zscore(const std::vector<std::string>& args) -> std::string;
+    auto handle_zrem(const std::vector<std::string>& args) -> std::string;
+    auto handle_geoadd(const std::vector<std::string>& args) -> std::string;
+    auto handle_geopos(const std::vector<std::string>& args) -> std::string;
+    auto handle_geodist(const std::vector<std::string>& args) -> std::string;
+    auto handle_geosearch(const std::vector<std::string>& args) -> std::string;
+    auto handle_xread_with_blocking(int fd, const std::vector<std::string>& args) -> ProcessResult;
+    auto handle_xadd_with_blocking(const std::vector<std::string>& args,
+                                   const std::function<void(int, const std::string&)>& send_to_client) -> ProcessResult;
 
-    ProcessResult handle_blpop(int fd, const std::vector<std::string>& args);
-    ProcessResult
+    auto handle_blpop(int fd, const std::vector<std::string>& args) -> ProcessResult;
+    auto
     handle_rpush_with_blocking(const std::vector<std::string>& args,
-                               std::function<void(int, const std::string&)> send_to_client);
-    ProcessResult
+                               const std::function<void(int, const std::string&)>& send_to_client) -> ProcessResult;
+    auto
     handle_lpush_with_blocking(const std::vector<std::string>& args,
-                               std::function<void(int, const std::string&)> send_to_client);
+                               const std::function<void(int, const std::string&)>& send_to_client) -> ProcessResult;
 };

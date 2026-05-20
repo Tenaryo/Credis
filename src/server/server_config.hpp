@@ -14,5 +14,7 @@ struct ServerConfig {
     int64_t master_repl_offset = 0;
     std::string dir;
     std::string dbfilename;
-    bool is_replica() const { return replicaof.has_value(); }
+    [[nodiscard]] auto is_replica() const -> bool {
+        return replicaof.has_value();
+    }
 };

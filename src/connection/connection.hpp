@@ -8,19 +8,22 @@ class Connection {
     int fd_{-1};
     std::vector<char> buffer_;
     ssize_t bytes_read_{0};
+
   public:
     explicit Connection(int fd);
     ~Connection();
 
     Connection(const Connection&) = delete;
-    Connection& operator=(const Connection&) = delete;
+    auto operator=(const Connection&) -> Connection& = delete;
     Connection(Connection&&) noexcept;
-    Connection& operator=(Connection&&) noexcept;
+    auto operator=(Connection&&) noexcept -> Connection&;
 
-    [[nodiscard]] int fd() const noexcept { return fd_; }
+    [[nodiscard]] auto fd() const noexcept -> int {
+        return fd_;
+    }
     void close();
-    std::optional<std::string_view> handle_read();
-    void send_data(const char* data, size_t len);
+    auto handle_read() -> std::optional<std::string_view>;
+    void send_data(const char* data, size_t len) const;
 
     static constexpr size_t BUFFER_SIZE = 4096;
 };

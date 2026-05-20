@@ -12,7 +12,7 @@ static constexpr double kLonMin = -180.0;
 static constexpr double kLonMax = 180.0;
 static constexpr double kLatRange = kLatMax - kLatMin;
 static constexpr double kLonRange = kLonMax - kLonMin;
-static constexpr uint32_t kGeoStep = 1u << 26;
+static constexpr uint32_t kGeoStep = 1U << 26;
 static constexpr double kEarthRadius = 6372797.560856;
 
 inline auto spread(uint32_t v) -> uint64_t {
@@ -58,9 +58,8 @@ inline auto distance(double lat1, double lon1, double lat2, double lon2) -> doub
     auto to_rad = [](double deg) { return deg * std::numbers::pi / 180.0; };
     auto dlat = to_rad(lat2 - lat1);
     auto dlon = to_rad(lon2 - lon1);
-    auto a = std::sin(dlat / 2) * std::sin(dlat / 2) + std::cos(to_rad(lat1)) *
-                                                           std::cos(to_rad(lat2)) *
-                                                           std::sin(dlon / 2) * std::sin(dlon / 2);
+    auto a = std::sin(dlat / 2) * std::sin(dlat / 2)
+             + std::cos(to_rad(lat1)) * std::cos(to_rad(lat2)) * std::sin(dlon / 2) * std::sin(dlon / 2);
     return kEarthRadius * 2 * std::asin(std::sqrt(a));
 }
 

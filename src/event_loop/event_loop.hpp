@@ -1,31 +1,36 @@
 #pragma once
 
+#include <sys/epoll.h>
+
 #include <chrono>
 #include <functional>
-#include <sys/epoll.h>
 
 class EventLoop {
     int epoll_fd_{-1};
     static constexpr int MAX_EVENTS = 64;
     bool running_{true};
+
   public:
     EventLoop();
     ~EventLoop();
 
     EventLoop(const EventLoop&) = delete;
-    EventLoop& operator=(const EventLoop&) = delete;
+    auto operator=(const EventLoop&) -> EventLoop& = delete;
     EventLoop(EventLoop&&) noexcept;
-    EventLoop& operator=(EventLoop&&) noexcept;
+    auto operator=(EventLoop&&) noexcept -> EventLoop&;
 
-    void add_fd(int fd, uint32_t events = EPOLLIN);
-    void remove_fd(int fd);
+    void add_fd(int fd, uint32_t events = EPOLLIN) const;
+    void remove_fd(int fd) const;
     void run(
         int server_fd,
-        std::function<void(int)> on_event,
-        std::function<std::chrono::milliseconds()> get_timeout = [] {
-            return std::chrono::milliseconds(-1);
-        });
-    void stop() { running_ = false; }
+        const std::function<void(int)>& on_event,
+        const std::function<std::chrono::milliseconds()>& get_timeout
+        = [] { return std::chrono::milliseconds(-1); }) const;
+    void stop() {
+        running_ = false;
+    }
 
-    [[nodiscard]] int fd() const noexcept { return epoll_fd_; }
+    [[nodiscard]] auto fd() const noexcept -> int {
+        return epoll_fd_;
+    }
 };

@@ -1,4 +1,10 @@
 #include "command_handler.hpp"
+
+#include <cmath>
+#include <cstdio>
+#include <string_view>
+#include <utility>
+
 #include "block_manager/blocking_manager.hpp"
 #include "geo/geo_score.hpp"
 #include "protocol/resp_parser.hpp"
@@ -6,31 +12,19 @@
 #include "rdb/rdb_constants.hpp"
 #include "store/store.hpp"
 #include "util/parse.hpp"
-#include <cmath>
-#include <cstdio>
-#include <string_view>
 
 namespace {
 using namespace std::string_view_literals;
 
-bool is_write_command(std::string_view cmd) {
-    static constexpr auto kWriteCommands = std::array{"SET"sv,
-                                                      "DEL"sv,
-                                                      "INCR"sv,
-                                                      "RPUSH"sv,
-                                                      "LPUSH"sv,
-                                                      "LPOP"sv,
-                                                      "XADD"sv,
-                                                      "ZADD"sv,
-                                                      "ZREM"sv,
-                                                      "GEOADD"sv};
+auto is_write_command(std::string_view cmd) -> bool {
+    static constexpr auto kWriteCommands = std::array{
+        "SET"sv, "DEL"sv, "INCR"sv, "RPUSH"sv, "LPUSH"sv, "LPOP"sv, "XADD"sv, "ZADD"sv, "ZREM"sv, "GEOADD"sv};
     return std::ranges::find(kWriteCommands, cmd) != kWriteCommands.end();
 }
 
 } // namespace
 
-CommandHandler::CommandHandler(Store& store, const ServerConfig& config)
-    : store_(store), config_(config) {
+CommandHandler::CommandHandler(Store& store, ServerConfig config) : store_(store), config_(std::move(config)) {
     register_commands();
 }
 
@@ -42,205 +36,134 @@ void CommandHandler::remove_connection(int fd) {
 void CommandHandler::register_commands() {
     command_table_ = {
         {"PING",
-         {[this](const std::vector<std::string>&,
-                 int fd,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              if (pubsub_manager_ && pubsub_manager_->is_subscribed(fd)) {
+         {[this](const std::vector<std::string>&, int fd, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult {
+              if ((pubsub_manager_ != nullptr) && pubsub_manager_->is_subscribed(fd)) {
                   return ProcessResult::normal(RespParser::encode_array({"pong", ""}));
               }
               return ProcessResult::normal(handle_ping());
           },
           1}},
         {"ECHO",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return ProcessResult::normal(handle_echo(args[1]));
-          },
+         {[](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return ProcessResult::normal(handle_echo(args[1])); },
           2}},
         {"SET",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return ProcessResult::normal(handle_set(args));
-          },
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return ProcessResult::normal(handle_set(args)); },
           3}},
         {"GET",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return ProcessResult::normal(handle_get(args[1]));
-          },
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return ProcessResult::normal(handle_get(args[1])); },
           2}},
         {"INCR",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return ProcessResult::normal(handle_incr(args[1]));
-          },
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return ProcessResult::normal(handle_incr(args[1])); },
           2}},
         {"RPUSH",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)> send) -> ProcessResult {
-              if (send)
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>& send)
+              -> ProcessResult {
+              if (send) {
                   return handle_rpush_with_blocking(args, send);
+              }
               return ProcessResult::normal(handle_rpush(args));
           },
           3}},
         {"LPUSH",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)> send) -> ProcessResult {
-              if (send)
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>& send)
+              -> ProcessResult {
+              if (send) {
                   return handle_lpush_with_blocking(args, send);
+              }
               return ProcessResult::normal(handle_lpush(args));
           },
           3}},
         {"LLEN",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return ProcessResult::normal(RespParser::encode_integer(store_.llen(args[1])));
-          },
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return ProcessResult::normal(RespParser::encode_integer(store_.llen(args[1]))); },
           2}},
         {"LPOP",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return ProcessResult::normal(handle_lpop(args));
-          },
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return ProcessResult::normal(handle_lpop(args)); },
           2}},
         {"LRANGE",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return ProcessResult::normal(handle_lrange(args));
-          },
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return ProcessResult::normal(handle_lrange(args)); },
           4}},
         {"BLPOP",
-         {[this](const std::vector<std::string>& args,
-                 int fd,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return handle_blpop(fd, args);
-          },
+         {[this](const std::vector<std::string>& args, int fd, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return handle_blpop(fd, args); },
           3}},
         {"TYPE",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return ProcessResult::normal(
-                  RespParser::encode_simple_string(store_.get_type(args[1])));
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult {
+              return ProcessResult::normal(RespParser::encode_simple_string(store_.get_type(args[1])));
           },
           2}},
         {"KEYS",
-         {[this](const std::vector<std::string>&, int, std::function<void(int, const std::string&)>)
-              -> ProcessResult {
-              return ProcessResult::normal(RespParser::encode_array(store_.keys()));
-          },
+         {[this](const std::vector<std::string>&, int, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return ProcessResult::normal(RespParser::encode_array(store_.keys())); },
           2}},
         {"XADD",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)> send) -> ProcessResult {
-              return handle_xadd_with_blocking(args, send);
-          },
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>& send)
+              -> ProcessResult { return handle_xadd_with_blocking(args, send); },
           4}},
         {"ZADD",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return ProcessResult::normal(handle_zadd(args));
-          },
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return ProcessResult::normal(handle_zadd(args)); },
           4}},
         {"ZRANK",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return ProcessResult::normal(handle_zrank(args));
-          },
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return ProcessResult::normal(handle_zrank(args)); },
           3}},
         {"ZRANGE",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return ProcessResult::normal(handle_zrange(args));
-          },
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return ProcessResult::normal(handle_zrange(args)); },
           4}},
         {"ZCARD",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return ProcessResult::normal(handle_zcard(args[1]));
-          },
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return ProcessResult::normal(handle_zcard(args[1])); },
           2}},
         {"ZSCORE",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return ProcessResult::normal(handle_zscore(args));
-          },
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return ProcessResult::normal(handle_zscore(args)); },
           3}},
         {"ZREM",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return ProcessResult::normal(handle_zrem(args));
-          },
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return ProcessResult::normal(handle_zrem(args)); },
           3}},
         {"GEOADD",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return ProcessResult::normal(handle_geoadd(args));
-          },
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return ProcessResult::normal(handle_geoadd(args)); },
           5}},
         {"GEOPOS",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return ProcessResult::normal(handle_geopos(args));
-          },
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return ProcessResult::normal(handle_geopos(args)); },
           3}},
         {"GEODIST",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return ProcessResult::normal(handle_geodist(args));
-          },
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return ProcessResult::normal(handle_geodist(args)); },
           4}},
         {"GEOSEARCH",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return ProcessResult::normal(handle_geosearch(args));
-          },
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return ProcessResult::normal(handle_geosearch(args)); },
           8}},
         {"XRANGE",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return ProcessResult::normal(handle_xrange(args));
-          },
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return ProcessResult::normal(handle_xrange(args)); },
           4}},
         {"XREAD",
-         {[this](const std::vector<std::string>& args,
-                 int fd,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return handle_xread_with_blocking(fd, args);
-          },
+         {[this](const std::vector<std::string>& args, int fd, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return handle_xread_with_blocking(fd, args); },
           4}},
         {"INFO",
-         {[this](const std::vector<std::string>& args,
-                 int,
-                 std::function<void(int, const std::string&)>) -> ProcessResult {
-              return ProcessResult::normal(handle_info(args));
-          },
+         {[this](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&)
+              -> ProcessResult { return ProcessResult::normal(handle_info(args)); },
           1}},
     };
 }
 
-std::string CommandHandler::process(std::string_view input) {
+auto CommandHandler::process(std::string_view input) -> std::string {
     auto result = process_with_fd(-1, input, nullptr);
     if (std::holds_alternative<ProcessResult::Normal>(result.state)) {
         return std::get<ProcessResult::Normal>(result.state).response;
@@ -248,10 +171,9 @@ std::string CommandHandler::process(std::string_view input) {
     return std::get<ProcessResult::ReplicaHandshake>(result.state).response;
 }
 
-ProcessResult
-CommandHandler::process_with_fd(int fd,
-                                std::string_view input,
-                                std::function<void(int, const std::string&)> send_to_client) {
+auto CommandHandler::process_with_fd(int fd,
+                                     std::string_view input,
+                                     std::function<void(int, const std::string&)> send_to_client) -> ProcessResult {
     auto parsed = RespParser::parse(input);
     if (!parsed) {
         return ProcessResult::normal(RespParser::encode_error("ERR " + parsed.error()));
@@ -265,14 +187,9 @@ CommandHandler::process_with_fd(int fd,
     std::string& cmd = args[0];
     cmd = to_upper(std::move(cmd));
 
-    if (pubsub_manager_ && pubsub_manager_->is_subscribed(fd)) {
-        static constexpr auto kSubscribedAllowed = std::array{"SUBSCRIBE"sv,
-                                                              "UNSUBSCRIBE"sv,
-                                                              "PSUBSCRIBE"sv,
-                                                              "PUNSUBSCRIBE"sv,
-                                                              "PING"sv,
-                                                              "QUIT"sv,
-                                                              "RESET"sv};
+    if ((pubsub_manager_ != nullptr) && pubsub_manager_->is_subscribed(fd)) {
+        static constexpr auto kSubscribedAllowed = std::array{
+            "SUBSCRIBE"sv, "UNSUBSCRIBE"sv, "PSUBSCRIBE"sv, "PUNSUBSCRIBE"sv, "PING"sv, "QUIT"sv, "RESET"sv};
         if (std::ranges::find(kSubscribedAllowed, cmd) == kSubscribedAllowed.end()) {
             return ProcessResult::normal(
                 RespParser::encode_error("ERR Can't execute '" + cmd + "' in subscribed mode"));
@@ -280,12 +197,11 @@ CommandHandler::process_with_fd(int fd,
     }
 
     if (cmd != "AUTH" && !authenticated_fds_.contains(fd)) {
-        auto* user = acl_manager_.get_user("default");
-        if (user && user->nopass) {
+        const auto* user = acl_manager_.get_user("default");
+        if ((user != nullptr) && user->nopass) {
             authenticated_fds_.insert(fd);
         } else {
-            return ProcessResult::normal(
-                RespParser::encode_error("NOAUTH Authentication required."));
+            return ProcessResult::normal(RespParser::encode_error("NOAUTH Authentication required."));
         }
     }
 
@@ -326,7 +242,7 @@ CommandHandler::process_with_fd(int fd,
             }
         }
         transactions_.erase(it);
-        return ProcessResult::normal(RespParser::encode_raw_array(std::move(results)));
+        return ProcessResult::normal(RespParser::encode_raw_array(results));
     }
 
     if (cmd == "DISCARD") {
@@ -340,13 +256,11 @@ CommandHandler::process_with_fd(int fd,
 
     if (cmd == "WATCH") {
         if (args.size() < 2) {
-            return ProcessResult::normal(
-                RespParser::encode_error("ERR wrong number of arguments for 'watch' command"));
+            return ProcessResult::normal(RespParser::encode_error("ERR wrong number of arguments for 'watch' command"));
         }
         auto it = transactions_.find(fd);
         if (it != transactions_.end() && it->second.in_multi) {
-            return ProcessResult::normal(
-                RespParser::encode_error("ERR WATCH inside MULTI is not allowed"));
+            return ProcessResult::normal(RespParser::encode_error("ERR WATCH inside MULTI is not allowed"));
         }
         auto& tx = transactions_[fd];
         for (size_t i = 1; i < args.size(); ++i) {
@@ -377,9 +291,8 @@ CommandHandler::process_with_fd(int fd,
 }
 
 template <typename SendFn>
-ProcessResult CommandHandler::execute_command(const std::vector<std::string>& args,
-                                              int fd,
-                                              SendFn&& send_to_client) {
+auto CommandHandler::execute_command(const std::vector<std::string>& args, int fd, SendFn&& send_to_client)
+    -> ProcessResult {
     const std::string& cmd = args[0];
 
     if (cmd == "CONFIG") {
@@ -391,8 +304,7 @@ ProcessResult CommandHandler::execute_command(const std::vector<std::string>& ar
     }
     if (cmd == "ACL") {
         if (args.size() < 2) {
-            return ProcessResult::normal(
-                RespParser::encode_error("ERR unknown subcommand for 'ACL'. Try ACL HELP."));
+            return ProcessResult::normal(RespParser::encode_error("ERR unknown subcommand for 'ACL'. Try ACL HELP."));
         }
         auto subcmd = to_upper(args[1]);
         if (subcmd == "WHOAMI") {
@@ -400,32 +312,30 @@ ProcessResult CommandHandler::execute_command(const std::vector<std::string>& ar
         }
         if (subcmd == "GETUSER") {
             if (args.size() < 3) {
-                return ProcessResult::normal(RespParser::encode_error(
-                    "ERR wrong number of arguments for 'acl|getuser' command"));
+                return ProcessResult::normal(
+                    RespParser::encode_error("ERR wrong number of arguments for 'acl|getuser' command"));
             }
             return ProcessResult::normal(handle_acl_getuser(args));
         }
         if (subcmd == "SETUSER") {
             if (args.size() < 3) {
-                return ProcessResult::normal(RespParser::encode_error(
-                    "ERR wrong number of arguments for 'acl|setuser' command"));
+                return ProcessResult::normal(
+                    RespParser::encode_error("ERR wrong number of arguments for 'acl|setuser' command"));
             }
             return ProcessResult::normal(handle_acl_setuser(args));
         }
-        return ProcessResult::normal(
-            RespParser::encode_error("ERR unknown subcommand for 'ACL'. Try ACL HELP."));
+        return ProcessResult::normal(RespParser::encode_error("ERR unknown subcommand for 'ACL'. Try ACL HELP."));
     }
     if (cmd == "AUTH") {
         if (args.size() < 3) {
-            return ProcessResult::normal(
-                RespParser::encode_error("ERR wrong number of arguments for 'auth' command"));
+            return ProcessResult::normal(RespParser::encode_error("ERR wrong number of arguments for 'auth' command"));
         }
         if (acl_manager_.authenticate(args[1], args[2])) {
             authenticated_fds_.insert(fd);
             return ProcessResult::normal(RespParser::encode_simple_string("OK"));
         }
-        return ProcessResult::normal(RespParser::encode_error(
-            "WRONGPASS invalid username-password pair or user is disabled."));
+        return ProcessResult::normal(
+            RespParser::encode_error("WRONGPASS invalid username-password pair or user is disabled."));
     }
     if (cmd == "REPLCONF") {
         if (args.size() >= 2 && to_upper(args[1]) == "GETACK") {
@@ -435,20 +345,18 @@ ProcessResult CommandHandler::execute_command(const std::vector<std::string>& ar
     }
     if (cmd == "WAIT") {
         if (args.size() < 3) {
-            return ProcessResult::normal(
-                RespParser::encode_error("ERR wrong number of arguments for 'wait' command"));
+            return ProcessResult::normal(RespParser::encode_error("ERR wrong number of arguments for 'wait' command"));
         }
         auto numreplicas = parse_int<int64_t>(args[1]);
         auto timeout = parse_int<int64_t>(args[2]);
         if (!numreplicas || !timeout) {
-            return ProcessResult::normal(
-                RespParser::encode_error("ERR value is not an integer or out of range"));
+            return ProcessResult::normal(RespParser::encode_error("ERR value is not an integer or out of range"));
         }
         return ProcessResult::wait(*numreplicas, *timeout);
     }
     if (cmd == "PSYNC") {
-        auto response = "+FULLRESYNC " + config_.master_replid + " " +
-                        std::to_string(config_.master_repl_offset) + "\r\n";
+        auto response
+            = "+FULLRESYNC " + config_.master_replid + " " + std::to_string(config_.master_repl_offset) + "\r\n";
         response += "$88\r\n";
         response.append(kEmptyRdb.begin(), kEmptyRdb.end());
         return ProcessResult::replica_handshake(response);
@@ -459,20 +367,18 @@ ProcessResult CommandHandler::execute_command(const std::vector<std::string>& ar
                 RespParser::encode_error("ERR wrong number of arguments for 'subscribe' command"));
         }
         size_t count = pubsub_manager_ ? pubsub_manager_->subscribe(fd, args[1]) : 1;
-        auto resp = "*3\r\n" + RespParser::encode_bulk_string("subscribe") +
-                    RespParser::encode_bulk_string(args[1]) +
-                    RespParser::encode_integer(static_cast<int64_t>(count));
+        auto resp = "*3\r\n" + RespParser::encode_bulk_string("subscribe") + RespParser::encode_bulk_string(args[1])
+                    + RespParser::encode_integer(static_cast<int64_t>(count));
         return ProcessResult::normal(std::move(resp));
     }
     if (cmd == "UNSUBSCRIBE") {
         if (args.size() < 2) {
-            return ProcessResult::normal(RespParser::encode_error(
-                "ERR wrong number of arguments for 'unsubscribe' command"));
+            return ProcessResult::normal(
+                RespParser::encode_error("ERR wrong number of arguments for 'unsubscribe' command"));
         }
         size_t count = pubsub_manager_ ? pubsub_manager_->unsubscribe(fd, args[1]) : 0;
-        auto resp = "*3\r\n" + RespParser::encode_bulk_string("unsubscribe") +
-                    RespParser::encode_bulk_string(args[1]) +
-                    RespParser::encode_integer(static_cast<int64_t>(count));
+        auto resp = "*3\r\n" + RespParser::encode_bulk_string("unsubscribe") + RespParser::encode_bulk_string(args[1])
+                    + RespParser::encode_integer(static_cast<int64_t>(count));
         return ProcessResult::normal(std::move(resp));
     }
     if (cmd == "PUBLISH") {
@@ -488,8 +394,7 @@ ProcessResult CommandHandler::execute_command(const std::vector<std::string>& ar
                 auto msg = RespParser::encode_array({"message", channel, message});
                 std::ranges::for_each(subs, [&](int cfd) { send_to_client(cfd, msg); });
             }
-            return ProcessResult::normal(
-                RespParser::encode_integer(static_cast<int64_t>(subs.size())));
+            return ProcessResult::normal(RespParser::encode_integer(static_cast<int64_t>(subs.size())));
         }
         return ProcessResult::normal(RespParser::encode_integer(0));
     }
@@ -499,19 +404,21 @@ ProcessResult CommandHandler::execute_command(const std::vector<std::string>& ar
         return ProcessResult::normal(RespParser::encode_error("ERR unknown command '" + cmd + "'"));
     }
     if (args.size() < it->second.min_args) {
-        return ProcessResult::normal(RespParser::encode_error(
-            "ERR wrong number of arguments for '" + to_lower(cmd) + "' command"));
+        return ProcessResult::normal(
+            RespParser::encode_error("ERR wrong number of arguments for '" + to_lower(cmd) + "' command"));
     }
     return it->second.handler(args, fd, send_to_client);
 }
 
-std::string CommandHandler::handle_ping() { return RespParser::encode_simple_string("PONG"); }
+auto CommandHandler::handle_ping() -> std::string {
+    return RespParser::encode_simple_string("PONG");
+}
 
-std::string CommandHandler::handle_echo(std::string_view args) {
+auto CommandHandler::handle_echo(std::string_view args) -> std::string {
     return RespParser::encode_bulk_string(args);
 }
 
-std::string CommandHandler::handle_set(const std::vector<std::string>& args) {
+auto CommandHandler::handle_set(const std::vector<std::string>& args) -> std::string {
     const std::string& key = args[1];
     const std::string& value = args[2];
 
@@ -539,12 +446,12 @@ std::string CommandHandler::handle_set(const std::vector<std::string>& args) {
     return RespParser::encode_simple_string("OK");
 }
 
-std::string CommandHandler::handle_get(const std::string& key) {
+auto CommandHandler::handle_get(const std::string& key) -> std::string {
     auto value = store_.get(key);
     return value ? RespParser::encode_bulk_string(*value) : RespParser::encode_null_bulk_string();
 }
 
-std::string CommandHandler::handle_incr(const std::string& key) {
+auto CommandHandler::handle_incr(const std::string& key) -> std::string {
     auto result = store_.incr(key);
     if (!result) {
         return RespParser::encode_error("ERR value is not an integer or out of range");
@@ -552,7 +459,7 @@ std::string CommandHandler::handle_incr(const std::string& key) {
     return RespParser::encode_integer(*result);
 }
 
-std::string CommandHandler::handle_rpush(const std::vector<std::string>& args) {
+auto CommandHandler::handle_rpush(const std::vector<std::string>& args) -> std::string {
     const std::string& key = args[1];
     int64_t count = 0;
     for (size_t i = 2; i < args.size(); ++i) {
@@ -561,7 +468,7 @@ std::string CommandHandler::handle_rpush(const std::vector<std::string>& args) {
     return RespParser::encode_integer(count);
 }
 
-std::string CommandHandler::handle_lpush(const std::vector<std::string>& args) {
+auto CommandHandler::handle_lpush(const std::vector<std::string>& args) -> std::string {
     const std::string& key = args[1];
     int64_t count = 0;
     for (size_t i = 2; i < args.size(); ++i) {
@@ -570,7 +477,7 @@ std::string CommandHandler::handle_lpush(const std::vector<std::string>& args) {
     return RespParser::encode_integer(count);
 }
 
-std::string CommandHandler::handle_lpop(const std::vector<std::string>& args) {
+auto CommandHandler::handle_lpop(const std::vector<std::string>& args) -> std::string {
     const std::string& key = args[1];
 
     if (args.size() == 2) {
@@ -595,7 +502,7 @@ std::string CommandHandler::handle_lpop(const std::vector<std::string>& args) {
     return RespParser::encode_array(elements);
 }
 
-std::string CommandHandler::handle_lrange(const std::vector<std::string>& args) {
+auto CommandHandler::handle_lrange(const std::vector<std::string>& args) -> std::string {
     const std::string& key = args[1];
 
     auto start_opt = parse_int<int64_t>(args[2]);
@@ -608,23 +515,23 @@ std::string CommandHandler::handle_lrange(const std::vector<std::string>& args) 
     return RespParser::encode_array(elements);
 }
 
-std::string CommandHandler::handle_info(const std::vector<std::string>& /* args */) {
-    auto role = config_.is_replica() ? "slave" : "master";
-    auto info = "# Replication\r\nrole:" + std::string(role) +
-                "\r\nmaster_replid:" + config_.master_replid +
-                "\r\nmaster_repl_offset:" + std::to_string(config_.master_repl_offset) + "\r\n";
+auto CommandHandler::handle_info(const std::vector<std::string>& /* args */) -> std::string {
+    const auto* role = config_.is_replica() ? "slave" : "master";
+    auto info = "# Replication\r\nrole:" + std::string(role) + "\r\nmaster_replid:" + config_.master_replid
+                + "\r\nmaster_repl_offset:" + std::to_string(config_.master_repl_offset) + "\r\n";
     return RespParser::encode_bulk_string(info);
 }
 
-ProcessResult CommandHandler::handle_blpop(int fd, const std::vector<std::string>& args) {
+auto CommandHandler::handle_blpop(int fd, const std::vector<std::string>& args) -> ProcessResult {
     const std::string& key = args[1];
 
     auto timeout_opt = parse_double(args[2]);
-    if (!timeout_opt)
-        return ProcessResult::normal(
-            RespParser::encode_error("ERR value is not an integer or out of range"));
-    if (*timeout_opt < 0)
+    if (!timeout_opt) {
+        return ProcessResult::normal(RespParser::encode_error("ERR value is not an integer or out of range"));
+    }
+    if (*timeout_opt < 0) {
         return ProcessResult::normal(RespParser::encode_error("ERR timeout is negative"));
+    }
     double timeout_sec = *timeout_opt;
 
     auto elements = store_.lpop(key, 1);
@@ -632,7 +539,7 @@ ProcessResult CommandHandler::handle_blpop(int fd, const std::vector<std::string
         return ProcessResult::normal(RespParser::encode_array({key, elements[0]}));
     }
 
-    if (blocking_manager_) {
+    if (blocking_manager_ != nullptr) {
         auto timeout_ms = std::chrono::milliseconds(static_cast<int64_t>(timeout_sec * 1000));
         blocking_manager_->block_client(fd, key, timeout_ms);
         return ProcessResult::block();
@@ -641,14 +548,14 @@ ProcessResult CommandHandler::handle_blpop(int fd, const std::vector<std::string
     return ProcessResult::normal(RespParser::encode_error("ERR blocking not available"));
 }
 
-ProcessResult CommandHandler::handle_rpush_with_blocking(
-    const std::vector<std::string>& args,
-    std::function<void(int, const std::string&)> send_to_client) {
+auto CommandHandler::handle_rpush_with_blocking(const std::vector<std::string>& args,
+                                                const std::function<void(int, const std::string&)>& send_to_client)
+    -> ProcessResult {
     const std::string& key = args[1];
     int64_t count = 0;
 
     for (size_t i = 2; i < args.size(); ++i) {
-        if (blocking_manager_) {
+        if (blocking_manager_ != nullptr) {
             auto blocked = blocking_manager_->wake_client(key);
             if (blocked) {
                 count = store_.rpush(key, args[i]);
@@ -664,14 +571,14 @@ ProcessResult CommandHandler::handle_rpush_with_blocking(
     return ProcessResult::normal(RespParser::encode_integer(count));
 }
 
-ProcessResult CommandHandler::handle_lpush_with_blocking(
-    const std::vector<std::string>& args,
-    std::function<void(int, const std::string&)> send_to_client) {
+auto CommandHandler::handle_lpush_with_blocking(const std::vector<std::string>& args,
+                                                const std::function<void(int, const std::string&)>& send_to_client)
+    -> ProcessResult {
     const std::string& key = args[1];
     int64_t count = store_.llen(key);
 
     for (size_t i = 2; i < args.size(); ++i) {
-        if (blocking_manager_) {
+        if (blocking_manager_ != nullptr) {
             auto blocked = blocking_manager_->wake_client(key);
             if (blocked) {
                 send_to_client(blocked->fd, RespParser::encode_array({key, args[i]}));
@@ -684,21 +591,22 @@ ProcessResult CommandHandler::handle_lpush_with_blocking(
     return ProcessResult::normal(RespParser::encode_integer(count));
 }
 
-std::string CommandHandler::handle_zadd(const std::vector<std::string>& args) {
+auto CommandHandler::handle_zadd(const std::vector<std::string>& args) -> std::string {
     const std::string& key = args[1];
     auto score = parse_double(args[2]);
-    if (!score)
+    if (!score) {
         return RespParser::encode_error("ERR value is not a valid float");
+    }
     auto added = store_.zadd(key, *score, args[3]);
     return RespParser::encode_integer(added);
 }
 
-std::string CommandHandler::handle_zrank(const std::vector<std::string>& args) {
+auto CommandHandler::handle_zrank(const std::vector<std::string>& args) -> std::string {
     auto rank = store_.zrank(args[1], args[2]);
     return rank ? RespParser::encode_integer(*rank) : RespParser::encode_null_bulk_string();
 }
 
-std::string CommandHandler::handle_zrange(const std::vector<std::string>& args) {
+auto CommandHandler::handle_zrange(const std::vector<std::string>& args) -> std::string {
     const std::string& key = args[1];
     auto start_opt = parse_int<int64_t>(args[2]);
     auto stop_opt = parse_int<int64_t>(args[3]);
@@ -709,38 +617,39 @@ std::string CommandHandler::handle_zrange(const std::vector<std::string>& args) 
     return RespParser::encode_array(elements);
 }
 
-std::string CommandHandler::handle_zcard(const std::string& key) {
+auto CommandHandler::handle_zcard(const std::string& key) -> std::string {
     return RespParser::encode_integer(store_.zcard(key));
 }
 
-std::string CommandHandler::handle_zscore(const std::vector<std::string>& args) {
+auto CommandHandler::handle_zscore(const std::vector<std::string>& args) -> std::string {
     auto score = store_.zscore(args[1], args[2]);
-    if (!score)
+    if (!score) {
         return RespParser::encode_null_bulk_string();
+    }
 
     char buf[32];
     std::snprintf(buf, sizeof(buf), "%.17g", *score);
     return RespParser::encode_bulk_string(buf);
 }
 
-std::string CommandHandler::handle_zrem(const std::vector<std::string>& args) {
+auto CommandHandler::handle_zrem(const std::vector<std::string>& args) -> std::string {
     auto removed = store_.zrem(args[1], args[2]);
     return RespParser::encode_integer(removed);
 }
 
-std::string CommandHandler::handle_geoadd(const std::vector<std::string>& args) {
+auto CommandHandler::handle_geoadd(const std::vector<std::string>& args) -> std::string {
     auto lon = parse_double(args[2]);
     auto lat = parse_double(args[3]);
-    if (!lon || !lat)
+    if (!lon || !lat) {
         return RespParser::encode_error("ERR value is not a valid float");
+    }
 
     bool lon_invalid = !std::isfinite(*lon) || *lon < geo::kLonMin || *lon > geo::kLonMax;
     bool lat_invalid = !std::isfinite(*lat) || *lat < geo::kLatMin || *lat > geo::kLatMax;
 
     if (lon_invalid || lat_invalid) {
         char buf[128];
-        std::snprintf(
-            buf, sizeof(buf), "ERR invalid longitude,latitude pair %.6f,%.6f", *lon, *lat);
+        std::snprintf(buf, sizeof(buf), "ERR invalid longitude,latitude pair %.6f,%.6f", *lon, *lat);
         return RespParser::encode_error(buf);
     }
 
@@ -749,7 +658,7 @@ std::string CommandHandler::handle_geoadd(const std::vector<std::string>& args) 
     return RespParser::encode_integer(added);
 }
 
-std::string CommandHandler::handle_geopos(const std::vector<std::string>& args) {
+auto CommandHandler::handle_geopos(const std::vector<std::string>& args) -> std::string {
     const auto& key = args[1];
     auto count = args.size() - 2;
 
@@ -776,11 +685,12 @@ std::string CommandHandler::handle_geopos(const std::vector<std::string>& args) 
     return resp;
 }
 
-std::string CommandHandler::handle_geodist(const std::vector<std::string>& args) {
+auto CommandHandler::handle_geodist(const std::vector<std::string>& args) -> std::string {
     auto score1 = store_.zscore(args[1], args[2]);
     auto score2 = store_.zscore(args[1], args[3]);
-    if (!score1 || !score2)
+    if (!score1 || !score2) {
         return RespParser::encode_null_bulk_string();
+    }
     auto c1 = geo::decode(static_cast<uint64_t>(*score1));
     auto c2 = geo::decode(static_cast<uint64_t>(*score2));
     auto dist = geo::distance(c1.lat, c1.lon, c2.lat, c2.lon);
@@ -789,31 +699,35 @@ std::string CommandHandler::handle_geodist(const std::vector<std::string>& args)
     return RespParser::encode_bulk_string(buf);
 }
 
-std::string CommandHandler::handle_geosearch(const std::vector<std::string>& args) {
+auto CommandHandler::handle_geosearch(const std::vector<std::string>& args) -> std::string {
     const auto& key = args[1];
 
-    if (to_upper(args[2]) != "FROMLONLAT")
+    if (to_upper(args[2]) != "FROMLONLAT") {
         return RespParser::encode_error("ERR syntax error");
+    }
 
     auto search_lon = parse_double(args[3]);
     auto search_lat = parse_double(args[4]);
-    if (!search_lon || !search_lat)
+    if (!search_lon || !search_lat) {
         return RespParser::encode_error("ERR value is not a valid float");
+    }
 
-    if (to_upper(args[5]) != "BYRADIUS")
+    if (to_upper(args[5]) != "BYRADIUS") {
         return RespParser::encode_error("ERR syntax error");
+    }
 
     auto radius = parse_double(args[6]);
-    if (!radius)
+    if (!radius) {
         return RespParser::encode_error("ERR value is not a valid float");
+    }
 
     auto unit = to_upper(args[7]);
-    static constexpr std::pair<std::string_view, double> kUnitFactors[] = {
-        {"M", 1.0}, {"KM", 1000.0}, {"MI", 1609.34}, {"FT", 0.3048}};
-    auto factor_it =
-        std::ranges::find_if(kUnitFactors, [&](const auto& p) { return p.first == unit; });
-    if (factor_it == std::end(kUnitFactors))
+    static constexpr std::pair<std::string_view, double> kUnitFactors[]
+        = {{"M", 1.0}, {"KM", 1000.0}, {"MI", 1609.34}, {"FT", 0.3048}};
+    const auto* factor_it = std::ranges::find_if(kUnitFactors, [&](const auto& p) { return p.first == unit; });
+    if (factor_it == std::end(kUnitFactors)) {
         return RespParser::encode_error("ERR unsupported unit provided");
+    }
 
     double radius_m = *radius * factor_it->second;
 
@@ -822,14 +736,15 @@ std::string CommandHandler::handle_geosearch(const std::vector<std::string>& arg
     for (const auto& [member, score] : all) {
         auto coords = geo::decode(static_cast<uint64_t>(score));
         auto dist = geo::distance(*search_lat, *search_lon, coords.lat, coords.lon);
-        if (dist <= radius_m)
+        if (dist <= radius_m) {
             matched.push_back(member);
+        }
     }
 
     return RespParser::encode_array(matched);
 }
 
-std::string CommandHandler::handle_xadd(const std::vector<std::string>& args) {
+auto CommandHandler::handle_xadd(const std::vector<std::string>& args) -> std::string {
     const std::string& key = args[1];
     const std::string& id = args[2];
 
@@ -851,7 +766,7 @@ std::string CommandHandler::handle_xadd(const std::vector<std::string>& args) {
     return RespParser::encode_bulk_string(result);
 }
 
-std::string CommandHandler::handle_xrange(const std::vector<std::string>& args) {
+auto CommandHandler::handle_xrange(const std::vector<std::string>& args) -> std::string {
     const std::string& key = args[1];
     const std::string& start = args[2];
     const std::string& end = args[3];
@@ -860,7 +775,7 @@ std::string CommandHandler::handle_xrange(const std::vector<std::string>& args) 
     return RespParser::encode_entries(entries);
 }
 
-std::string CommandHandler::handle_xread(const std::vector<std::string>& args) {
+auto CommandHandler::handle_xread(const std::vector<std::string>& args) -> std::string {
     size_t streams_idx = 0;
     for (size_t i = 1; i < args.size(); ++i) {
         if (to_upper(args[i]) == "STREAMS") {
@@ -892,8 +807,7 @@ std::string CommandHandler::handle_xread(const std::vector<std::string>& args) {
     return RespParser::encode_stream_entries(results);
 }
 
-ProcessResult CommandHandler::handle_xread_with_blocking(int fd,
-                                                         const std::vector<std::string>& args) {
+auto CommandHandler::handle_xread_with_blocking(int fd, const std::vector<std::string>& args) -> ProcessResult {
     bool has_block = false;
     int64_t timeout_ms = 0;
     size_t start_idx = 1;
@@ -906,8 +820,7 @@ ProcessResult CommandHandler::handle_xread_with_blocking(int fd,
             }
             auto parsed = parse_int<int64_t>(args[start_idx + 1]);
             if (!parsed) {
-                return ProcessResult::normal(
-                    RespParser::encode_error("ERR value is not an integer or out of range"));
+                return ProcessResult::normal(RespParser::encode_error("ERR value is not an integer or out of range"));
             }
             timeout_ms = *parsed;
             start_idx += 2;
@@ -928,14 +841,12 @@ ProcessResult CommandHandler::handle_xread_with_blocking(int fd,
 
     size_t num_pairs = args.size() - streams_idx - 1;
     if (num_pairs == 0 || num_pairs % 2 != 0) {
-        return ProcessResult::normal(
-            RespParser::encode_error("ERR wrong number of arguments for 'xread' command"));
+        return ProcessResult::normal(RespParser::encode_error("ERR wrong number of arguments for 'xread' command"));
     }
 
     size_t num_streams = num_pairs / 2;
     if (has_block && num_streams != 1) {
-        return ProcessResult::normal(
-            RespParser::encode_error("ERR BLOCK only supports single stream"));
+        return ProcessResult::normal(RespParser::encode_error("ERR BLOCK only supports single stream"));
     }
 
     std::vector<std::pair<std::string, std::span<const Redis::StreamEntry>>> results;
@@ -960,7 +871,7 @@ ProcessResult CommandHandler::handle_xread_with_blocking(int fd,
         return ProcessResult::normal(RespParser::encode_stream_entries(results));
     }
 
-    if (blocking_manager_) {
+    if (blocking_manager_ != nullptr) {
         const std::string& key = args[streams_idx + 1];
         const std::string& id_arg = args[streams_idx + 1 + num_streams];
 
@@ -971,23 +882,21 @@ ProcessResult CommandHandler::handle_xread_with_blocking(int fd,
         }
 
         auto sid = StreamId::parse(id).value_or(StreamId{0, 0});
-        blocking_manager_->block_client_for_stream(
-            fd, key, sid, std::chrono::milliseconds(timeout_ms));
+        blocking_manager_->block_client_for_stream(fd, key, sid, std::chrono::milliseconds(timeout_ms));
         return ProcessResult::block();
     }
 
     return ProcessResult::normal(RespParser::encode_error("ERR blocking not available"));
 }
 
-ProcessResult CommandHandler::handle_xadd_with_blocking(
-    const std::vector<std::string>& args,
-    std::function<void(int, const std::string&)> send_to_client) {
+auto CommandHandler::handle_xadd_with_blocking(const std::vector<std::string>& args,
+                                               const std::function<void(int, const std::string&)>& send_to_client)
+    -> ProcessResult {
     const std::string& key = args[1];
     const std::string& id = args[2];
 
     if ((args.size() - 3) % 2 != 0) {
-        return ProcessResult::normal(
-            RespParser::encode_error("ERR wrong number of arguments for 'xadd' command"));
+        return ProcessResult::normal(RespParser::encode_error("ERR wrong number of arguments for 'xadd' command"));
     }
 
     std::vector<std::pair<std::string, std::string>> fields;
@@ -1001,7 +910,7 @@ ProcessResult CommandHandler::handle_xadd_with_blocking(
         return ProcessResult::normal(RespParser::encode_error(new_id));
     }
 
-    if (blocking_manager_) {
+    if (blocking_manager_ != nullptr) {
         while (auto blocked = blocking_manager_->wake_client_for_stream(key, new_id)) {
             auto entries = store_.xread(key, blocked->last_id.to_string());
             auto response = RespParser::encode_stream_entries({{key, entries}});
@@ -1012,41 +921,41 @@ ProcessResult CommandHandler::handle_xadd_with_blocking(
     return ProcessResult::normal(RespParser::encode_bulk_string(new_id));
 }
 
-std::string CommandHandler::handle_config_get(const std::string& param) {
+auto CommandHandler::handle_config_get(const std::string& param) const -> std::string {
     auto upper = to_upper(param);
     if (upper == "DIR") {
-        auto value = config_.dir.empty() ? RespParser::encode_null_bulk_string()
-                                         : RespParser::encode_bulk_string(config_.dir);
+        auto value
+            = config_.dir.empty() ? RespParser::encode_null_bulk_string() : RespParser::encode_bulk_string(config_.dir);
         return "*2\r\n$3\r\ndir\r\n" + value;
     }
     if (upper == "DBFILENAME") {
-        auto value = config_.dbfilename.empty()
-                         ? RespParser::encode_null_bulk_string()
-                         : RespParser::encode_bulk_string(config_.dbfilename);
+        auto value = config_.dbfilename.empty() ? RespParser::encode_null_bulk_string()
+                                                : RespParser::encode_bulk_string(config_.dbfilename);
         return "*2\r\n$10\r\ndbfilename\r\n" + value;
     }
     return RespParser::encode_array({});
 }
 
-std::string CommandHandler::handle_acl_whoami() {
+auto CommandHandler::handle_acl_whoami() -> std::string {
     return RespParser::encode_bulk_string("default");
 }
 
-std::string CommandHandler::handle_acl_getuser(const std::vector<std::string>& args) {
-    auto* user = acl_manager_.get_user(args[2]);
-    if (!user) {
+auto CommandHandler::handle_acl_getuser(const std::vector<std::string>& args) -> std::string {
+    const auto* user = acl_manager_.get_user(args[2]);
+    if (user == nullptr) {
         return RespParser::encode_null_array();
     }
     std::vector<std::string> flags;
-    if (user->nopass)
+    if (user->nopass) {
         flags.emplace_back("nopass");
+    }
     return RespParser::encode_raw_array({RespParser::encode_bulk_string("flags"),
                                          RespParser::encode_array(flags),
                                          RespParser::encode_bulk_string("passwords"),
                                          RespParser::encode_array(user->passwords)});
 }
 
-std::string CommandHandler::handle_acl_setuser(const std::vector<std::string>& args) {
+auto CommandHandler::handle_acl_setuser(const std::vector<std::string>& args) -> std::string {
     const auto& username = args[2];
     for (size_t i = 3; i < args.size(); ++i) {
         const auto& rule = args[i];
@@ -1057,8 +966,7 @@ std::string CommandHandler::handle_acl_setuser(const std::vector<std::string>& a
     return RespParser::encode_simple_string("OK");
 }
 
-template ProcessResult
-CommandHandler::execute_command<std::function<void(int, const std::string&)>>(
+template ProcessResult CommandHandler::execute_command<std::function<void(int, const std::string&)>>(
     const std::vector<std::string>&,
     int,
     std::function<void(int, const std::string&)>&&);

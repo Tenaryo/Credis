@@ -1,10 +1,12 @@
 #include "resp_parser.hpp"
+
 #include <charconv>
 
-std::expected<std::vector<std::string>, std::string> RespParser::parse(std::string_view input) {
+auto RespParser::parse(std::string_view input) -> std::expected<std::vector<std::string>, std::string> {
     auto result = parse_one(input);
-    if (!result)
+    if (!result) {
         return std::unexpected(std::move(result.error()));
+    }
     return std::move(result->args);
 }
 
@@ -46,30 +48,34 @@ auto RespParser::parse_one(std::string_view input) -> std::expected<ParsedComman
 
         pos = crlf + 2;
 
-        if (pos + len > input.size()) {
+        if (pos + static_cast<size_t>(len) > input.size()) {
             return std::unexpected("Incomplete RESP: bulk string truncated");
         }
 
-        args.emplace_back(input.substr(pos, len));
-        pos += len + 2;
+        args.emplace_back(input.substr(pos, static_cast<size_t>(len)));
+        pos += static_cast<size_t>(len) + 2;
     }
 
     return ParsedCommand{std::move(args), pos};
 }
 
-std::string RespParser::encode_simple_string(std::string_view s) {
+auto RespParser::encode_simple_string(std::string_view s) -> std::string {
     return "+" + std::string(s) + "\r\n";
 }
 
-std::string RespParser::encode_bulk_string(std::string_view s) {
+auto RespParser::encode_bulk_string(std::string_view s) -> std::string {
     return "$" + std::to_string(s.size()) + "\r\n" + std::string(s) + "\r\n";
 }
 
-std::string RespParser::encode_null_bulk_string() { return "$-1\r\n"; }
+auto RespParser::encode_null_bulk_string() -> std::string {
+    return "$-1\r\n";
+}
 
-std::string RespParser::encode_integer(int64_t n) { return ":" + std::to_string(n) + "\r\n"; }
+auto RespParser::encode_integer(int64_t n) -> std::string {
+    return ":" + std::to_string(n) + "\r\n";
+}
 
-std::string RespParser::encode_array(const std::vector<std::string>& elements) {
+auto RespParser::encode_array(const std::vector<std::string>& elements) -> std::string {
     std::string result = "*" + std::to_string(elements.size()) + "\r\n";
     for (const auto& elem : elements) {
         result += encode_bulk_string(elem);
@@ -77,15 +83,15 @@ std::string RespParser::encode_array(const std::vector<std::string>& elements) {
     return result;
 }
 
-std::string RespParser::encode_raw_array(std::vector<std::string> raw_elements) {
+auto RespParser::encode_raw_array(const std::vector<std::string>& raw_elements) -> std::string {
     std::string result = "*" + std::to_string(raw_elements.size()) + "\r\n";
-    for (auto& elem : raw_elements) {
-        result += std::move(elem);
+    for (const auto& elem : raw_elements) {
+        result += elem;
     }
     return result;
 }
 
-std::string RespParser::encode_entries(std::span<const Redis::StreamEntry> entries) {
+auto RespParser::encode_entries(std::span<const Redis::StreamEntry> entries) -> std::string {
     std::string result = "*" + std::to_string(entries.size()) + "\r\n";
     for (const auto& entry : entries) {
         result += "*2\r\n";
@@ -99,12 +105,16 @@ std::string RespParser::encode_entries(std::span<const Redis::StreamEntry> entri
     return result;
 }
 
-std::string RespParser::encode_error(std::string_view s) { return "-" + std::string(s) + "\r\n"; }
+auto RespParser::encode_error(std::string_view s) -> std::string {
+    return "-" + std::string(s) + "\r\n";
+}
 
-std::string RespParser::encode_null_array() { return "*-1\r\n"; }
+auto RespParser::encode_null_array() -> std::string {
+    return "*-1\r\n";
+}
 
-std::string RespParser::encode_stream_entries(
-    const std::vector<std::pair<std::string, std::span<const Redis::StreamEntry>>>& streams) {
+auto RespParser::encode_stream_entries(
+    const std::vector<std::pair<std::string, std::span<const Redis::StreamEntry>>>& streams) -> std::string {
     std::string result = "*" + std::to_string(streams.size()) + "\r\n";
     for (const auto& [key, entries] : streams) {
         result += "*2\r\n";

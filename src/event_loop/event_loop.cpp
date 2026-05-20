@@ -1,6 +1,8 @@
 #include "event_loop.hpp"
-#include <iostream>
+
 #include <unistd.h>
+
+#include <iostream>
 
 EventLoop::EventLoop() {
     epoll_fd_ = epoll_create1(0);
@@ -19,7 +21,7 @@ EventLoop::EventLoop(EventLoop&& other) noexcept : epoll_fd_(other.epoll_fd_) {
     other.epoll_fd_ = -1;
 }
 
-EventLoop& EventLoop::operator=(EventLoop&& other) noexcept {
+auto EventLoop::operator=(EventLoop&& other) noexcept -> EventLoop& {
     if (this != &other) {
         if (epoll_fd_ >= 0) {
             close(epoll_fd_);
@@ -30,7 +32,7 @@ EventLoop& EventLoop::operator=(EventLoop&& other) noexcept {
     return *this;
 }
 
-void EventLoop::add_fd(int fd, uint32_t events) {
+void EventLoop::add_fd(int fd, uint32_t events) const {
     struct epoll_event ev {};
     ev.events = events;
     ev.data.fd = fd;
@@ -39,11 +41,13 @@ void EventLoop::add_fd(int fd, uint32_t events) {
     }
 }
 
-void EventLoop::remove_fd(int fd) { epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr); }
+void EventLoop::remove_fd(int fd) const {
+    epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr);
+}
 
 void EventLoop::run(int /* server_fd */,
-                    std::function<void(int)> on_data,
-                    std::function<std::chrono::milliseconds()> get_timeout) {
+                    const std::function<void(int)>& on_event,
+                    const std::function<std::chrono::milliseconds()>& get_timeout) const {
     struct epoll_event events[MAX_EVENTS];
 
     while (running_) {
@@ -61,7 +65,7 @@ void EventLoop::run(int /* server_fd */,
 
         for (int i = 0; i < n; ++i) {
             int fd = events[i].data.fd;
-            on_data(fd);
+            on_event(fd);
         }
     }
 }

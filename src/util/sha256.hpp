@@ -5,6 +5,6 @@
 
 namespace util {
 
-std::string sha256(std::string_view input);
+auto sha256(std::string_view input) -> std::string;
 
 } // namespace util

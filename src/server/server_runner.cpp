@@ -1,37 +1,42 @@
 #include "server_runner.hpp"
-#include "protocol/resp_parser.hpp"
-#include "rdb/rdb_parser.hpp"
-#include "replica/replica_connector.hpp"
-#include "util/parse.hpp"
 
 #include <chrono>
 #include <filesystem>
 #include <iostream>
 
-RedisApp::RedisApp(Server server, int listening_port, const ServerConfig& config)
-    : server_(std::move(server)), handler_(store_, config), listening_port_(listening_port) {}
+#include "protocol/resp_parser.hpp"
+#include "rdb/rdb_parser.hpp"
+#include "replica/replica_connector.hpp"
+#include "util/parse.hpp"
 
-std::expected<RedisApp, std::string> RedisApp::create(const AppConfig& config) {
-    auto server = Server::create(config.port);
-    if (!server)
-        return std::unexpected(server.error());
-    return std::expected<RedisApp, std::string>(
-        std::in_place, std::move(*server), config.port, config.server_config);
+RedisApp::RedisApp(Server server, int listening_port, const ServerConfig& config)
+    : server_(std::move(server)), handler_(store_, config), listening_port_(listening_port) {
 }
 
-bool RedisApp::perform_replica_handshake() {
-    const auto& rc = handler_.config().replicaof;
-    auto connector = std::make_unique<ReplicaConnector>(rc->host, rc->port);
+auto RedisApp::create(const AppConfig& config) -> std::expected<RedisApp, std::string> {
+    auto server = Server::create(config.port);
+    if (!server) {
+        return std::unexpected(server.error());
+    }
+    return std::expected<RedisApp, std::string>(std::in_place, std::move(*server), config.port, config.server_config);
+}
+
+auto RedisApp::perform_replica_handshake() -> bool {
+    const auto& opt = handler_.config().replicaof;
+    if (!opt) {
+        return false;
+    }
+    auto connector = std::make_unique<ReplicaConnector>(opt->host, opt->port);
     connector->set_handler(handler_);
-    if (!connector->send_ping() || !connector->send_replconf(listening_port_) ||
-        !connector->send_psync() || !connector->receive_rdb().has_value()) {
+    if (!connector->send_ping() || !connector->send_replconf(listening_port_) || !connector->send_psync()
+        || !connector->receive_rdb().has_value()) {
         return false;
     }
     replica_connector_ = std::move(connector);
     return true;
 }
 
-std::chrono::milliseconds RedisApp::compute_timeout() {
+auto RedisApp::compute_timeout() -> std::chrono::milliseconds {
     for (int fd : blocking_manager_.get_expired_clients()) {
         if (auto it = connections_.find(fd); it != connections_.end()) {
             auto response = RespParser::encode_null_array();
@@ -46,17 +51,19 @@ std::chrono::milliseconds RedisApp::compute_timeout() {
     auto now = std::chrono::steady_clock::now();
     std::optional<std::chrono::steady_clock::time_point> earliest;
 
-    if (auto blocking_deadline = blocking_manager_.get_next_deadline())
+    if (auto blocking_deadline = blocking_manager_.get_next_deadline()) {
         earliest = *blocking_deadline;
+    }
 
-    if (wait_state_ && (!earliest || wait_state_->deadline < *earliest))
+    if (wait_state_ && (!earliest || wait_state_->deadline < *earliest)) {
         earliest = wait_state_->deadline;
+    }
 
-    if (!earliest)
+    if (!earliest) {
         return std::chrono::milliseconds(-1);
-    return *earliest <= now
-               ? std::chrono::milliseconds(0)
-               : std::chrono::duration_cast<std::chrono::milliseconds>(*earliest - now);
+    }
+    return *earliest <= now ? std::chrono::milliseconds(0)
+                            : std::chrono::duration_cast<std::chrono::milliseconds>(*earliest - now);
 }
 
 void RedisApp::send_to_client(int fd, const std::string& response) {
@@ -95,13 +102,14 @@ void RedisApp::handle_replica_ack(int fd) {
     }
 }
 
-int RedisApp::count_acked_replicas() const {
-    if (!wait_state_)
+auto RedisApp::count_acked_replicas() const -> int {
+    if (!wait_state_) {
         return 0;
+    }
     return count_acked_replicas_for(wait_state_->target_offset);
 }
 
-int RedisApp::count_acked_replicas_for(int64_t target) const {
+auto RedisApp::count_acked_replicas_for(int64_t target) const -> int {
     int count = 0;
     for (int rfd : replica_fds_) {
         auto it = replica_offsets_.find(rfd);
@@ -113,8 +121,9 @@ int RedisApp::count_acked_replicas_for(int64_t target) const {
 }
 
 void RedisApp::finish_wait(int count) {
-    if (!wait_state_)
+    if (!wait_state_) {
         return;
+    }
     int client_fd = wait_state_->client_fd;
     auto response = RespParser::encode_integer(count);
     if (auto it = connections_.find(client_fd); it != connections_.end()) {
@@ -149,33 +158,28 @@ void RedisApp::on_event(int fd) {
     }
 
     auto it = connections_.find(fd);
-    if (it == connections_.end())
+    if (it == connections_.end()) {
         return;
+    }
 
     Connection& conn = *it->second;
     if (auto data = conn.handle_read()) {
-        auto result =
-            handler_.process_with_fd(fd, *data, [this](int client_fd, const std::string& resp) {
-                send_to_client(client_fd, resp);
-            });
+        auto result = handler_.process_with_fd(
+            fd, *data, [this](int client_fd, const std::string& resp) { send_to_client(client_fd, resp); });
 
         if (std::holds_alternative<ProcessResult::Wait>(result.state)) {
             int acked = count_acked_replicas_for(master_offset_);
-            if (master_offset_ == 0 ||
-                acked >= std::get<ProcessResult::Wait>(result.state).numreplicas) {
+            if (master_offset_ == 0 || acked >= std::get<ProcessResult::Wait>(result.state).numreplicas) {
                 acked = static_cast<int>(replica_fds_.size());
                 auto resp = RespParser::encode_integer(acked);
                 conn.send_data(resp.c_str(), resp.size());
             } else {
                 auto timeout_ms = std::get<ProcessResult::Wait>(result.state).timeout_ms;
-                auto deadline = timeout_ms == 0 ? std::chrono::steady_clock::now()
-                                                : std::chrono::steady_clock::now() +
-                                                      std::chrono::milliseconds(timeout_ms);
+                auto deadline = timeout_ms == 0
+                                    ? std::chrono::steady_clock::now()
+                                    : std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
                 wait_state_.emplace(
-                    WaitState{fd,
-                              master_offset_,
-                              std::get<ProcessResult::Wait>(result.state).numreplicas,
-                              deadline});
+                    WaitState{fd, master_offset_, std::get<ProcessResult::Wait>(result.state).numreplicas, deadline});
 
                 for (int rfd : replica_fds_) {
                     if (auto rit = connections_.find(rfd); rit != connections_.end()) {
@@ -220,8 +224,9 @@ void RedisApp::on_event(int fd) {
 
 void RedisApp::load_rdb() {
     const auto& config = handler_.config();
-    if (config.dir.empty() || config.dbfilename.empty())
+    if (config.dir.empty() || config.dbfilename.empty()) {
         return;
+    }
 
     auto path = std::filesystem::path(config.dir) / config.dbfilename;
     auto entries = RdbParser::load_file(path.string());
@@ -230,14 +235,16 @@ void RedisApp::load_rdb() {
     auto now_ms = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 
     for (auto& [key, entry] : entries) {
-        if (!std::holds_alternative<Redis::String>(entry.value))
+        if (!std::holds_alternative<Redis::String>(entry.value)) {
             continue;
+        }
 
         std::optional<uint64_t> ttl;
         if (entry.expire_ms) {
             auto remaining = static_cast<int64_t>(*entry.expire_ms) - now_ms;
-            if (remaining <= 0)
+            if (remaining <= 0) {
                 continue;
+            }
             ttl = static_cast<uint64_t>(remaining);
         }
 
@@ -245,7 +252,7 @@ void RedisApp::load_rdb() {
     }
 }
 
-int RedisApp::run() {
+auto RedisApp::run() -> int {
     event_loop_.add_fd(server_.fd());
     load_rdb();
 

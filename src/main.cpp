@@ -1,8 +1,9 @@
-#include "cli/cli_parser.hpp"
-#include "server/server_runner.hpp"
 #include <iostream>
 
-int main(int argc, char* argv[]) {
+#include "cli/cli_parser.hpp"
+#include "server/server_runner.hpp"
+
+auto main(int argc, char* argv[]) -> int {
     std::cout << std::unitbuf;
     std::cerr << std::unitbuf;
 
