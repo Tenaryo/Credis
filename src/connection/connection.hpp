@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+namespace credis::connection {
+
 class Connection {
     int fd_{-1};
     std::vector<char> buffer_;
@@ -27,3 +29,5 @@ class Connection {
 
     static constexpr size_t BUFFER_SIZE = 4096;
 };
+
+} // namespace credis::connection

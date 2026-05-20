@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace util {
+namespace credis::util {
 
 auto sha256(std::string_view input) -> std::string {
     static constexpr std::array<uint32_t, 64> K
@@ -98,4 +98,4 @@ auto sha256(std::string_view input) -> std::string {
     return result;
 }
 
-} // namespace util
+} // namespace credis::util

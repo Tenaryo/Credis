@@ -285,7 +285,7 @@ void test_geopos_existing_and_missing_member() {
     assert(resp.starts_with("*2\r\n"));
     assert(!resp.starts_with("*2\r\n*-1"));
 
-    auto null_part = RespParser::encode_null_array();
+    auto null_part = credis::protocol::encode_null_array();
     assert(resp.ends_with(null_part));
 
     std::cout << "\u2713 Test passed: GEOPOS returns position for existing and null for missing "
@@ -298,7 +298,7 @@ void test_geopos_nonexistent_key() {
 
     auto resp = handler.process(make_geopos_resp("missing_key", {"London", "Munich"}));
 
-    auto expected = "*2\r\n" + RespParser::encode_null_array() + RespParser::encode_null_array();
+    auto expected = "*2\r\n" + credis::protocol::encode_null_array() + credis::protocol::encode_null_array();
     assert(resp == expected);
 
     std::cout << "\u2713 Test passed: GEOPOS returns null arrays for non-existent key\r\n";
@@ -339,7 +339,7 @@ void test_geodist_missing_member() {
     handler.process(make_geoadd_resp("places", "11.5030378", "48.164271", "Munich"));
 
     auto resp = handler.process(make_geodist_resp("places", "Munich", "Berlin"));
-    assert(resp == RespParser::encode_null_bulk_string());
+    assert(resp == credis::protocol::encode_null_bulk_string());
 
     std::cout << "\u2713 Test passed: GEODIST missing member returns null bulk string\r\n";
 }
@@ -349,7 +349,7 @@ void test_geodist_nonexistent_key() {
     CommandHandler handler(store);
 
     auto resp = handler.process(make_geodist_resp("missing_key", "A", "B"));
-    assert(resp == RespParser::encode_null_bulk_string());
+    assert(resp == credis::protocol::encode_null_bulk_string());
 
     std::cout << "\u2713 Test passed: GEODIST non-existent key returns null bulk string\r\n";
 }

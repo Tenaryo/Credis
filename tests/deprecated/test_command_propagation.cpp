@@ -18,7 +18,7 @@
 namespace {
 
 void send_resp(int fd, const std::vector<std::string>& args) {
-    auto msg = RespParser::encode_array(args);
+    auto msg = credis::protocol::encode_array(args);
     size_t sent = 0;
     while (sent < msg.size()) {
         auto n = ::send(fd, msg.data() + sent, msg.size() - sent, MSG_NOSIGNAL);
@@ -162,7 +162,7 @@ class TestServer {
                 }
 
                 if (!result.propagate_args.empty()) {
-                    auto msg = RespParser::encode_array(result.propagate_args);
+                    auto msg = credis::protocol::encode_array(result.propagate_args);
                     for (int rfd : replicas_) {
                         if (auto rit = conns_.find(rfd); rit != conns_.end()) {
                             rit->second->send_data(msg.c_str(), msg.size());

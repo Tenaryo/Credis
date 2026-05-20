@@ -23,7 +23,7 @@ namespace {
 using namespace std::string_view_literals;
 
 void send_resp(int fd, const std::vector<std::string>& args) {
-    auto msg = RespParser::encode_array(args);
+    auto msg = credis::protocol::encode_array(args);
     size_t sent = 0;
     while (sent < msg.size()) {
         auto n = ::send(fd, msg.data() + sent, msg.size() - sent, MSG_NOSIGNAL);
@@ -68,7 +68,7 @@ int tcp_connect(int port) {
 
 void test_parse_one_single_command() {
     auto input = "*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n"sv;
-    auto result = RespParser::parse_one(input);
+    auto result = credis::protocol::parse_one(input);
     assert(result);
     assert(result->args.size() == 3);
     assert(result->args[0] == "SET");
@@ -81,7 +81,7 @@ void test_parse_one_single_command() {
 
 void test_parse_one_incomplete_returns_error() {
     auto input = "*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n"sv;
-    auto result = RespParser::parse_one(input);
+    auto result = credis::protocol::parse_one(input);
     assert(!result);
 
     std::cout << "\u2713 Test passed: parse_one returns error for incomplete data\n";
@@ -92,7 +92,7 @@ void test_parse_one_multiple_commands_in_buffer() {
     auto cmd2 = "*2\r\n$4\r\nINCR\r\n$3\r\nfoo\r\n"sv;
     std::string input = std::string(cmd1) + std::string(cmd2);
 
-    auto result1 = RespParser::parse_one(input);
+    auto result1 = credis::protocol::parse_one(input);
     assert(result1);
     assert(result1->args.size() == 3);
     assert(result1->args[0] == "SET");
@@ -100,7 +100,7 @@ void test_parse_one_multiple_commands_in_buffer() {
 
     auto remaining =
         std::string_view(input.data() + result1->consumed, input.size() - result1->consumed);
-    auto result2 = RespParser::parse_one(remaining);
+    auto result2 = credis::protocol::parse_one(remaining);
     assert(result2);
     assert(result2->args.size() == 2);
     assert(result2->args[0] == "INCR");
@@ -132,7 +132,7 @@ void test_replica_applies_single_propagated_command() {
             buffer_.append(buf, static_cast<size_t>(n));
 
             while (true) {
-                auto result = RespParser::parse_one(buffer_);
+                auto result = credis::protocol::parse_one(buffer_);
                 if (!result)
                     break;
                 auto resp = std::string_view(buffer_.data(), result->consumed);
@@ -181,7 +181,7 @@ void test_replica_applies_multiple_commands_in_one_read() {
             buffer_.append(buf, static_cast<size_t>(n));
 
             while (true) {
-                auto result = RespParser::parse_one(buffer_);
+                auto result = credis::protocol::parse_one(buffer_);
                 if (!result)
                     break;
                 auto resp = std::string_view(buffer_.data(), result->consumed);
@@ -194,8 +194,8 @@ void test_replica_applies_multiple_commands_in_one_read() {
 
     FakeReplicaConnector connector(sv[0], handler);
 
-    auto cmd1 = RespParser::encode_array({"SET", "foo", "1"});
-    auto cmd2 = RespParser::encode_array({"INCR", "foo"});
+    auto cmd1 = credis::protocol::encode_array({"SET", "foo", "1"});
+    auto cmd2 = credis::protocol::encode_array({"INCR", "foo"});
     auto combined = cmd1 + cmd2;
     ::send(sv[1], combined.c_str(), combined.size(), MSG_NOSIGNAL);
 
@@ -234,7 +234,7 @@ void test_replica_does_not_reply_to_master() {
             buffer_.append(buf, static_cast<size_t>(n));
 
             while (true) {
-                auto result = RespParser::parse_one(buffer_);
+                auto result = credis::protocol::parse_one(buffer_);
                 if (!result)
                     break;
                 auto resp = std::string_view(buffer_.data(), result->consumed);
@@ -287,7 +287,7 @@ void test_replica_handles_various_command_types() {
             buffer_.append(buf, static_cast<size_t>(n));
 
             while (true) {
-                auto result = RespParser::parse_one(buffer_);
+                auto result = credis::protocol::parse_one(buffer_);
                 if (!result)
                     break;
                 auto resp = std::string_view(buffer_.data(), result->consumed);
@@ -300,10 +300,10 @@ void test_replica_handles_various_command_types() {
 
     FakeReplicaConnector connector(sv[0], handler);
 
-    auto combined = RespParser::encode_array({"SET", "key", "val"}) +
-                    RespParser::encode_array({"INCR", "counter"}) +
-                    RespParser::encode_array({"RPUSH", "mylist", "a"}) +
-                    RespParser::encode_array({"LPUSH", "mylist", "b"});
+    auto combined = credis::protocol::encode_array({"SET", "key", "val"}) +
+                    credis::protocol::encode_array({"INCR", "counter"}) +
+                    credis::protocol::encode_array({"RPUSH", "mylist", "a"}) +
+                    credis::protocol::encode_array({"LPUSH", "mylist", "b"});
     ::send(sv[1], combined.c_str(), combined.size(), MSG_NOSIGNAL);
 
     connector.process_propagated_commands();
@@ -371,7 +371,7 @@ void test_replica_continues_after_master_disconnect() {
 
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
-        auto set_cmd = RespParser::encode_array({"SET", "key1", "val1"});
+        auto set_cmd = credis::protocol::encode_array({"SET", "key1", "val1"});
         ::send(client_fd, set_cmd.c_str(), set_cmd.size(), MSG_NOSIGNAL);
 
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -411,10 +411,10 @@ void test_command_handler_replconf_getack() {
     ServerConfig config;
     CommandHandler handler(store, config);
 
-    auto input = RespParser::encode_array({"REPLCONF", "GETACK", "*"});
+    auto input = credis::protocol::encode_array({"REPLCONF", "GETACK", "*"});
     auto response = handler.process(input);
 
-    auto expected = RespParser::encode_array({"REPLCONF", "ACK", "0"});
+    auto expected = credis::protocol::encode_array({"REPLCONF", "ACK", "0"});
     assert(response == expected);
 
     std::cout << "\u2713 Test passed: CommandHandler returns REPLCONF ACK 0 for GETACK\n";
@@ -469,11 +469,11 @@ void test_replconf_getack_end_to_end() {
 
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
-        auto getack_cmd = RespParser::encode_array({"REPLCONF", "GETACK", "*"});
+        auto getack_cmd = credis::protocol::encode_array({"REPLCONF", "GETACK", "*"});
         ::send(client_fd, getack_cmd.c_str(), getack_cmd.size(), MSG_NOSIGNAL);
 
         auto ack_response = recv_all(client_fd, 500);
-        auto expected = RespParser::encode_array({"REPLCONF", "ACK", "0"});
+        auto expected = credis::protocol::encode_array({"REPLCONF", "ACK", "0"});
         assert(ack_response == expected);
 
         ::close(client_fd);
@@ -493,7 +493,7 @@ void test_replconf_getack_end_to_end() {
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
     auto result = connector.process_propagated_commands();
     assert(result.has_value());
-    auto expected = RespParser::encode_array({"REPLCONF", "ACK", "0"});
+    auto expected = credis::protocol::encode_array({"REPLCONF", "ACK", "0"});
     assert(*result == expected);
     connector.send_response(*result);
 
@@ -570,19 +570,19 @@ void test_replconf_getack_accumulated_offset() {
 
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
-        auto getack1 = RespParser::encode_array({"REPLCONF", "GETACK", "*"});
+        auto getack1 = credis::protocol::encode_array({"REPLCONF", "GETACK", "*"});
         ::send(client_fd, getack1.c_str(), getack1.size(), MSG_NOSIGNAL);
         auto ack1 = recv_all(client_fd, 500);
-        assert(ack1 == RespParser::encode_array({"REPLCONF", "ACK", "0"}));
+        assert(ack1 == credis::protocol::encode_array({"REPLCONF", "ACK", "0"}));
 
-        auto ping_cmd = RespParser::encode_array({"PING"});
+        auto ping_cmd = credis::protocol::encode_array({"PING"});
         ::send(client_fd, ping_cmd.c_str(), ping_cmd.size(), MSG_NOSIGNAL);
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-        auto getack2 = RespParser::encode_array({"REPLCONF", "GETACK", "*"});
+        auto getack2 = credis::protocol::encode_array({"REPLCONF", "GETACK", "*"});
         ::send(client_fd, getack2.c_str(), getack2.size(), MSG_NOSIGNAL);
         auto ack2 = recv_all(client_fd, 500);
-        assert(ack2 == RespParser::encode_array({"REPLCONF", "ACK", "51"}));
+        assert(ack2 == credis::protocol::encode_array({"REPLCONF", "ACK", "51"}));
 
         ::close(client_fd);
     });
@@ -622,31 +622,31 @@ void test_replconf_getack_with_set_commands() {
 
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
-        auto getack1 = RespParser::encode_array({"REPLCONF", "GETACK", "*"});
+        auto getack1 = credis::protocol::encode_array({"REPLCONF", "GETACK", "*"});
         ::send(client_fd, getack1.c_str(), getack1.size(), MSG_NOSIGNAL);
         auto ack1 = recv_all(client_fd, 500);
-        assert(ack1 == RespParser::encode_array({"REPLCONF", "ACK", "0"}));
+        assert(ack1 == credis::protocol::encode_array({"REPLCONF", "ACK", "0"}));
 
-        auto ping_cmd = RespParser::encode_array({"PING"});
+        auto ping_cmd = credis::protocol::encode_array({"PING"});
         ::send(client_fd, ping_cmd.c_str(), ping_cmd.size(), MSG_NOSIGNAL);
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-        auto getack2 = RespParser::encode_array({"REPLCONF", "GETACK", "*"});
+        auto getack2 = credis::protocol::encode_array({"REPLCONF", "GETACK", "*"});
         ::send(client_fd, getack2.c_str(), getack2.size(), MSG_NOSIGNAL);
         auto ack2 = recv_all(client_fd, 500);
-        assert(ack2 == RespParser::encode_array({"REPLCONF", "ACK", "51"}));
+        assert(ack2 == credis::protocol::encode_array({"REPLCONF", "ACK", "51"}));
 
-        auto set1 = RespParser::encode_array({"SET", "foo", "1"});
+        auto set1 = credis::protocol::encode_array({"SET", "foo", "1"});
         ::send(client_fd, set1.c_str(), set1.size(), MSG_NOSIGNAL);
 
-        auto set2 = RespParser::encode_array({"SET", "bar", "2"});
+        auto set2 = credis::protocol::encode_array({"SET", "bar", "2"});
         ::send(client_fd, set2.c_str(), set2.size(), MSG_NOSIGNAL);
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-        auto getack3 = RespParser::encode_array({"REPLCONF", "GETACK", "*"});
+        auto getack3 = credis::protocol::encode_array({"REPLCONF", "GETACK", "*"});
         ::send(client_fd, getack3.c_str(), getack3.size(), MSG_NOSIGNAL);
         auto ack3 = recv_all(client_fd, 500);
-        assert(ack3 == RespParser::encode_array({"REPLCONF", "ACK", "146"}));
+        assert(ack3 == credis::protocol::encode_array({"REPLCONF", "ACK", "146"}));
 
         ::close(client_fd);
     });
@@ -686,15 +686,15 @@ void test_replconf_getack_multiple_commands_single_read() {
 
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
-        auto set1 = RespParser::encode_array({"SET", "foo", "bar"});
-        auto set2 = RespParser::encode_array({"SET", "baz", "qux"});
-        auto getack = RespParser::encode_array({"REPLCONF", "GETACK", "*"});
+        auto set1 = credis::protocol::encode_array({"SET", "foo", "bar"});
+        auto set2 = credis::protocol::encode_array({"SET", "baz", "qux"});
+        auto getack = credis::protocol::encode_array({"REPLCONF", "GETACK", "*"});
 
         std::string combined = set1 + set2 + getack;
         ::send(client_fd, combined.c_str(), combined.size(), MSG_NOSIGNAL);
 
         auto ack = recv_all(client_fd, 500);
-        assert(ack == RespParser::encode_array({"REPLCONF", "ACK", "62"}));
+        assert(ack == credis::protocol::encode_array({"REPLCONF", "ACK", "62"}));
 
         ::close(client_fd);
     });
@@ -744,14 +744,14 @@ void test_replconf_getack_arrives_with_rdb_data() {
 
         std::string fullresync = "+FULLRESYNC abc 0\r\n";
         std::string rdb_transfer = "$88\r\n" + master.rdb_file;
-        auto getack = RespParser::encode_array({"REPLCONF", "GETACK", "*"});
+        auto getack = credis::protocol::encode_array({"REPLCONF", "GETACK", "*"});
 
         std::string combined = fullresync + rdb_transfer + getack;
         ssize_t sent = ::send(client_fd, combined.c_str(), combined.size(), MSG_NOSIGNAL);
         assert(sent == static_cast<ssize_t>(combined.size()));
 
         auto ack = recv_all(client_fd, 2000);
-        auto expected = RespParser::encode_array({"REPLCONF", "ACK", "0"});
+        auto expected = credis::protocol::encode_array({"REPLCONF", "ACK", "0"});
         assert(ack == expected);
 
         ::close(client_fd);
@@ -770,7 +770,7 @@ void test_replconf_getack_arrives_with_rdb_data() {
 
     auto result = connector.process_pending_buffer();
     assert(!result.empty());
-    auto expected = RespParser::encode_array({"REPLCONF", "ACK", "0"});
+    auto expected = credis::protocol::encode_array({"REPLCONF", "ACK", "0"});
     assert(result == expected);
     connector.send_response(result);
 

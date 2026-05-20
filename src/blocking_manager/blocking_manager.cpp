@@ -1,12 +1,14 @@
 #include "blocking_manager.hpp"
 
+namespace credis::blocking {
+
 void BlockingManager::block_client(int fd, const std::string& key, std::chrono::milliseconds timeout) {
-    block_client_for_stream(fd, key, StreamId{}, timeout);
+    block_client_for_stream(fd, key, credis::protocol::StreamId{}, timeout);
 }
 
 void BlockingManager::block_client_for_stream(int fd,
                                               const std::string& key,
-                                              StreamId last_id,
+                                              credis::protocol::StreamId last_id,
                                               std::chrono::milliseconds timeout) {
     auto deadline = timeout.count() == 0 ? std::chrono::steady_clock::time_point::max()
                                          : std::chrono::steady_clock::now() + timeout;
@@ -19,7 +21,7 @@ void BlockingManager::block_client_for_stream(int fd,
 
 auto BlockingManager::wake_client(const std::string& key) -> std::optional<BlockedClient> {
     auto it = blocked_clients_.find(key);
-    if (it == blocked_clients_.end() || it->second.empty()) {
+    if (it == blocked_clients_.end() || it->second.empty()) [[unlikely]] {
         return std::nullopt;
     }
 
@@ -27,7 +29,7 @@ auto BlockingManager::wake_client(const std::string& key) -> std::optional<Block
     it->second.pop_front();
     fd_to_client_.erase(client.fd);
 
-    if (it->second.empty()) {
+    if (it->second.empty()) [[unlikely]] {
         blocked_clients_.erase(it);
     }
 
@@ -37,18 +39,18 @@ auto BlockingManager::wake_client(const std::string& key) -> std::optional<Block
 auto BlockingManager::wake_client_for_stream(const std::string& key,
                                              const std::string& new_entry_id) -> std::optional<BlockedClient> {
     auto it = blocked_clients_.find(key);
-    if (it == blocked_clients_.end() || it->second.empty()) {
+    if (it == blocked_clients_.end() || it->second.empty()) [[unlikely]] {
         return std::nullopt;
     }
 
-    auto new_sid = StreamId::parse(new_entry_id);
+    auto new_sid = credis::protocol::StreamId::parse(new_entry_id);
     for (auto client_it = it->second.begin(); client_it != it->second.end(); ++client_it) {
-        if (new_sid && client_it->last_id < *new_sid) {
+        if (new_sid && client_it->last_id < *new_sid) [[likely]] {
             BlockedClient client = std::move(*client_it);
             it->second.erase(client_it);
             fd_to_client_.erase(client.fd);
 
-            if (it->second.empty()) {
+            if (it->second.empty()) [[unlikely]] {
                 blocked_clients_.erase(it);
             }
 
@@ -83,15 +85,15 @@ auto BlockingManager::get_expired_clients() -> std::vector<int> {
 
 void BlockingManager::unblock_client(int fd) {
     auto it = fd_to_client_.find(fd);
-    if (it == fd_to_client_.end()) {
+    if (it == fd_to_client_.end()) [[unlikely]] {
         return;
     }
 
     std::string key = it->second->key;
     auto queue_it = blocked_clients_.find(key);
-    if (queue_it != blocked_clients_.end()) {
+    if (queue_it != blocked_clients_.end()) [[likely]] {
         queue_it->second.erase(it->second);
-        if (queue_it->second.empty()) {
+        if (queue_it->second.empty()) [[unlikely]] {
             blocked_clients_.erase(queue_it);
         }
     }
@@ -100,15 +102,15 @@ void BlockingManager::unblock_client(int fd) {
 }
 
 auto BlockingManager::get_next_deadline() const -> std::optional<std::chrono::steady_clock::time_point> {
-    if (blocked_clients_.empty()) {
+    if (blocked_clients_.empty()) [[unlikely]] {
         return std::nullopt;
     }
 
     std::optional<std::chrono::steady_clock::time_point> earliest;
     for (const auto& [key, queue] : blocked_clients_) {
-        if (!queue.empty() && !queue.front().is_indefinite()) {
+        if (!queue.empty() && !queue.front().is_indefinite()) [[likely]] {
             auto deadline = queue.front().deadline;
-            if (!earliest || deadline < *earliest) {
+            if (!earliest || deadline < *earliest) [[likely]] {
                 earliest = deadline;
             }
         }
@@ -124,3 +126,5 @@ auto BlockingManager::is_blocked(int fd) const -> bool {
 auto BlockingManager::blocked_count() const -> size_t {
     return fd_to_client_.size();
 }
+
+} // namespace credis::blocking

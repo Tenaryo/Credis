@@ -9,11 +9,13 @@
 
 #include "protocol/stream_id.hpp"
 
+namespace credis::blocking {
+
 struct BlockedClient {
     int fd;
     std::string key;
     std::chrono::steady_clock::time_point deadline;
-    StreamId last_id;
+    credis::protocol::StreamId last_id;
 
     [[nodiscard]] auto is_indefinite() const -> bool {
         return deadline == std::chrono::steady_clock::time_point::max();
@@ -26,7 +28,10 @@ class BlockingManager {
 
   public:
     void block_client(int fd, const std::string& key, std::chrono::milliseconds timeout);
-    void block_client_for_stream(int fd, const std::string& key, StreamId last_id, std::chrono::milliseconds timeout);
+    void block_client_for_stream(int fd,
+                                 const std::string& key,
+                                 credis::protocol::StreamId last_id,
+                                 std::chrono::milliseconds timeout);
     auto wake_client(const std::string& key) -> std::optional<BlockedClient>;
     auto wake_client_for_stream(const std::string& key,
                                 const std::string& new_entry_id) -> std::optional<BlockedClient>;
@@ -36,3 +41,5 @@ class BlockingManager {
     auto is_blocked(int fd) const -> bool;
     auto blocked_count() const -> size_t;
 };
+
+} // namespace credis::blocking

@@ -8,6 +8,8 @@
 
 #include "util/sha256.hpp"
 
+namespace credis::server {
+
 struct AclUser {
     std::vector<std::string> passwords;
     bool nopass{true};
@@ -28,16 +30,18 @@ class AclManager {
 
     auto set_password(std::string_view username, std::string_view password) -> void {
         auto& user = users_[std::string(username)];
-        user.passwords.push_back(util::sha256(password));
+        user.passwords.push_back(credis::util::sha256(password));
         user.nopass = false;
     }
 
     auto authenticate(std::string_view username, std::string_view password) const -> bool {
         const auto* user = get_user(username);
-        if (user == nullptr) {
+        if (user == nullptr) [[unlikely]] {
             return false;
         }
-        auto hash = util::sha256(password);
+        auto hash = credis::util::sha256(password);
         return std::ranges::find(user->passwords, hash) != user->passwords.end();
     }
 };
+
+} // namespace credis::server

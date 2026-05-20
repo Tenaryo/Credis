@@ -7,9 +7,12 @@
 
 #include "util/string_hash.hpp"
 
+namespace credis::pubsub {
+
 class PubSubManager {
     std::unordered_map<int, std::unordered_set<std::string>> subscriptions_;
-    std::unordered_map<std::string, std::unordered_set<int>, StringHash, std::equal_to<>> channel_subscribers_;
+    std::unordered_map<std::string, std::unordered_set<int>, credis::util::StringHash, std::equal_to<>>
+        channel_subscribers_;
 
   public:
     auto subscribe(int fd, std::string channel) -> size_t {
@@ -20,18 +23,18 @@ class PubSubManager {
 
     auto unsubscribe(int fd, std::string_view channel) -> size_t {
         auto it = subscriptions_.find(fd);
-        if (it == subscriptions_.end()) {
+        if (it == subscriptions_.end()) [[unlikely]] {
             return 0;
         }
-        if (auto cit = channel_subscribers_.find(channel); cit != channel_subscribers_.end()) {
+        if (auto cit = channel_subscribers_.find(channel); cit != channel_subscribers_.end()) [[likely]] {
             cit->second.erase(fd);
-            if (cit->second.empty()) {
+            if (cit->second.empty()) [[unlikely]] {
                 channel_subscribers_.erase(cit);
             }
         }
         it->second.erase(std::string(channel));
         size_t remaining = it->second.size();
-        if (remaining == 0) {
+        if (remaining == 0) [[unlikely]] {
             subscriptions_.erase(it);
         }
         return remaining;
@@ -39,13 +42,13 @@ class PubSubManager {
 
     void unsubscribe(int fd) {
         auto it = subscriptions_.find(fd);
-        if (it == subscriptions_.end()) {
+        if (it == subscriptions_.end()) [[unlikely]] {
             return;
         }
         for (const auto& channel : it->second) {
-            if (auto cit = channel_subscribers_.find(channel); cit != channel_subscribers_.end()) {
+            if (auto cit = channel_subscribers_.find(channel); cit != channel_subscribers_.end()) [[likely]] {
                 cit->second.erase(fd);
-                if (cit->second.empty()) {
+                if (cit->second.empty()) [[unlikely]] {
                     channel_subscribers_.erase(cit);
                 }
             }
@@ -69,3 +72,5 @@ class PubSubManager {
         return it != channel_subscribers_.end() ? it->second : kEmpty;
     }
 };
+
+} // namespace credis::pubsub

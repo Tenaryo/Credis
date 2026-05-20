@@ -8,15 +8,18 @@
 #include <cstring>
 #include <memory>
 
-#include "handler/command_handler.hpp"
 #include "protocol/resp_parser.hpp"
+#include "server/server_config.hpp"
 #include "util/parse.hpp"
+#include "util/string_utils.hpp"
+
+namespace credis::replica {
 
 ReplicaConnector::ReplicaConnector(std::string host, int port) : host_(std::move(host)), port_(port) {
 }
 
 ReplicaConnector::~ReplicaConnector() {
-    if (fd_ >= 0) {
+    if (fd_ >= 0) [[likely]] {
         ::close(fd_);
     }
 }
@@ -28,8 +31,8 @@ ReplicaConnector::ReplicaConnector(ReplicaConnector&& other) noexcept
 }
 
 auto ReplicaConnector::operator=(ReplicaConnector&& other) noexcept -> ReplicaConnector& {
-    if (this != &other) {
-        if (fd_ >= 0) {
+    if (this != &other) [[likely]] {
+        if (fd_ >= 0) [[likely]] {
             ::close(fd_);
         }
         host_ = std::move(other.host_);
@@ -48,18 +51,18 @@ auto ReplicaConnector::connect_to_master() -> bool {
     hints.ai_socktype = SOCK_STREAM;
 
     struct addrinfo* result = nullptr;
-    if (::getaddrinfo(host_.c_str(), std::to_string(port_).c_str(), &hints, &result) != 0) {
+    if (::getaddrinfo(host_.c_str(), std::to_string(port_).c_str(), &hints, &result) != 0) [[unlikely]] {
         return false;
     }
 
     auto guard = std::unique_ptr<addrinfo, decltype(&freeaddrinfo)>(result, &freeaddrinfo);
 
     fd_ = ::socket(result->ai_family, result->ai_socktype, result->ai_protocol);
-    if (fd_ < 0) {
+    if (fd_ < 0) [[unlikely]] {
         return false;
     }
 
-    if (::connect(fd_, result->ai_addr, result->ai_addrlen) < 0) {
+    if (::connect(fd_, result->ai_addr, result->ai_addrlen) < 0) [[unlikely]] {
         ::close(fd_);
         fd_ = -1;
         return false;
@@ -75,15 +78,15 @@ auto ReplicaConnector::send_and_expect(const std::vector<std::string>& args,
 
 template <typename Pred>
 auto ReplicaConnector::send_and_check(const std::vector<std::string>& args, Pred&& pred) -> bool {
-    if (fd_ < 0 && !connect_to_master()) {
+    if (fd_ < 0 && !connect_to_master()) [[unlikely]] {
         return false;
     }
 
-    auto msg = RespParser::encode_array(args);
+    auto msg = credis::protocol::encode_array(args);
     size_t sent = 0;
-    while (sent < msg.size()) {
+    while (sent < msg.size()) [[likely]] {
         auto n = ::send(fd_, msg.data() + sent, msg.size() - sent, MSG_NOSIGNAL);
-        if (n <= 0) {
+        if (n <= 0) [[unlikely]] {
             return false;
         }
         sent += static_cast<size_t>(n);
@@ -91,7 +94,7 @@ auto ReplicaConnector::send_and_check(const std::vector<std::string>& args, Pred
 
     char buf[256]{};
     auto n = ::read(fd_, buf, sizeof(buf));
-    if (n <= 0) {
+    if (n <= 0) [[unlikely]] {
         return false;
     }
 
@@ -104,22 +107,22 @@ auto ReplicaConnector::send_ping() -> bool {
 }
 
 auto ReplicaConnector::send_replconf(int listening_port) -> bool {
-    if (!send_and_expect({"REPLCONF", "listening-port", std::to_string(listening_port)}, "+OK\r\n")) {
+    if (!send_and_expect({"REPLCONF", "listening-port", std::to_string(listening_port)}, "+OK\r\n")) [[unlikely]] {
         return false;
     }
     return send_and_expect({"REPLCONF", "capa", "psync2"}, "+OK\r\n");
 }
 
 auto ReplicaConnector::send_psync() -> bool {
-    if (fd_ < 0 && !connect_to_master()) {
+    if (fd_ < 0 && !connect_to_master()) [[unlikely]] {
         return false;
     }
 
-    auto msg = RespParser::encode_array({"PSYNC", "?", "-1"});
+    auto msg = credis::protocol::encode_array({"PSYNC", "?", "-1"});
     size_t sent = 0;
-    while (sent < msg.size()) {
+    while (sent < msg.size()) [[likely]] {
         auto n = ::send(fd_, msg.data() + sent, msg.size() - sent, MSG_NOSIGNAL);
-        if (n <= 0) {
+        if (n <= 0) [[unlikely]] {
             return false;
         }
         sent += static_cast<size_t>(n);
@@ -127,22 +130,22 @@ auto ReplicaConnector::send_psync() -> bool {
 
     char buf[512]{};
     auto n = ::read(fd_, buf, sizeof(buf));
-    if (n <= 0) {
+    if (n <= 0) [[unlikely]] {
         return false;
     }
 
     std::string_view all(buf, static_cast<size_t>(n));
-    if (!all.starts_with("+FULLRESYNC")) {
+    if (!all.starts_with("+FULLRESYNC")) [[unlikely]] {
         return false;
     }
 
     auto crlf = all.find("\r\n");
-    if (crlf == std::string_view::npos) {
+    if (crlf == std::string_view::npos) [[unlikely]] {
         return false;
     }
 
     size_t remaining = all.size() - crlf - 2;
-    if (remaining > 0) {
+    if (remaining > 0) [[likely]] {
         pending_buffer_.assign(buf + crlf + 2, remaining);
     }
 
@@ -150,7 +153,7 @@ auto ReplicaConnector::send_psync() -> bool {
 }
 
 auto ReplicaConnector::receive_rdb() -> std::optional<std::string> {
-    if (fd_ < 0) {
+    if (fd_ < 0) [[unlikely]] {
         return std::nullopt;
     }
 
@@ -158,28 +161,28 @@ auto ReplicaConnector::receive_rdb() -> std::optional<std::string> {
 
     auto find_crlf = [&]() -> size_t {
         for (size_t i = 0; i + 1 < header_buf.size(); ++i) {
-            if (header_buf[i] == '\r' && header_buf[i + 1] == '\n') {
+            if (header_buf[i] == '\r' && header_buf[i + 1] == '\n') [[likely]] {
                 return i;
             }
         }
         return std::string::npos;
     };
 
-    if (!pending_buffer_.empty()) {
+    if (!pending_buffer_.empty()) [[unlikely]] {
         header_buf = std::move(pending_buffer_);
         pending_buffer_.clear();
     }
 
-    while (true) {
+    while (true) [[likely]] {
         auto crlf_pos = find_crlf();
-        if (crlf_pos != std::string::npos) {
-            if (header_buf.empty() || header_buf[0] != '$') {
+        if (crlf_pos != std::string::npos) [[likely]] {
+            if (header_buf.empty() || header_buf[0] != '$') [[unlikely]] {
                 return std::nullopt;
             }
 
             int len = 0;
             auto [ptr, ec] = std::from_chars(header_buf.data() + 1, header_buf.data() + crlf_pos, len);
-            if (ec != std::errc{} || len <= 0) {
+            if (ec != std::errc{} || len <= 0) [[unlikely]] {
                 return std::nullopt;
             }
 
@@ -190,15 +193,15 @@ auto ReplicaConnector::receive_rdb() -> std::optional<std::string> {
             size_t copied = std::min(available, static_cast<size_t>(len));
             std::memcpy(rdb_data.data(), header_buf.data() + header_size, copied);
 
-            while (copied < static_cast<size_t>(len)) {
+            while (copied < static_cast<size_t>(len)) [[likely]] {
                 auto rd = ::read(fd_, rdb_data.data() + copied, static_cast<size_t>(len) - copied);
-                if (rd <= 0) {
+                if (rd <= 0) [[unlikely]] {
                     return std::nullopt;
                 }
                 copied += static_cast<size_t>(rd);
             }
 
-            if (available > static_cast<size_t>(len)) {
+            if (available > static_cast<size_t>(len)) [[unlikely]] {
                 size_t extra_offset = header_size + static_cast<size_t>(len);
                 pending_buffer_.assign(header_buf.data() + extra_offset, header_buf.size() - extra_offset);
             }
@@ -208,44 +211,43 @@ auto ReplicaConnector::receive_rdb() -> std::optional<std::string> {
 
         char buf[256]{};
         auto n = ::read(fd_, buf, sizeof(buf));
-        if (n <= 0) {
+        if (n <= 0) [[unlikely]] {
             return std::nullopt;
         }
         header_buf.append(buf, static_cast<size_t>(n));
     }
 }
 
-auto ReplicaConnector::process_buffer_impl() -> std::string {
-    std::string responses;
-    while (true) {
-        auto result = RespParser::parse_one(pending_buffer_);
-        if (!result) {
+auto ReplicaConnector::process_buffer_impl() -> ProcessedBuffer {
+    ProcessedBuffer result;
+    while (true) [[likely]] {
+        auto parsed = credis::protocol::parse_one(pending_buffer_);
+        if (!parsed) [[unlikely]] {
             break;
         }
 
-        bool is_getack = result->args.size() >= 2 && to_upper(result->args[0]) == "REPLCONF"
-                         && to_upper(result->args[1]) == "GETACK";
+        bool is_getack = parsed->args.size() >= 2 && credis::util::to_upper(parsed->args[0]) == "REPLCONF"
+                         && credis::util::to_upper(parsed->args[1]) == "GETACK";
 
-        if (is_getack) {
-            responses += RespParser::encode_array({"REPLCONF", "ACK", std::to_string(offset_)});
-        } else {
-            auto resp = std::string_view(pending_buffer_.data(), result->consumed);
-            handler_->process(resp);
+        if (is_getack) [[unlikely]] {
+            result.ack_responses += credis::protocol::encode_array({"REPLCONF", "ACK", std::to_string(offset_)});
+        } else [[likely]] {
+            result.commands.emplace_back(pending_buffer_.data(), parsed->consumed);
         }
-        offset_ += static_cast<int64_t>(result->consumed);
-        pending_buffer_.erase(0, result->consumed);
+        offset_ += static_cast<int64_t>(parsed->consumed);
+        pending_buffer_.erase(0, parsed->consumed);
     }
-    return responses;
+    return result;
 }
 
-auto ReplicaConnector::process_propagated_commands() -> std::optional<std::string> {
-    if (fd_ < 0 || (handler_ == nullptr)) {
+auto ReplicaConnector::process_propagated_commands() -> std::optional<ProcessedBuffer> {
+    if (fd_ < 0) [[unlikely]] {
         return std::nullopt;
     }
 
     char buf[4096];
     auto n = ::read(fd_, buf, sizeof(buf));
-    if (n <= 0) {
+    if (n <= 0) [[unlikely]] {
         return std::nullopt;
     }
 
@@ -253,17 +255,33 @@ auto ReplicaConnector::process_propagated_commands() -> std::optional<std::strin
     return process_buffer_impl();
 }
 
-auto ReplicaConnector::process_pending_buffer() -> std::string {
+auto ReplicaConnector::process_pending_buffer() -> ProcessedBuffer {
     return process_buffer_impl();
 }
 
 void ReplicaConnector::send_response(std::string_view data) const {
     size_t sent = 0;
-    while (sent < data.size()) {
+    while (sent < data.size()) [[likely]] {
         auto n = ::send(fd_, data.data() + sent, data.size() - sent, MSG_NOSIGNAL);
-        if (n <= 0) {
+        if (n <= 0) [[unlikely]] {
             break;
         }
         sent += static_cast<size_t>(n);
     }
 }
+
+auto connect_if_replica(const credis::server::ServerConfig& config,
+                        int listening_port) -> std::optional<ReplicaConnector> {
+    const auto& replica = config.replica;
+    if (!replica) [[likely]] {
+        return std::nullopt;
+    }
+    auto connector = ReplicaConnector(replica->host, replica->port);
+    if (!connector.send_ping() || !connector.send_replconf(listening_port) || !connector.send_psync()
+        || !connector.receive_rdb().has_value()) [[unlikely]] {
+        return std::nullopt;
+    }
+    return connector;
+}
+
+} // namespace credis::replica

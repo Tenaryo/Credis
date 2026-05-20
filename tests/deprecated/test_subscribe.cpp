@@ -13,8 +13,8 @@ void test_subscribe_single_channel() {
 
     auto response = handler.process("*2\r\n$9\r\nsubscribe\r\n$3\r\nfoo\r\n");
 
-    auto expected = "*3\r\n" + RespParser::encode_bulk_string("subscribe") +
-                    RespParser::encode_bulk_string("foo") + RespParser::encode_integer(1);
+    auto expected = "*3\r\n" + credis::protocol::encode_bulk_string("subscribe") +
+                    credis::protocol::encode_bulk_string("foo") + credis::protocol::encode_integer(1);
     assert(response == expected);
 
     std::cout << "Test 1 passed: SUBSCRIBE foo returns [\"subscribe\", \"foo\", 1]\n";
@@ -86,13 +86,13 @@ void test_publish_returns_subscriber_count() {
     auto bar_result =
         handler.process_with_fd(10, "*3\r\n$7\r\nPUBLISH\r\n$3\r\nbar\r\n$3\r\nmsg\r\n", nullptr);
     assert(std::get<ProcessResult::Normal>(bar_result.state).response ==
-           RespParser::encode_integer(2));
+           credis::protocol::encode_integer(2));
     std::cout << "Test 5 passed: PUBLISH bar returns 2 (two subscribers)\n";
 
     auto foo_result =
         handler.process_with_fd(10, "*3\r\n$7\r\nPUBLISH\r\n$3\r\nfoo\r\n$3\r\nmsg\r\n", nullptr);
     assert(std::get<ProcessResult::Normal>(foo_result.state).response ==
-           RespParser::encode_integer(1));
+           credis::protocol::encode_integer(1));
     std::cout << "Test 6 passed: PUBLISH foo returns 1 (one subscriber)\n";
 }
 
@@ -104,7 +104,7 @@ void test_publish_no_subscribers() {
 
     auto result = handler.process_with_fd(
         10, "*3\r\n$7\r\nPUBLISH\r\n$11\r\nnonexistent\r\n$3\r\nmsg\r\n", nullptr);
-    assert(std::get<ProcessResult::Normal>(result.state).response == RespParser::encode_integer(0));
+    assert(std::get<ProcessResult::Normal>(result.state).response == credis::protocol::encode_integer(0));
     std::cout << "Test 7 passed: PUBLISH nonexistent returns 0\n";
 }
 
@@ -136,7 +136,7 @@ void test_publish_delivers_message_to_subscribers() {
     auto result =
         handler.process_with_fd(10, "*3\r\n$7\r\nPUBLISH\r\n$3\r\nfoo\r\n$5\r\nhello\r\n", send_fn);
 
-    assert(std::get<ProcessResult::Normal>(result.state).response == RespParser::encode_integer(2));
+    assert(std::get<ProcessResult::Normal>(result.state).response == credis::protocol::encode_integer(2));
     assert(delivered.size() == 2);
     assert(delivered.contains(1));
     assert(delivered.contains(2));
@@ -163,7 +163,7 @@ void test_publish_only_delivers_to_matching_channel() {
     auto result =
         handler.process_with_fd(10, "*3\r\n$7\r\nPUBLISH\r\n$3\r\nfoo\r\n$5\r\nhello\r\n", send_fn);
 
-    assert(std::get<ProcessResult::Normal>(result.state).response == RespParser::encode_integer(1));
+    assert(std::get<ProcessResult::Normal>(result.state).response == credis::protocol::encode_integer(1));
     assert(delivered.size() == 1);
     assert(delivered.contains(1));
     assert(!delivered.contains(2));
@@ -186,8 +186,8 @@ void test_unsubscribe_single_channel() {
     auto result =
         handler.process_with_fd(kClientFd, "*2\r\n$11\r\nunsubscribe\r\n$3\r\nfoo\r\n", nullptr);
 
-    auto expected = "*3\r\n" + RespParser::encode_bulk_string("unsubscribe") +
-                    RespParser::encode_bulk_string("foo") + RespParser::encode_integer(0);
+    auto expected = "*3\r\n" + credis::protocol::encode_bulk_string("unsubscribe") +
+                    credis::protocol::encode_bulk_string("foo") + credis::protocol::encode_integer(0);
     assert(std::get<ProcessResult::Normal>(result.state).response == expected);
     std::cout << "Test 11 passed: UNSUBSCRIBE foo returns [\"unsubscribe\", \"foo\", 0]\n";
 }
@@ -205,8 +205,8 @@ void test_unsubscribe_partial() {
     auto result =
         handler.process_with_fd(kClientFd, "*2\r\n$11\r\nunsubscribe\r\n$3\r\nfoo\r\n", nullptr);
 
-    auto expected = "*3\r\n" + RespParser::encode_bulk_string("unsubscribe") +
-                    RespParser::encode_bulk_string("foo") + RespParser::encode_integer(1);
+    auto expected = "*3\r\n" + credis::protocol::encode_bulk_string("unsubscribe") +
+                    credis::protocol::encode_bulk_string("foo") + credis::protocol::encode_integer(1);
     assert(std::get<ProcessResult::Normal>(result.state).response == expected);
 
     std::unordered_map<int, std::vector<std::string>> delivered;
@@ -235,8 +235,8 @@ void test_unsubscribe_not_subscribed_channel() {
     auto result =
         handler.process_with_fd(kClientFd, "*2\r\n$11\r\nunsubscribe\r\n$3\r\nbar\r\n", nullptr);
 
-    auto expected = "*3\r\n" + RespParser::encode_bulk_string("unsubscribe") +
-                    RespParser::encode_bulk_string("bar") + RespParser::encode_integer(1);
+    auto expected = "*3\r\n" + credis::protocol::encode_bulk_string("unsubscribe") +
+                    credis::protocol::encode_bulk_string("bar") + credis::protocol::encode_integer(1);
     assert(std::get<ProcessResult::Normal>(result.state).response == expected);
     std::cout << "Test 13 passed: UNSUBSCRIBE bar (not subscribed) returns count unchanged (1)\n";
 }

@@ -19,7 +19,7 @@
 namespace {
 
 void send_resp(int fd, const std::vector<std::string>& args) {
-    auto msg = RespParser::encode_array(args);
+    auto msg = credis::protocol::encode_array(args);
     size_t sent = 0;
     while (sent < msg.size()) {
         auto n = ::send(fd, msg.data() + sent, msg.size() - sent, MSG_NOSIGNAL);
@@ -97,7 +97,7 @@ class TestServer {
     void finish_wait(int count) {
         if (!wait_state_)
             return;
-        auto resp = RespParser::encode_integer(count);
+        auto resp = credis::protocol::encode_integer(count);
         if (auto it = conns_.find(wait_state_->client_fd); it != conns_.end())
             it->second->send_data(resp.c_str(), resp.size());
         wait_state_.reset();
@@ -116,7 +116,7 @@ class TestServer {
         replica_buffers_[fd].append(buf, static_cast<size_t>(n));
 
         auto& buffer = replica_buffers_[fd];
-        while (auto result = RespParser::parse_one(buffer)) {
+        while (auto result = credis::protocol::parse_one(buffer)) {
             auto& args = result->args;
             if (args.size() >= 3 && to_upper(args[0]) == "REPLCONF" && to_upper(args[1]) == "ACK")
                 replica_offsets_[fd] = std::stoll(args[2]);
@@ -144,7 +144,7 @@ class TestServer {
             if (master_offset_ == 0 ||
                 acked >= std::get<ProcessResult::Wait>(result.state).numreplicas) {
                 acked = static_cast<int>(replicas_.size());
-                auto resp = RespParser::encode_integer(acked);
+                auto resp = credis::protocol::encode_integer(acked);
                 conn.send_data(resp.c_str(), resp.size());
             } else {
                 auto timeout_ms = std::get<ProcessResult::Wait>(result.state).timeout_ms;
@@ -159,7 +159,7 @@ class TestServer {
 
                 for (int rfd : replicas_) {
                     if (auto rit = conns_.find(rfd); rit != conns_.end()) {
-                        auto getack = RespParser::encode_array({"REPLCONF", "GETACK", "*"});
+                        auto getack = credis::protocol::encode_array({"REPLCONF", "GETACK", "*"});
                         rit->second->send_data(getack.c_str(), getack.size());
                     }
                 }
@@ -180,7 +180,7 @@ class TestServer {
             replicas_.insert(fd);
 
         if (!result.propagate_args.empty()) {
-            auto msg = RespParser::encode_array(result.propagate_args);
+            auto msg = credis::protocol::encode_array(result.propagate_args);
             master_offset_ += static_cast<int64_t>(msg.size());
             for (int rfd : replicas_) {
                 if (auto rit = conns_.find(rfd); rit != conns_.end())
@@ -324,7 +324,7 @@ struct ReplicaState {
             buffer.append(buf, static_cast<size_t>(rd));
         }
 
-        while (auto result = RespParser::parse_one(buffer)) {
+        while (auto result = credis::protocol::parse_one(buffer)) {
             offset += static_cast<int64_t>(result->consumed);
             auto& args = result->args;
             if (args.size() >= 2 && to_upper(args[0]) == "REPLCONF" &&

@@ -5,6 +5,8 @@
 #include <chrono>
 #include <functional>
 
+namespace credis::event_loop {
+
 class EventLoop {
     int epoll_fd_{-1};
     static constexpr int MAX_EVENTS = 64;
@@ -34,3 +36,5 @@ class EventLoop {
         return epoll_fd_;
     }
 };
+
+} // namespace credis::event_loop

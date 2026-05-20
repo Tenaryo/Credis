@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <numbers>
 
-namespace geo {
+namespace credis::geo {
 
 static constexpr double kLatMin = -85.05112878;
 static constexpr double kLatMax = 85.05112878;
@@ -63,4 +63,4 @@ inline auto distance(double lat1, double lon1, double lat2, double lon2) -> doub
     return kEarthRadius * 2 * std::asin(std::sqrt(a));
 }
 
-} // namespace geo
+} // namespace credis::geo

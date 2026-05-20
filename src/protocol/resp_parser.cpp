@@ -2,7 +2,9 @@
 
 #include <charconv>
 
-auto RespParser::parse(std::string_view input) -> std::expected<std::vector<std::string>, std::string> {
+namespace credis::protocol {
+
+auto parse_resp(std::string_view input) -> std::expected<std::vector<std::string>, std::string> {
     auto result = parse_one(input);
     if (!result) {
         return std::unexpected(std::move(result.error()));
@@ -10,7 +12,7 @@ auto RespParser::parse(std::string_view input) -> std::expected<std::vector<std:
     return std::move(result->args);
 }
 
-auto RespParser::parse_one(std::string_view input) -> std::expected<ParsedCommand, std::string> {
+auto parse_one(std::string_view input) -> std::expected<ParsedCommand, std::string> {
     if (input.empty() || input[0] != '*') {
         return std::unexpected("Invalid RESP: expected array");
     }
@@ -59,23 +61,23 @@ auto RespParser::parse_one(std::string_view input) -> std::expected<ParsedComman
     return ParsedCommand{std::move(args), pos};
 }
 
-auto RespParser::encode_simple_string(std::string_view s) -> std::string {
+auto encode_simple_string(std::string_view s) -> std::string {
     return "+" + std::string(s) + "\r\n";
 }
 
-auto RespParser::encode_bulk_string(std::string_view s) -> std::string {
+auto encode_bulk_string(std::string_view s) -> std::string {
     return "$" + std::to_string(s.size()) + "\r\n" + std::string(s) + "\r\n";
 }
 
-auto RespParser::encode_null_bulk_string() -> std::string {
+auto encode_null_bulk_string() -> std::string {
     return "$-1\r\n";
 }
 
-auto RespParser::encode_integer(int64_t n) -> std::string {
+auto encode_integer(int64_t n) -> std::string {
     return ":" + std::to_string(n) + "\r\n";
 }
 
-auto RespParser::encode_array(const std::vector<std::string>& elements) -> std::string {
+auto encode_array(const std::vector<std::string>& elements) -> std::string {
     std::string result = "*" + std::to_string(elements.size()) + "\r\n";
     for (const auto& elem : elements) {
         result += encode_bulk_string(elem);
@@ -83,7 +85,7 @@ auto RespParser::encode_array(const std::vector<std::string>& elements) -> std::
     return result;
 }
 
-auto RespParser::encode_raw_array(const std::vector<std::string>& raw_elements) -> std::string {
+auto encode_raw_array(const std::vector<std::string>& raw_elements) -> std::string {
     std::string result = "*" + std::to_string(raw_elements.size()) + "\r\n";
     for (const auto& elem : raw_elements) {
         result += elem;
@@ -91,7 +93,7 @@ auto RespParser::encode_raw_array(const std::vector<std::string>& raw_elements) 
     return result;
 }
 
-auto RespParser::encode_entries(std::span<const Redis::StreamEntry> entries) -> std::string {
+auto encode_entries(std::span<const credis::store::StreamEntry> entries) -> std::string {
     std::string result = "*" + std::to_string(entries.size()) + "\r\n";
     for (const auto& entry : entries) {
         result += "*2\r\n";
@@ -105,16 +107,16 @@ auto RespParser::encode_entries(std::span<const Redis::StreamEntry> entries) -> 
     return result;
 }
 
-auto RespParser::encode_error(std::string_view s) -> std::string {
+auto encode_error(std::string_view s) -> std::string {
     return "-" + std::string(s) + "\r\n";
 }
 
-auto RespParser::encode_null_array() -> std::string {
+auto encode_null_array() -> std::string {
     return "*-1\r\n";
 }
 
-auto RespParser::encode_stream_entries(
-    const std::vector<std::pair<std::string, std::span<const Redis::StreamEntry>>>& streams) -> std::string {
+auto encode_stream_entries(
+    const std::vector<std::pair<std::string, std::span<const credis::store::StreamEntry>>>& streams) -> std::string {
     std::string result = "*" + std::to_string(streams.size()) + "\r\n";
     for (const auto& [key, entries] : streams) {
         result += "*2\r\n";
@@ -123,3 +125,5 @@ auto RespParser::encode_stream_entries(
     }
     return result;
 }
+
+} // namespace credis::protocol

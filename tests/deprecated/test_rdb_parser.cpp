@@ -55,8 +55,8 @@ void test_parse_single_string_key() {
 
     assert(result.size() == 1);
     assert(result.contains("foo"));
-    assert(std::holds_alternative<Redis::String>(result["foo"].value));
-    assert(std::get<Redis::String>(result["foo"].value) == "bar");
+    assert(std::holds_alternative<credis::store::String>(result["foo"].value));
+    assert(std::get<credis::store::String>(result["foo"].value) == "bar");
     assert(!result["foo"].expire_ms.has_value());
 
     std::cout << "\u2713 Test 1 passed: parse single string key-value\n";
@@ -76,8 +76,8 @@ void test_parse_multiple_keys() {
     assert(result.size() == 2);
     assert(result.contains("foo"));
     assert(result.contains("baz"));
-    assert(std::get<Redis::String>(result["foo"].value) == "bar");
-    assert(std::get<Redis::String>(result["baz"].value) == "qux");
+    assert(std::get<credis::store::String>(result["foo"].value) == "bar");
+    assert(std::get<credis::store::String>(result["baz"].value) == "qux");
 
     std::cout << "\u2713 Test 2 passed: parse multiple string keys\n";
 }
@@ -98,7 +98,7 @@ void test_parse_expire_seconds() {
 
     assert(result.size() == 1);
     assert(result.contains("baz"));
-    assert(std::get<Redis::String>(result["baz"].value) == "qux");
+    assert(std::get<credis::store::String>(result["baz"].value) == "qux");
     assert(result["baz"].expire_ms.has_value());
 
     std::cout << "\u2713 Test 3 passed: parse key with second expiry\n";
@@ -120,7 +120,7 @@ void test_parse_expire_milliseconds() {
 
     assert(result.size() == 1);
     assert(result.contains("foo"));
-    assert(std::get<Redis::String>(result["foo"].value) == "bar");
+    assert(std::get<credis::store::String>(result["foo"].value) == "bar");
     assert(result["foo"].expire_ms.has_value());
 
     std::cout << "\u2713 Test 4 passed: parse key with millisecond expiry\n";
@@ -147,7 +147,7 @@ void test_parse_integer_encoded_string_8bit() {
     auto result = RdbParser::parse(rdb);
 
     assert(result.size() == 1);
-    assert(std::get<Redis::String>(result["key"].value) == "123");
+    assert(std::get<credis::store::String>(result["key"].value) == "123");
 
     std::cout << "\u2713 Test 5 passed: parse 8-bit integer encoded string\n";
 }
@@ -174,7 +174,7 @@ void test_parse_integer_encoded_string_16bit() {
     auto result = RdbParser::parse(rdb);
 
     assert(result.size() == 1);
-    assert(std::get<Redis::String>(result["key"].value) == "12345");
+    assert(std::get<credis::store::String>(result["key"].value) == "12345");
 
     std::cout << "\u2713 Test 6 passed: parse 16-bit integer encoded string\n";
 }
@@ -203,7 +203,7 @@ void test_parse_integer_encoded_string_32bit() {
     auto result = RdbParser::parse(rdb);
 
     assert(result.size() == 1);
-    assert(std::get<Redis::String>(result["key"].value) == "1234567");
+    assert(std::get<credis::store::String>(result["key"].value) == "1234567");
 
     std::cout << "\u2713 Test 7 passed: parse 32-bit integer encoded string\n";
 }

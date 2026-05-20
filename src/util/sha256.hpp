@@ -3,8 +3,8 @@
 #include <string>
 #include <string_view>
 
-namespace util {
+namespace credis::util {
 
 auto sha256(std::string_view input) -> std::string;
 
-} // namespace util
+} // namespace credis::util

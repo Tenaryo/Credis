@@ -3,6 +3,8 @@
 #include <string>
 #include <string_view>
 
+namespace credis::util {
+
 struct StringHash {
     using is_transparent = void;
     using hash_type = std::hash<std::string_view>;
@@ -14,3 +16,5 @@ struct StringHash {
         return hash_type{}(s);
     }
 };
+
+} // namespace credis::util

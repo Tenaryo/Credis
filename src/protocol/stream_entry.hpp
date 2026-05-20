@@ -4,9 +4,9 @@
 #include <utility>
 #include <vector>
 
-namespace Redis {
+namespace credis::store {
 struct StreamEntry {
     std::string id;
     std::vector<std::pair<std::string, std::string>> fields;
 };
-} // namespace Redis
+} // namespace credis::store

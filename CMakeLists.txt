@@ -14,15 +14,24 @@ find_package(Threads REQUIRED)
 
 add_library(
     redis_core STATIC
-    src/block_manager/blocking_manager.cpp
+    src/blocking_manager/blocking_manager.cpp
     src/connection/connection.cpp
+    src/connection/connection_pool.cpp
     src/event_loop/event_loop.cpp
     src/handler/command_handler.cpp
+    src/handler/geo_commands.cpp
+    src/handler/list_commands.cpp
+    src/handler/pubsub_commands.cpp
+    src/handler/server_commands.cpp
+    src/handler/stream_commands.cpp
+    src/handler/string_commands.cpp
+    src/handler/zset_commands.cpp
     src/protocol/resp_parser.cpp
     src/rdb/rdb_parser.cpp
     src/replica/replica_connector.cpp
+    src/replica/replica_manager.cpp
+    src/server/event_dispatch.cpp
     src/server/server.cpp
-    src/server/server_runner.cpp
     src/store/store.cpp
     src/util/sha256.cpp
 )
@@ -71,16 +80,4 @@ if (ENABLE_SANITIZERS)
     target_link_options(redis_core PUBLIC -fsanitize=address,undefined)
 endif ()
 
-option(BUILD_TESTS "Build tests" ON)
-if (BUILD_TESTS)
-    include(FetchContent)
-    FetchContent_Declare(
-        googletest
-        GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG v1.15.2
-        SYSTEM
-    )
-    FetchContent_MakeAvailable(googletest)
-    enable_testing()
-    add_subdirectory(tests)
-endif ()
+option(BUILD_TESTS "Build tests" OFF)

@@ -17,7 +17,8 @@
 #include "protocol/stream_id.hpp"
 #include "util/string_hash.hpp"
 
-namespace Redis {
+namespace credis::store {
+
 using String = std::string;
 using List = std::deque<std::string>;
 
@@ -52,18 +53,17 @@ struct SortedSet {
 };
 
 using Value = std::variant<String, List, Stream, SortedSet>;
-} // namespace Redis
 
 class Store {
     struct Entry {
-        Redis::Value value;
+        Value value;
         std::optional<std::chrono::steady_clock::time_point> expiry;
     };
 
-    std::unordered_map<std::string, Entry, StringHash, std::equal_to<>> data_;
+    std::unordered_map<std::string, Entry, credis::util::StringHash, std::equal_to<>> data_;
 
     uint64_t version_counter_{0};
-    std::unordered_map<std::string, uint64_t, StringHash, std::equal_to<>> key_versions_;
+    std::unordered_map<std::string, uint64_t, credis::util::StringHash, std::equal_to<>> key_versions_;
 
     void touch_key(std::string_view key) {
         auto it = key_versions_.find(key);
@@ -99,27 +99,27 @@ class Store {
         return &std::get<T>(entry->value);
     }
 
-    auto get_list(std::string_view key) -> Redis::List* {
-        return get_typed<Redis::List>(key);
+    auto get_list(std::string_view key) -> List* {
+        return get_typed<List>(key);
     }
-    auto get_or_create_list(std::string key) -> Redis::List* {
-        return get_or_create_typed<Redis::List>(std::move(key));
+    auto get_or_create_list(std::string key) -> List* {
+        return get_or_create_typed<List>(std::move(key));
     }
-    auto get_stream(std::string_view key) -> Redis::Stream* {
-        return get_typed<Redis::Stream>(key);
+    auto get_stream(std::string_view key) -> Stream* {
+        return get_typed<Stream>(key);
     }
-    auto get_or_create_stream(std::string key) -> Redis::Stream* {
-        return get_or_create_typed<Redis::Stream>(std::move(key));
+    auto get_or_create_stream(std::string key) -> Stream* {
+        return get_or_create_typed<Stream>(std::move(key));
     }
-    auto get_zset(std::string_view key) -> Redis::SortedSet* {
-        return get_typed<Redis::SortedSet>(key);
+    auto get_zset(std::string_view key) -> SortedSet* {
+        return get_typed<SortedSet>(key);
     }
-    auto get_or_create_zset(std::string key) -> Redis::SortedSet* {
-        return get_or_create_typed<Redis::SortedSet>(std::move(key));
+    auto get_or_create_zset(std::string key) -> SortedSet* {
+        return get_or_create_typed<SortedSet>(std::move(key));
     }
 
-    static auto lower_bound(const Redis::Stream& stream, const StreamId& target) -> size_t;
-    static auto upper_bound(const Redis::Stream& stream, const StreamId& target) -> size_t;
+    static auto lower_bound(const Stream& stream, const credis::protocol::StreamId& target) -> size_t;
+    static auto upper_bound(const Stream& stream, const credis::protocol::StreamId& target) -> size_t;
 
   public:
     void set(std::string key, std::string value, std::optional<uint64_t> ttl_ms = std::nullopt);
@@ -139,10 +139,9 @@ class Store {
               const std::string& id,
               const std::vector<std::pair<std::string, std::string>>& fields) -> std::string;
 
-    auto
-    xrange(std::string_view key, std::string_view start, std::string_view end) -> std::span<const Redis::StreamEntry>;
+    auto xrange(std::string_view key, std::string_view start, std::string_view end) -> std::span<const StreamEntry>;
 
-    auto xread(std::string_view key, std::string_view id) -> std::span<const Redis::StreamEntry>;
+    auto xread(std::string_view key, std::string_view id) -> std::span<const StreamEntry>;
 
     auto get_stream_max_id(std::string_view key) -> std::optional<std::string>;
 
@@ -162,3 +161,5 @@ class Store {
         return it != key_versions_.end() ? it->second : 0;
     }
 };
+
+} // namespace credis::store

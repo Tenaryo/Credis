@@ -2,6 +2,11 @@
 
 #include "util/parse.hpp"
 
+namespace credis::store {
+
+using credis::protocol::StreamId;
+using credis::util::parse_int;
+
 auto Store::get_current_time() -> std::chrono::steady_clock::time_point {
     return std::chrono::steady_clock::now();
 }
@@ -22,7 +27,7 @@ auto Store::find_valid_entry(std::string_view key) -> Store::Entry* {
     return &it->second;
 }
 
-auto Store::lower_bound(const Redis::Stream& stream, const StreamId& target) -> size_t {
+auto Store::lower_bound(const Stream& stream, const credis::protocol::StreamId& target) -> size_t {
     size_t lo = 0;
     size_t hi = stream.size();
     while (lo < hi) {
@@ -37,7 +42,7 @@ auto Store::lower_bound(const Redis::Stream& stream, const StreamId& target) -> 
     return lo;
 }
 
-auto Store::upper_bound(const Redis::Stream& stream, const StreamId& target) -> size_t {
+auto Store::upper_bound(const Stream& stream, const credis::protocol::StreamId& target) -> size_t {
     size_t lo = 0;
     size_t hi = stream.size();
     while (lo < hi) {
@@ -64,10 +69,10 @@ void Store::set(std::string key, std::string value, std::optional<uint64_t> ttl_
 
 auto Store::get(std::string_view key) -> std::optional<std::string> {
     Entry* entry = find_valid_entry(key);
-    if ((entry == nullptr) || !std::holds_alternative<Redis::String>(entry->value)) {
+    if ((entry == nullptr) || !std::holds_alternative<String>(entry->value)) {
         return std::nullopt;
     }
-    return std::get<Redis::String>(entry->value);
+    return std::get<String>(entry->value);
 }
 
 auto Store::incr(std::string_view key) -> std::optional<int64_t> {
@@ -75,22 +80,22 @@ auto Store::incr(std::string_view key) -> std::optional<int64_t> {
     Entry* entry = find_valid_entry(key);
 
     if (entry == nullptr) {
-        data_[std::string(key)] = Entry{Redis::String("1"), {}};
+        data_[std::string(key)] = Entry{String("1"), {}};
         return 1;
     }
 
-    if (!std::holds_alternative<Redis::String>(entry->value)) {
+    if (!std::holds_alternative<String>(entry->value)) {
         return std::nullopt;
     }
 
-    const std::string& str_value = std::get<Redis::String>(entry->value);
+    const std::string& str_value = std::get<String>(entry->value);
     auto parsed = parse_int<int64_t>(str_value);
     if (!parsed || *parsed == INT64_MAX) {
         return std::nullopt;
     }
 
     int64_t new_value = *parsed + 1;
-    entry->value = Redis::String(std::to_string(new_value));
+    entry->value = String(std::to_string(new_value));
     return new_value;
 }
 
@@ -204,16 +209,16 @@ auto Store::get_type(std::string_view key) -> std::string {
     if (entry == nullptr) {
         return "none";
     }
-    if (std::holds_alternative<Redis::String>(entry->value)) {
+    if (std::holds_alternative<String>(entry->value)) {
         return "string";
     }
-    if (std::holds_alternative<Redis::List>(entry->value)) {
+    if (std::holds_alternative<List>(entry->value)) {
         return "list";
     }
-    if (std::holds_alternative<Redis::Stream>(entry->value)) {
+    if (std::holds_alternative<Stream>(entry->value)) {
         return "stream";
     }
-    if (std::holds_alternative<Redis::SortedSet>(entry->value)) {
+    if (std::holds_alternative<SortedSet>(entry->value)) {
         return "zset";
     }
     return "none";
@@ -289,13 +294,11 @@ auto Store::xadd(std::string key,
         }
     }
 
-    stream->push_back(Redis::StreamEntry{final_id, fields});
+    stream->push_back(StreamEntry{final_id, fields});
     return final_id;
 }
 
-auto Store::xrange(std::string_view key,
-                   std::string_view start,
-                   std::string_view end) -> std::span<const Redis::StreamEntry> {
+auto Store::xrange(std::string_view key, std::string_view start, std::string_view end) -> std::span<const StreamEntry> {
     auto* stream = get_stream(key);
     if ((stream == nullptr) || stream->empty()) {
         return {};
@@ -318,7 +321,7 @@ auto Store::xrange(std::string_view key,
     return {stream->data() + lo, hi - lo};
 }
 
-auto Store::xread(std::string_view key, std::string_view id) -> std::span<const Redis::StreamEntry> {
+auto Store::xread(std::string_view key, std::string_view id) -> std::span<const StreamEntry> {
     auto* stream = get_stream(key);
     if ((stream == nullptr) || stream->empty()) {
         return {};
@@ -462,3 +465,5 @@ auto Store::keys() -> std::vector<std::string> {
     }
     return result;
 }
+
+} // namespace credis::store

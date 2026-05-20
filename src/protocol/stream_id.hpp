@@ -6,6 +6,8 @@
 #include <string>
 #include <string_view>
 
+namespace credis::protocol {
+
 struct StreamId {
     int64_t timestamp{};
     int64_t sequence{};
@@ -37,3 +39,5 @@ struct StreamId {
 
     auto operator<=>(const StreamId&) const = default;
 };
+
+} // namespace credis::protocol

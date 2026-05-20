@@ -6,6 +6,10 @@
 #include <unordered_map>
 #include <vector>
 
+namespace credis::rdb {
+
+namespace {
+
 class Reader {
     const uint8_t* data_;
     size_t size_;
@@ -26,7 +30,8 @@ class Reader {
     }
 
     auto read_be16() -> uint16_t {
-        uint16_t v = static_cast<uint16_t>((static_cast<uint16_t>(data_[pos_]) << 8) | static_cast<uint16_t>(data_[pos_ + 1]));
+        uint16_t v
+            = static_cast<uint16_t>((static_cast<uint16_t>(data_[pos_]) << 8) | static_cast<uint16_t>(data_[pos_ + 1]));
         pos_ += 2;
         return v;
     }
@@ -39,7 +44,8 @@ class Reader {
     }
 
     auto read_le16() -> uint16_t {
-        uint16_t v = static_cast<uint16_t>(static_cast<uint16_t>(data_[pos_]) | (static_cast<uint16_t>(data_[pos_ + 1]) << 8));
+        uint16_t v
+            = static_cast<uint16_t>(static_cast<uint16_t>(data_[pos_]) | (static_cast<uint16_t>(data_[pos_ + 1]) << 8));
         pos_ += 2;
         return v;
     }
@@ -80,7 +86,7 @@ class Reader {
         auto first = data_[pos_];
         auto hi2 = (first & 0xC0) >> 6;
 
-        if (hi2 == 3) {
+        if (hi2 == 3) [[unlikely]] {
             pos_++;
             switch (first & 0x3F) {
             case 0:
@@ -110,7 +116,9 @@ class Reader {
     }
 };
 
-auto RdbParser::parse(const std::vector<uint8_t>& data) -> std::unordered_map<std::string, RdbEntry> {
+} // namespace
+
+auto parse_rdb(const std::vector<uint8_t>& data) -> std::unordered_map<std::string, RdbEntry> {
     Reader reader(data.data(), data.size());
     std::unordered_map<std::string, RdbEntry> result;
 
@@ -118,33 +126,33 @@ auto RdbParser::parse(const std::vector<uint8_t>& data) -> std::unordered_map<st
         reader.read_byte();
     }
 
-    while (reader.has_more()) {
+    while (reader.has_more()) [[likely]] {
         auto op = reader.read_byte();
 
-        if (op == 0xFA) {
+        if (op == 0xFA) [[likely]] {
             reader.read_string();
             reader.read_string();
-        } else if (op == 0xFE) {
+        } else if (op == 0xFE) [[unlikely]] {
             reader.read_length();
 
-            if (reader.has_more() && reader.peek() == 0xFB) {
+            if (reader.has_more() && reader.peek() == 0xFB) [[unlikely]] {
                 reader.read_byte();
                 reader.read_length();
                 reader.read_length();
             }
 
-            while (reader.has_more()) {
+            while (reader.has_more()) [[likely]] {
                 auto peek = reader.peek();
-                if (peek == 0xFF || peek == 0xFE || peek == 0xFA) {
+                if (peek == 0xFF || peek == 0xFE || peek == 0xFA) [[unlikely]] {
                     break;
                 }
 
                 std::optional<uint64_t> expire_ms;
 
-                if (peek == 0xFD) {
+                if (peek == 0xFD) [[likely]] {
                     reader.read_byte();
                     expire_ms = static_cast<uint64_t>(reader.read_le32()) * 1000;
-                } else if (peek == 0xFC) {
+                } else if (peek == 0xFC) [[unlikely]] {
                     reader.read_byte();
                     expire_ms = reader.read_le64();
                 }
@@ -153,9 +161,9 @@ auto RdbParser::parse(const std::vector<uint8_t>& data) -> std::unordered_map<st
                 auto key = reader.read_string();
                 auto value = reader.read_string();
 
-                result.emplace(std::move(key), RdbEntry{Redis::String(std::move(value)), expire_ms});
+                result.emplace(std::move(key), RdbEntry{credis::store::String(std::move(value)), expire_ms});
             }
-        } else if (op == 0xFF) {
+        } else if (op == 0xFF) [[unlikely]] {
             break;
         }
     }
@@ -163,9 +171,9 @@ auto RdbParser::parse(const std::vector<uint8_t>& data) -> std::unordered_map<st
     return result;
 }
 
-auto RdbParser::load_file(const std::string& path) -> std::unordered_map<std::string, RdbEntry> {
+auto load_rdb_file(const std::string& path) -> std::unordered_map<std::string, RdbEntry> {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
-    if (!file) {
+    if (!file) [[unlikely]] {
         return {};
     }
 
@@ -175,5 +183,7 @@ auto RdbParser::load_file(const std::string& path) -> std::unordered_map<std::st
     std::vector<uint8_t> data(static_cast<size_t>(size));
     file.read(reinterpret_cast<char*>(data.data()), size);
 
-    return parse(data);
+    return parse_rdb(data);
 }
+
+} // namespace credis::rdb

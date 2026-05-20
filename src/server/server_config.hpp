@@ -3,18 +3,22 @@
 #include <optional>
 #include <string>
 
-struct ReplicaOfConfig {
+namespace credis::server {
+
+struct ReplicaConfig {
     std::string host;
     int port;
 };
 
 struct ServerConfig {
-    std::optional<ReplicaOfConfig> replicaof;
+    std::optional<ReplicaConfig> replica;
     std::string master_replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
     int64_t master_repl_offset = 0;
     std::string dir;
     std::string dbfilename;
     [[nodiscard]] auto is_replica() const -> bool {
-        return replicaof.has_value();
+        return replica.has_value();
     }
 };
+
+} // namespace credis::server
