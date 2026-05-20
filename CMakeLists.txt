@@ -50,7 +50,23 @@ target_precompile_headers(redis_core PUBLIC
 add_executable(redis src/main.cpp)
 target_link_libraries(redis PRIVATE redis_core)
 
+option(ENABLE_SANITIZERS "Enable Address and Undefined Behavior Sanitizers" OFF)
+
+if(ENABLE_SANITIZERS)
+    target_compile_options(redis_core PUBLIC -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(redis_core PUBLIC -fsanitize=address,undefined)
+endif()
+
 option(BUILD_TESTS "Build tests" ON)
 if(BUILD_TESTS)
+    include(FetchContent)
+    FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG v1.15.2
+        SYSTEM
+    )
+    FetchContent_MakeAvailable(googletest)
+    enable_testing()
     add_subdirectory(tests)
 endif()

@@ -1,0 +1,20 @@
+Checks: >
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  modernize-*,
+  performance-*,
+  readability-*,
+  -readability-magic-numbers,
+  -readability-identifier-naming,
+  misc-*,
+  -misc-no-recursion,
+  -misc-const-correctness,
+  -misc-include-cleaner,
+  portability-*,
+  cppcoreguidelines-pro-type-member-init,
+
+HeaderFilterRegex: '^(src|tests)/.*'
+
+WarningsAsErrors: '*'
+
+FormatStyle: file
