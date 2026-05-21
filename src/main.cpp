@@ -60,6 +60,9 @@ auto main(int argc, char* argv[]) -> int {
 
     auto port = credis::cli::parse_port(argc, argv);
     server_config.dir = credis::cli::parse_dir(argc, argv);
+    if (server_config.dir.empty()) {
+        server_config.dir = std::filesystem::current_path().string();
+    }
     server_config.dbfilename = credis::cli::parse_dbfilename(argc, argv);
 
     // 2. Create TCP listener

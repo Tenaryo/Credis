@@ -33,14 +33,24 @@ auto handle_info(CommandContext& ctx, const std::vector<std::string>& /* args */
 auto handle_config_get(CommandContext& ctx, const std::string& param) -> std::string {
     auto upper = credis::util::to_upper(param);
     if (upper == "DIR") {
-        auto value = ctx.config.dir.empty() ? credis::protocol::encode_null_bulk_string()
-                                            : credis::protocol::encode_bulk_string(ctx.config.dir);
-        return "*2\r\n$3\r\ndir\r\n" + value;
+        return "*2\r\n$3\r\ndir\r\n" + credis::protocol::encode_bulk_string(ctx.config.dir);
     }
     if (upper == "DBFILENAME") {
         auto value = ctx.config.dbfilename.empty() ? credis::protocol::encode_null_bulk_string()
                                                    : credis::protocol::encode_bulk_string(ctx.config.dbfilename);
         return "*2\r\n$10\r\ndbfilename\r\n" + value;
+    }
+    if (upper == "APPENDONLY") {
+        return "*2\r\n$10\r\nappendonly\r\n" + credis::protocol::encode_bulk_string(ctx.config.appendonly);
+    }
+    if (upper == "APPENDDIRNAME") {
+        return "*2\r\n$12\r\nappenddirname\r\n" + credis::protocol::encode_bulk_string(ctx.config.appenddirname);
+    }
+    if (upper == "APPENDFILENAME") {
+        return "*2\r\n$14\r\nappendfilename\r\n" + credis::protocol::encode_bulk_string(ctx.config.appendfilename);
+    }
+    if (upper == "APPENDFSYNC") {
+        return "*2\r\n$11\r\nappendfsync\r\n" + credis::protocol::encode_bulk_string(ctx.config.appendfsync);
     }
     return credis::protocol::encode_array({});
 }
