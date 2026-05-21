@@ -44,7 +44,7 @@ auto handle_config_get(CommandContext& ctx, const std::string& param) -> std::st
         return "*2\r\n$10\r\nappendonly\r\n" + credis::protocol::encode_bulk_string(ctx.config.appendonly);
     }
     if (upper == "APPENDDIRNAME") {
-        return "*2\r\n$12\r\nappenddirname\r\n" + credis::protocol::encode_bulk_string(ctx.config.appenddirname);
+        return "*2\r\n$13\r\nappenddirname\r\n" + credis::protocol::encode_bulk_string(ctx.config.appenddirname);
     }
     if (upper == "APPENDFILENAME") {
         return "*2\r\n$14\r\nappendfilename\r\n" + credis::protocol::encode_bulk_string(ctx.config.appendfilename);
