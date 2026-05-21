@@ -45,6 +45,9 @@ class ReplicaConnector {
     auto process_propagated_commands() -> std::optional<ProcessedBuffer>;
     auto process_pending_buffer() -> ProcessedBuffer;
     void send_response(std::string_view data) const;
+    void append_to_pending_buffer(std::string_view data) {
+        pending_buffer_.append(data);
+    }
     [[nodiscard]] auto master_fd() const noexcept -> int {
         return fd_;
     }

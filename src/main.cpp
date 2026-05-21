@@ -107,9 +107,9 @@ auto main(int argc, char* argv[]) -> int {
             for (auto& cmd : buffered.commands) {
                 handler.process(cmd);
             }
-            if (!buffered.ack_responses.empty()) [[unlikely]] {
-                replica_conn->send_response(buffered.ack_responses);
-            }
+        }
+        if (!buffered.ack_responses.empty()) [[unlikely]] {
+            replica_conn->send_response(buffered.ack_responses);
         }
     }
 

@@ -19,9 +19,11 @@ void dispatch_event(int fd, EventContext& ctx) {
         auto result = ctx.replica_conn->process_propagated_commands();
         if (!result.has_value()) [[unlikely]] {
             ctx.replica_conn.reset();
-        } else if (!result->commands.empty()) [[likely]] {
-            for (auto& cmd : result->commands) {
-                ctx.handler.process(cmd);
+        } else {
+            if (!result->commands.empty()) [[likely]] {
+                for (auto& cmd : result->commands) {
+                    ctx.handler.process(cmd);
+                }
             }
             if (!result->ack_responses.empty()) [[unlikely]] {
                 ctx.replica_conn->send_response(result->ack_responses);
