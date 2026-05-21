@@ -12,8 +12,7 @@ namespace credis::handler {
 
 auto handle_rpush(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
     const std::string& key = args[1];
-    auto type = ctx.store.get_type(key);
-    if (type != "none" && type != "list") {
+    if (!ctx.store.key_is_absent_or_holds<credis::store::List>(key)) {
         return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
     }
     int64_t count = 0;
@@ -25,8 +24,7 @@ auto handle_rpush(CommandContext& ctx, const std::vector<std::string>& args) -> 
 
 auto handle_lpush(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
     const std::string& key = args[1];
-    auto type = ctx.store.get_type(key);
-    if (type != "none" && type != "list") {
+    if (!ctx.store.key_is_absent_or_holds<credis::store::List>(key)) {
         return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
     }
     int64_t count = 0;

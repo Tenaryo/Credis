@@ -13,8 +13,7 @@ auto handle_set(CommandContext& ctx, const std::vector<std::string>& args) -> st
     const std::string& key = args[1];
     const std::string& value = args[2];
 
-    auto type = ctx.store.get_type(key);
-    if (type != "none" && type != "string") {
+    if (!ctx.store.key_is_absent_or_holds<credis::store::String>(key)) {
         return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
     }
 
@@ -48,8 +47,7 @@ auto handle_get(CommandContext& ctx, const std::string& key) -> std::string {
 }
 
 auto handle_incr(CommandContext& ctx, const std::string& key) -> std::string {
-    auto type = ctx.store.get_type(key);
-    if (type != "none" && type != "string") {
+    if (!ctx.store.key_is_absent_or_holds<credis::store::String>(key)) {
         return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
     }
     auto result = ctx.store.incr(key);

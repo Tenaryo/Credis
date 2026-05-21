@@ -16,8 +16,7 @@
 namespace credis::handler {
 
 auto handle_geoadd(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
-    auto type = ctx.store.get_type(args[1]);
-    if (type != "none" && type != "zset") {
+    if (!ctx.store.key_is_absent_or_holds<credis::store::SortedSet>(args[1])) {
         return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
     }
     auto lon = credis::util::parse_double(args[2]);

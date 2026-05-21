@@ -18,8 +18,7 @@ auto handle_xadd(CommandContext& ctx, const std::vector<std::string>& args) -> s
     const std::string& key = args[1];
     const std::string& id = args[2];
 
-    auto type = ctx.store.get_type(key);
-    if (type != "none" && type != "stream") {
+    if (!ctx.store.key_is_absent_or_holds<credis::store::Stream>(key)) {
         return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
     }
 
@@ -172,8 +171,7 @@ auto handle_xadd_with_blocking(CommandContext& ctx,
     const std::string& key = args[1];
     const std::string& id = args[2];
 
-    auto type = ctx.store.get_type(key);
-    if (type != "none" && type != "stream") {
+    if (!ctx.store.key_is_absent_or_holds<credis::store::Stream>(key)) {
         return ProcessResult::normal(
             credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value"));
     }

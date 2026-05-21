@@ -93,7 +93,7 @@ class Store {
             auto [it, _] = data_.emplace(std::move(key), Entry{T{}, {}});
             entry = &it->second;
         }
-        if (!std::holds_alternative<T>(entry->value)) {
+        if (!std::holds_alternative<T>(entry->value)) [[unlikely]] {
             entry->value = T{};
         }
         return &std::get<T>(entry->value);
@@ -155,6 +155,18 @@ class Store {
 
     auto get_type(std::string_view key) -> std::string;
     auto keys() -> std::vector<std::string>;
+
+    template <typename T>
+    [[nodiscard]] bool key_is_absent_or_holds(std::string_view key) const {
+        auto it = data_.find(key);
+        if (it == data_.end()) {
+            return true;
+        }
+        if (it->second.expiry && get_current_time() > *it->second.expiry) {
+            return true;
+        }
+        return std::holds_alternative<T>(it->second.value);
+    }
 
     auto get_key_version(std::string_view key) const -> uint64_t {
         auto it = key_versions_.find(key);
