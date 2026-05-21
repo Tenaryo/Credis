@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <vector>
@@ -27,7 +28,8 @@ class Connection {
     auto handle_read() -> std::optional<std::string_view>;
     void send_data(const char* data, size_t len) const;
 
-    static constexpr size_t BUFFER_SIZE = 4096;
+    static constexpr size_t kInitialBufferSize = 4096;
+    static constexpr size_t kMaxBufferSize = 512 * 1024 * 1024;
 };
 
 } // namespace credis::connection

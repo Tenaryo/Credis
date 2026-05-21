@@ -16,6 +16,7 @@
 #include "server/server.hpp"
 #include "server/server_config.hpp"
 #include "store/store.hpp"
+#include "util/logger.hpp"
 
 namespace {
 
@@ -57,6 +58,7 @@ auto main(int argc, char* argv[]) -> int {
     // 1. Parse configuration
     credis::server::ServerConfig server_config;
     server_config.replica = credis::cli::parse_replicaof(argc, argv);
+    server_config.generate_replid();
 
     auto port = credis::cli::parse_port(argc, argv);
     server_config.dir = credis::cli::parse_dir(argc, argv);
@@ -68,7 +70,7 @@ auto main(int argc, char* argv[]) -> int {
     // 2. Create TCP listener
     auto listener = credis::server::TcpListener::create(port);
     if (!listener) [[unlikely]] {
-        std::cerr << listener.error() << '\n';
+        LOG_ERROR(listener.error().to_string());
         return 1;
     }
 
@@ -88,13 +90,13 @@ auto main(int argc, char* argv[]) -> int {
     std::optional<credis::replica::ReplicaConnector> replica_conn
         = credis::replica::connect_if_replica(server_config, port);
     if (server_config.is_replica() && !replica_conn) [[unlikely]] {
-        std::cerr << "Failed to complete replica handshake\n";
+        LOG_ERROR("Failed to complete replica handshake");
         return 1;
     }
 
     // 6. Wire dependencies
-    handler.set_blocking_manager(&blocking);
-    handler.set_pubsub_manager(&pubsub);
+    handler.set_blocking_manager(blocking);
+    handler.set_pubsub_manager(pubsub);
     handler.set_replica_count_fn([&replica_mgr] { return replica_mgr.count(); });
 
     // 7. Add initial fds to event loop

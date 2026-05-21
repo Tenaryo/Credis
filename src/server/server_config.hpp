@@ -12,7 +12,7 @@ struct ReplicaConfig {
 
 struct ServerConfig {
     std::optional<ReplicaConfig> replica;
-    std::string master_replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
+    std::string master_replid;
     int64_t master_repl_offset = 0;
     std::string dir;
     std::string dbfilename;
@@ -23,6 +23,7 @@ struct ServerConfig {
     [[nodiscard]] auto is_replica() const -> bool {
         return replica.has_value();
     }
+    void generate_replid();
 };
 
 } // namespace credis::server

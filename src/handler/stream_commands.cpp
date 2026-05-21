@@ -148,7 +148,7 @@ auto handle_xread_with_blocking(CommandContext& ctx, int fd, const std::vector<s
         return ProcessResult::normal(credis::protocol::encode_stream_entries(results));
     }
 
-    if (ctx.blocking_manager != nullptr) {
+    if (ctx.blocking_manager) {
         const std::string& key = args[streams_idx + 1];
         const std::string& id_arg = args[streams_idx + 1 + num_streams];
 
@@ -159,7 +159,7 @@ auto handle_xread_with_blocking(CommandContext& ctx, int fd, const std::vector<s
         }
 
         auto sid = credis::protocol::StreamId::parse(id).value_or(credis::protocol::StreamId{0, 0});
-        ctx.blocking_manager->block_client_for_stream(fd, key, sid, std::chrono::milliseconds(timeout_ms));
+        ctx.blocking_manager->get().block_client_for_stream(fd, key, sid, std::chrono::milliseconds(timeout_ms));
         return ProcessResult::block();
     }
 
@@ -194,8 +194,8 @@ auto handle_xadd_with_blocking(CommandContext& ctx,
         return ProcessResult::normal(credis::protocol::encode_error(new_id));
     }
 
-    if (ctx.blocking_manager != nullptr) {
-        while (auto blocked = ctx.blocking_manager->wake_client_for_stream(key, new_id)) {
+    if (ctx.blocking_manager) {
+        while (auto blocked = ctx.blocking_manager->get().wake_client_for_stream(key, new_id)) {
             auto entries = ctx.store.xread(key, blocked->last_id.to_string());
             auto response = credis::protocol::encode_stream_entries({{key, entries}});
             send_to_client(blocked->fd, response);

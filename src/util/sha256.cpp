@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <fstream>
 #include <vector>
 
 namespace credis::util {
@@ -94,6 +95,32 @@ auto sha256(std::string_view input) -> std::string {
             result += hex[(val >> (i + 4)) & 0x0F];
             result += hex[(val >> i) & 0x0F];
         }
+    }
+    return result;
+}
+
+auto random_hex(size_t byte_count) -> std::string {
+    static constexpr char kHex[] = "0123456789abcdef";
+    std::string result;
+    result.reserve(byte_count * 2);
+
+    std::ifstream urandom("/dev/urandom", std::ios::binary);
+    if (!urandom) [[unlikely]] {
+        result.reserve(byte_count * 2);
+        for (size_t i = 0; i < byte_count; ++i) {
+            result += kHex[(i * 7) % 16];
+            result += kHex[(i * 13 + 3) % 16];
+        }
+        return result;
+    }
+
+    std::vector<char> buf(byte_count);
+    urandom.read(buf.data(), static_cast<std::streamsize>(byte_count));
+    auto bytes = static_cast<size_t>(urandom.gcount());
+    for (size_t i = 0; i < bytes; ++i) {
+        auto byte = static_cast<uint8_t>(buf[i]);
+        result += kHex[byte >> 4];
+        result += kHex[byte & 0x0F];
     }
     return result;
 }

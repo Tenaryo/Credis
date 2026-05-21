@@ -25,5 +25,7 @@ TEST_F(HandlerReplicaTest, ReplconfCapaPsync2) {
 
 TEST_F(HandlerReplicaTest, Psync) {
     auto response = handler_.process("*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n");
-    EXPECT_TRUE(response.starts_with("+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n"));
+    EXPECT_TRUE(response.starts_with("+FULLRESYNC"));
+    // response contains: +FULLRESYNC <replid> <offset>\r\n followed by $88\r\n + 88 bytes RDB
+    EXPECT_TRUE(response.find("$88\r\n") != std::string::npos);
 }

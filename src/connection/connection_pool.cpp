@@ -18,13 +18,12 @@ auto ConnectionPool::read_from(int fd) -> std::optional<std::string_view> {
     return it->second->handle_read();
 }
 
-auto ConnectionPool::send_to(int fd, std::string_view response) -> bool {
+void ConnectionPool::send_to(int fd, std::string_view response) {
     auto it = connections_.find(fd);
     if (it == connections_.end()) [[unlikely]] {
-        return false;
+        return;
     }
     it->second->send_data(response.data(), response.size());
-    return true;
 }
 
 auto ConnectionPool::contains(int fd) const -> bool {

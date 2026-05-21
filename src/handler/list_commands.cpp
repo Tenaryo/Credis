@@ -91,9 +91,9 @@ auto handle_blpop(CommandContext& ctx, int fd, const std::vector<std::string>& a
         return ProcessResult::normal(credis::protocol::encode_array({key, elements[0]}));
     }
 
-    if (ctx.blocking_manager != nullptr) {
+    if (ctx.blocking_manager) {
         auto timeout_ms = std::chrono::milliseconds(static_cast<int64_t>(timeout_sec * 1000));
-        ctx.blocking_manager->block_client(fd, key, timeout_ms);
+        ctx.blocking_manager->get().block_client(fd, key, timeout_ms);
         return ProcessResult::block();
     }
 
@@ -107,8 +107,8 @@ auto handle_rpush_with_blocking(CommandContext& ctx,
     int64_t count = 0;
 
     for (size_t i = 2; i < args.size(); ++i) {
-        if (ctx.blocking_manager != nullptr) {
-            auto blocked = ctx.blocking_manager->wake_client(key);
+        if (ctx.blocking_manager) {
+            auto blocked = ctx.blocking_manager->get().wake_client(key);
             if (blocked) {
                 count = ctx.store.rpush(key, args[i]);
                 auto elements = ctx.store.lpop(key, 1);
@@ -130,8 +130,8 @@ auto handle_lpush_with_blocking(CommandContext& ctx,
     int64_t count = ctx.store.llen(key);
 
     for (size_t i = 2; i < args.size(); ++i) {
-        if (ctx.blocking_manager != nullptr) {
-            auto blocked = ctx.blocking_manager->wake_client(key);
+        if (ctx.blocking_manager) {
+            auto blocked = ctx.blocking_manager->get().wake_client(key);
             if (blocked) {
                 send_to_client(blocked->fd, credis::protocol::encode_array({key, args[i]}));
                 ++count;

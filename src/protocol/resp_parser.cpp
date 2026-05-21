@@ -4,29 +4,32 @@
 
 namespace credis::protocol {
 
-auto parse_resp(std::string_view input) -> std::expected<std::vector<std::string>, std::string> {
+using credis::util::Error;
+using credis::util::ErrorCode;
+
+auto parse_resp(std::string_view input) -> std::expected<std::vector<std::string>, Error> {
     auto result = parse_one(input);
     if (!result) {
-        return std::unexpected(std::move(result.error()));
+        return std::unexpected(result.error());
     }
     return std::move(result->args);
 }
 
-auto parse_one(std::string_view input) -> std::expected<ParsedCommand, std::string> {
+auto parse_one(std::string_view input) -> std::expected<ParsedCommand, Error> {
     if (input.empty() || input[0] != '*') {
-        return std::unexpected("Invalid RESP: expected array");
+        return std::unexpected(Error(ErrorCode::kProtocolError, "Invalid RESP: expected array"));
     }
 
     size_t pos = 1;
     auto crlf = input.find("\r\n", pos);
     if (crlf == std::string_view::npos) {
-        return std::unexpected("Incomplete RESP: missing CRLF after array count");
+        return std::unexpected(Error(ErrorCode::kProtocolError, "Incomplete RESP: missing CRLF after array count"));
     }
 
     int count = 0;
     auto [ptr, ec] = std::from_chars(input.data() + pos, input.data() + crlf, count);
     if (ec != std::errc{} || count < 0) {
-        return std::unexpected("Invalid RESP: invalid array count");
+        return std::unexpected(Error(ErrorCode::kProtocolError, "Invalid RESP: invalid array count"));
     }
 
     pos = crlf + 2;
@@ -34,24 +37,25 @@ auto parse_one(std::string_view input) -> std::expected<ParsedCommand, std::stri
     std::vector<std::string> args;
     for (int i = 0; i < count; ++i) {
         if (pos >= input.size() || input[pos] != '$') {
-            return std::unexpected("Invalid RESP: expected bulk string");
+            return std::unexpected(Error(ErrorCode::kProtocolError, "Invalid RESP: expected bulk string"));
         }
 
         crlf = input.find("\r\n", pos + 1);
         if (crlf == std::string_view::npos) {
-            return std::unexpected("Incomplete RESP: missing CRLF after bulk string length");
+            return std::unexpected(
+                Error(ErrorCode::kProtocolError, "Incomplete RESP: missing CRLF after bulk string length"));
         }
 
         int len = 0;
         auto [ptr2, ec2] = std::from_chars(input.data() + pos + 1, input.data() + crlf, len);
         if (ec2 != std::errc{} || len < 0) {
-            return std::unexpected("Invalid RESP: invalid bulk string length");
+            return std::unexpected(Error(ErrorCode::kProtocolError, "Invalid RESP: invalid bulk string length"));
         }
 
         pos = crlf + 2;
 
         if (pos + static_cast<size_t>(len) > input.size()) {
-            return std::unexpected("Incomplete RESP: bulk string truncated");
+            return std::unexpected(Error(ErrorCode::kProtocolError, "Incomplete RESP: bulk string truncated"));
         }
 
         args.emplace_back(input.substr(pos, static_cast<size_t>(len)));

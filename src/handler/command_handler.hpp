@@ -30,8 +30,8 @@ namespace credis::handler {
 struct CommandContext {
     credis::store::Store& store;
     const credis::server::ServerConfig& config;
-    credis::blocking::BlockingManager* blocking_manager{nullptr};
-    credis::pubsub::PubSubManager* pubsub_manager{nullptr};
+    std::optional<std::reference_wrapper<credis::blocking::BlockingManager>> blocking_manager;
+    std::optional<std::reference_wrapper<credis::pubsub::PubSubManager>> pubsub_manager;
     credis::server::AclManager* acl_manager{nullptr};
     std::function<size_t()> replica_count_fn;
     std::unordered_map<int, TransactionState>* transactions{nullptr};
@@ -41,8 +41,8 @@ struct CommandContext {
 class CommandHandler {
     credis::store::Store& store_;
     credis::server::ServerConfig config_;
-    credis::blocking::BlockingManager* blocking_manager_{nullptr};
-    credis::pubsub::PubSubManager* pubsub_manager_{nullptr};
+    std::optional<std::reference_wrapper<credis::blocking::BlockingManager>> blocking_manager_;
+    std::optional<std::reference_wrapper<credis::pubsub::PubSubManager>> pubsub_manager_;
     std::function<size_t()> replica_count_fn_;
     credis::server::AclManager acl_manager_;
     std::unordered_map<int, TransactionState> transactions_;
@@ -51,11 +51,11 @@ class CommandHandler {
   public:
     explicit CommandHandler(credis::store::Store& store, credis::server::ServerConfig config = {});
 
-    void set_blocking_manager(credis::blocking::BlockingManager* manager) {
-        blocking_manager_ = manager;
+    void set_blocking_manager(credis::blocking::BlockingManager& manager) {
+        blocking_manager_.emplace(manager);
     }
-    void set_pubsub_manager(credis::pubsub::PubSubManager* manager) {
-        pubsub_manager_ = manager;
+    void set_pubsub_manager(credis::pubsub::PubSubManager& manager) {
+        pubsub_manager_.emplace(manager);
     }
     void set_replica_count_fn(std::function<size_t()> fn) {
         replica_count_fn_ = std::move(fn);

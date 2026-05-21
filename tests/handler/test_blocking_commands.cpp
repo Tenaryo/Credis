@@ -15,7 +15,7 @@ class HandlerBlockingTest : public ::testing::Test {
     credis::blocking::BlockingManager blocking_manager_;
 
     void SetUp() override {
-        handler_.set_blocking_manager(&blocking_manager_);
+        handler_.set_blocking_manager(blocking_manager_);
     }
 };
 

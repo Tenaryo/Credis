@@ -13,7 +13,7 @@
 namespace credis::handler {
 
 auto handle_ping(CommandContext& ctx, int fd) -> std::string {
-    if ((ctx.pubsub_manager != nullptr) && fd >= 0 && ctx.pubsub_manager->is_subscribed(fd)) {
+    if (ctx.pubsub_manager && fd >= 0 && ctx.pubsub_manager->get().is_subscribed(fd)) {
         return credis::protocol::encode_array({"pong", ""});
     }
     return credis::protocol::encode_simple_string("PONG");

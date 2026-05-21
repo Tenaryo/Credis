@@ -2,14 +2,16 @@
 
 #include <unistd.h>
 
-#include <iostream>
+#include <vector>
+
+#include "util/logger.hpp"
 
 namespace credis::event_loop {
 
-EventLoop::EventLoop() {
+EventLoop::EventLoop(int max_events) : max_events_(max_events) {
     epoll_fd_ = epoll_create1(0);
     if (epoll_fd_ < 0) [[unlikely]] {
-        std::cerr << "Failed to create epoll instance\n";
+        LOG_ERROR("Failed to create epoll instance");
     }
 }
 
@@ -39,7 +41,7 @@ void EventLoop::add_fd(int fd, uint32_t events) const {
     ev.events = events;
     ev.data.fd = fd;
     if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &ev) < 0) [[unlikely]] {
-        std::cerr << "Failed to add fd to epoll\n";
+        LOG_ERROR("Failed to add fd to epoll");
     }
 }
 
@@ -50,18 +52,18 @@ void EventLoop::remove_fd(int fd) const {
 void EventLoop::run(int /* server_fd */,
                     const std::function<void(int)>& on_event,
                     const std::function<std::chrono::milliseconds()>& get_timeout) const {
-    struct epoll_event events[MAX_EVENTS];
+    std::vector<struct epoll_event> events(static_cast<size_t>(max_events_));
 
     while (running_) [[likely]] {
         auto timeout_ms = get_timeout();
         int timeout = timeout_ms.count() < 0 ? -1 : static_cast<int>(timeout_ms.count());
 
-        int n = epoll_wait(epoll_fd_, events, MAX_EVENTS, timeout);
+        int n = epoll_wait(epoll_fd_, events.data(), max_events_, timeout);
         if (n < 0) [[unlikely]] {
             if (errno == EINTR) [[likely]] {
                 continue;
             }
-            std::cerr << "epoll_wait failed\n";
+            LOG_ERROR("epoll_wait failed");
             break;
         }
 

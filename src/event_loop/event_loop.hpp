@@ -9,11 +9,13 @@ namespace credis::event_loop {
 
 class EventLoop {
     int epoll_fd_{-1};
-    static constexpr int MAX_EVENTS = 64;
+    int max_events_;
+
+    static constexpr int kDefaultMaxEvents = 1024;
     bool running_{true};
 
   public:
-    EventLoop();
+    explicit EventLoop(int max_events = kDefaultMaxEvents);
     ~EventLoop();
 
     EventLoop(const EventLoop&) = delete;

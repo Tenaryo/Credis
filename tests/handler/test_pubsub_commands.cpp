@@ -15,7 +15,7 @@ class HandlerPubsubTest : public ::testing::Test {
     credis::pubsub::PubSubManager pubsub_;
 
     void SetUp() override {
-        handler_.set_pubsub_manager(&pubsub_);
+        handler_.set_pubsub_manager(pubsub_);
     }
 };
 

@@ -88,7 +88,7 @@ TEST(E2EPubSub, SubscribeAndReceiveMessage) {
     server::ServerConfig config;
     handler::CommandHandler handler(store, config);
     pubsub::PubSubManager pubsub;
-    handler.set_pubsub_manager(&pubsub);
+    handler.set_pubsub_manager(pubsub);
 
     std::unordered_map<int, std::vector<std::string>> delivered;
     auto send_fn = [&](int fd, const std::string& msg) { delivered[fd].push_back(msg); };

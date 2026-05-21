@@ -3,6 +3,8 @@
 #include <expected>
 #include <string>
 
+#include "util/error.hpp"
+
 namespace credis::server {
 
 class TcpListener {
@@ -12,7 +14,7 @@ class TcpListener {
     }
 
   public:
-    static std::expected<TcpListener, std::string> create(int port);
+    static std::expected<TcpListener, credis::util::Error> create(int port);
     ~TcpListener();
 
     TcpListener(const TcpListener&) = delete;
@@ -20,7 +22,7 @@ class TcpListener {
     TcpListener(TcpListener&&) noexcept;
     auto operator=(TcpListener&&) noexcept -> TcpListener&;
 
-    [[nodiscard]] std::expected<int, std::string> accept_connection() const;
+    [[nodiscard]] std::expected<int, credis::util::Error> accept_connection() const;
     [[nodiscard]] auto fd() const noexcept -> int {
         return server_fd_;
     }

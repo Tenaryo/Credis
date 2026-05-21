@@ -34,6 +34,9 @@ namespace credis::handler {
 
 CommandHandler::CommandHandler(credis::store::Store& store, credis::server::ServerConfig config)
     : store_(store), config_(std::move(config)) {
+    if (config_.master_replid.empty()) {
+        config_.generate_replid();
+    }
     register_commands();
 }
 
@@ -282,7 +285,7 @@ auto CommandHandler::process_with_fd(int fd,
                                      std::function<void(int, const std::string&)> send_to_client) -> ProcessResult {
     auto parsed = credis::protocol::parse_resp(input);
     if (!parsed) [[unlikely]] {
-        return ProcessResult::normal(credis::protocol::encode_error("ERR " + parsed.error()));
+        return ProcessResult::normal(credis::protocol::encode_error("ERR " + parsed.error().to_string()));
     }
 
     auto& args = *parsed;
@@ -293,7 +296,7 @@ auto CommandHandler::process_with_fd(int fd,
     std::string& cmd = args[0];
     cmd = credis::util::to_upper(std::move(cmd));
 
-    if ((pubsub_manager_ != nullptr) && pubsub_manager_->is_subscribed(fd)) [[unlikely]] {
+    if (pubsub_manager_ && pubsub_manager_->get().is_subscribed(fd)) [[unlikely]] {
         static constexpr auto kSubscribedAllowed = std::array{
             "SUBSCRIBE"sv, "UNSUBSCRIBE"sv, "PSUBSCRIBE"sv, "PUNSUBSCRIBE"sv, "PING"sv, "QUIT"sv, "RESET"sv};
         if (std::ranges::find(kSubscribedAllowed, cmd) == kSubscribedAllowed.end()) [[unlikely]] {
