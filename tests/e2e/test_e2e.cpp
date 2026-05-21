@@ -64,14 +64,14 @@ TEST(E2EMultiExec, Transaction) {
     EXPECT_EQ(handler.process(make_resp({"EXEC"})), "*1\r\n+OK\r\n");
 }
 
-TEST(E2EMultiExec, NestedMultiReturnsOk) {
+TEST(E2EMultiExec, NestedMultiReturnsError) {
     store::Store store;
     server::ServerConfig config;
     handler::CommandHandler handler(store, config);
 
     handler.process(make_resp({"MULTI"}));
     auto nested = handler.process(make_resp({"MULTI"}));
-    EXPECT_EQ(nested, "+OK\r\n");
+    EXPECT_TRUE(nested.starts_with("-ERR"));
 }
 
 TEST(E2EMultiExec, EmptyTransaction) {
@@ -120,7 +120,7 @@ TEST(E2EBlocking, BlpopExistingListReturnsElement) {
     EXPECT_EQ(std::get<handler::ProcessResult::Normal>(result.state).response, "*2\r\n$1\r\nq\r\n$4\r\nitem\r\n");
 }
 
-TEST(E2ETypeValidation, SetThenZaddSucceeds) {
+TEST(E2ETypeValidation, SetThenZaddWrontype) {
     store::Store store;
     server::ServerConfig config;
     handler::CommandHandler handler(store, config);
@@ -128,10 +128,10 @@ TEST(E2ETypeValidation, SetThenZaddSucceeds) {
     handler.process(make_resp({"SET", "key", "hello"}));
     auto zadd_resp = handler.process(make_resp({"ZADD", "key", "1.0", "member"}));
 
-    EXPECT_EQ(zadd_resp, ":1\r\n");
+    EXPECT_NE(zadd_resp.find("WRONGTYPE"), std::string::npos);
 }
 
-TEST(E2ETypeValidation, ZaddThenSetOverwrites) {
+TEST(E2ETypeValidation, ZaddThenSetWrontype) {
     store::Store store;
     server::ServerConfig config;
     handler::CommandHandler handler(store, config);
@@ -139,7 +139,7 @@ TEST(E2ETypeValidation, ZaddThenSetOverwrites) {
     handler.process(make_resp({"ZADD", "key", "1.0", "member"}));
     auto set_resp = handler.process(make_resp({"SET", "key", "hello"}));
 
-    EXPECT_EQ(set_resp, "+OK\r\n");
+    EXPECT_NE(set_resp.find("WRONGTYPE"), std::string::npos);
 }
 
 TEST(E2ERespRoundTrip, ParseEncodeParse) {

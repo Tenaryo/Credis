@@ -13,6 +13,11 @@ auto handle_set(CommandContext& ctx, const std::vector<std::string>& args) -> st
     const std::string& key = args[1];
     const std::string& value = args[2];
 
+    auto type = ctx.store.get_type(key);
+    if (type != "none" && type != "string") {
+        return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
+    }
+
     std::optional<uint64_t> ttl_ms;
 
     for (size_t i = 3; i < args.size(); ++i) {
@@ -43,6 +48,10 @@ auto handle_get(CommandContext& ctx, const std::string& key) -> std::string {
 }
 
 auto handle_incr(CommandContext& ctx, const std::string& key) -> std::string {
+    auto type = ctx.store.get_type(key);
+    if (type != "none" && type != "string") {
+        return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
+    }
     auto result = ctx.store.incr(key);
     if (!result) {
         return credis::protocol::encode_error("ERR value is not an integer or out of range");

@@ -18,6 +18,11 @@ auto handle_xadd(CommandContext& ctx, const std::vector<std::string>& args) -> s
     const std::string& key = args[1];
     const std::string& id = args[2];
 
+    auto type = ctx.store.get_type(key);
+    if (type != "none" && type != "stream") {
+        return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
+    }
+
     if ((args.size() - 3) % 2 != 0) {
         return credis::protocol::encode_error("ERR wrong number of arguments for 'xadd' command");
     }
@@ -166,6 +171,12 @@ auto handle_xadd_with_blocking(CommandContext& ctx,
                                const std::function<void(int, const std::string&)>& send_to_client) -> ProcessResult {
     const std::string& key = args[1];
     const std::string& id = args[2];
+
+    auto type = ctx.store.get_type(key);
+    if (type != "none" && type != "stream") {
+        return ProcessResult::normal(
+            credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value"));
+    }
 
     if ((args.size() - 3) % 2 != 0) {
         return ProcessResult::normal(

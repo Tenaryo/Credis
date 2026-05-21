@@ -29,3 +29,13 @@ TEST_F(HandlerBlockingTest, BlpopExistingKey) {
     ASSERT_TRUE(std::holds_alternative<ProcessResult::Normal>(result.state));
     EXPECT_EQ(std::get<ProcessResult::Normal>(result.state).response, "*2\r\n$2\r\nbl\r\n$1\r\na\r\n");
 }
+
+TEST_F(HandlerBlockingTest, BlpopEmptyListReturnsBlock) {
+    constexpr int kClientFd = 1;
+
+    auto result = handler_.process_with_fd(kClientFd, "*3\r\n$5\r\nBLPOP\r\n$5\r\nnokey\r\n$1\r\n1\r\n", nullptr);
+
+    ASSERT_TRUE(std::holds_alternative<ProcessResult::Block>(result.state))
+        << "BLPOP on empty list with BlockingManager should return Block state";
+    EXPECT_TRUE(blocking_manager_.is_blocked(kClientFd));
+}

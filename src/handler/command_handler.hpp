@@ -78,8 +78,10 @@ class CommandHandler {
     template <typename SendFn>
     auto execute_command(const std::vector<std::string>& args, int fd, SendFn&& send_to_client) -> ProcessResult;
 
-    using CmdHandler = std::function<
-        ProcessResult(const std::vector<std::string>&, int, std::function<void(int, const std::string&)>)>;
+    using CmdHandler = std::function<ProcessResult(CommandContext&,
+                                                   const std::vector<std::string>&,
+                                                   int,
+                                                   std::function<void(int, const std::string&)>)>;
 
     struct CommandEntry {
         CmdHandler handler;

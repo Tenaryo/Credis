@@ -16,6 +16,10 @@
 namespace credis::handler {
 
 auto handle_geoadd(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
+    auto type = ctx.store.get_type(args[1]);
+    if (type != "none" && type != "zset") {
+        return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
+    }
     auto lon = credis::util::parse_double(args[2]);
     auto lat = credis::util::parse_double(args[3]);
     if (!lon || !lat) {

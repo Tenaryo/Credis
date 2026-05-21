@@ -10,6 +10,10 @@ namespace credis::handler {
 
 auto handle_zadd(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
     const std::string& key = args[1];
+    auto type = ctx.store.get_type(key);
+    if (type != "none" && type != "zset") {
+        return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
+    }
     auto score = credis::util::parse_double(args[2]);
     if (!score) {
         return credis::protocol::encode_error("ERR value is not a valid float");

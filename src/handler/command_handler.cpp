@@ -43,40 +43,52 @@ void CommandHandler::remove_connection(int fd) {
 }
 
 void CommandHandler::register_commands() {
-    CommandContext ctx{store_,
-                       config_,
-                       blocking_manager_,
-                       pubsub_manager_,
-                       &acl_manager_,
-                       replica_count_fn_,
-                       &transactions_,
-                       &authenticated_fds_};
-
     command_table_ = {
         {"PING",
-         {[ctx](const std::vector<std::string>&, int fd, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return ProcessResult::normal(handle_ping(ctx, fd)); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>&,
+             int fd,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_ping(ctx, fd));
+          },
           1}},
         {"ECHO",
-         {[](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&)
-              -> ProcessResult { return ProcessResult::normal(handle_echo(args[1])); },
+         {[](CommandContext&,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_echo(args[1]));
+          },
           2}},
         {"SET",
-         {[ctx](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return ProcessResult::normal(handle_set(ctx, args)); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_set(ctx, args));
+          },
           3}},
         {"GET",
-         {[ctx](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return ProcessResult::normal(handle_get(ctx, args[1])); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_get(ctx, args[1]));
+          },
           2}},
         {"INCR",
-         {[ctx](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return ProcessResult::normal(handle_incr(ctx, args[1])); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_incr(ctx, args[1]));
+          },
           2}},
         {"RPUSH",
-         {[ctx](const std::vector<std::string>& args,
-                int,
-                const std::function<void(int, const std::string&)>& send) mutable -> ProcessResult {
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>& send) -> ProcessResult {
               if (send) {
                   return handle_rpush_with_blocking(ctx, args, send);
               }
@@ -84,9 +96,10 @@ void CommandHandler::register_commands() {
           },
           3}},
         {"LPUSH",
-         {[ctx](const std::vector<std::string>& args,
-                int,
-                const std::function<void(int, const std::string&)>& send) mutable -> ProcessResult {
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>& send) -> ProcessResult {
               if (send) {
                   return handle_lpush_with_blocking(ctx, args, send);
               }
@@ -94,91 +107,164 @@ void CommandHandler::register_commands() {
           },
           3}},
         {"LLEN",
-         {[ctx](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return ProcessResult::normal(credis::protocol::encode_integer(ctx.store.llen(args[1]))); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(credis::protocol::encode_integer(ctx.store.llen(args[1])));
+          },
           2}},
         {"LPOP",
-         {[ctx](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return ProcessResult::normal(handle_lpop(ctx, args)); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_lpop(ctx, args));
+          },
           2}},
         {"LRANGE",
-         {[ctx](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return ProcessResult::normal(handle_lrange(ctx, args)); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_lrange(ctx, args));
+          },
           4}},
         {"BLPOP",
-         {[ctx](
-              const std::vector<std::string>& args, int fd, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return handle_blpop(ctx, fd, args); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int fd,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return handle_blpop(ctx, fd, args);
+          },
           3}},
         {"TYPE",
-         {[ctx](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult {
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(credis::protocol::encode_simple_string(ctx.store.get_type(args[1])));
           },
           2}},
         {"KEYS",
-         {[ctx](const std::vector<std::string>&, int, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return ProcessResult::normal(credis::protocol::encode_array(ctx.store.keys())); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>&,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(credis::protocol::encode_array(ctx.store.keys()));
+          },
           2}},
         {"XADD",
-         {[ctx](const std::vector<std::string>& args,
-                int,
-                const std::function<void(int, const std::string&)>& send) mutable -> ProcessResult {
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>& send) -> ProcessResult {
               return handle_xadd_with_blocking(ctx, args, send);
           },
           4}},
         {"ZADD",
-         {[ctx](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return ProcessResult::normal(handle_zadd(ctx, args)); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_zadd(ctx, args));
+          },
           4}},
         {"ZRANK",
-         {[ctx](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return ProcessResult::normal(handle_zrank(ctx, args)); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_zrank(ctx, args));
+          },
           3}},
         {"ZRANGE",
-         {[ctx](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return ProcessResult::normal(handle_zrange(ctx, args)); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_zrange(ctx, args));
+          },
           4}},
         {"ZCARD",
-         {[ctx](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return ProcessResult::normal(handle_zcard(ctx, args[1])); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_zcard(ctx, args[1]));
+          },
           2}},
         {"ZSCORE",
-         {[ctx](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return ProcessResult::normal(handle_zscore(ctx, args)); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_zscore(ctx, args));
+          },
           3}},
         {"ZREM",
-         {[ctx](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return ProcessResult::normal(handle_zrem(ctx, args)); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_zrem(ctx, args));
+          },
           3}},
         {"GEOADD",
-         {[ctx](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return ProcessResult::normal(handle_geoadd(ctx, args)); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_geoadd(ctx, args));
+          },
           5}},
         {"GEOPOS",
-         {[ctx](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return ProcessResult::normal(handle_geopos(ctx, args)); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_geopos(ctx, args));
+          },
           3}},
         {"GEODIST",
-         {[ctx](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return ProcessResult::normal(handle_geodist(ctx, args)); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_geodist(ctx, args));
+          },
           4}},
         {"GEOSEARCH",
-         {[ctx](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return ProcessResult::normal(handle_geosearch(ctx, args)); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_geosearch(ctx, args));
+          },
           8}},
         {"XRANGE",
-         {[ctx](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return ProcessResult::normal(handle_xrange(ctx, args)); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_xrange(ctx, args));
+          },
           4}},
         {"XREAD",
-         {[ctx](
-              const std::vector<std::string>& args, int fd, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return handle_xread_with_blocking(ctx, fd, args); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int fd,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return handle_xread_with_blocking(ctx, fd, args);
+          },
           4}},
         {"INFO",
-         {[ctx](const std::vector<std::string>& args, int, const std::function<void(int, const std::string&)>&) mutable
-          -> ProcessResult { return ProcessResult::normal(handle_info(ctx, args)); },
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_info(ctx, args));
+          },
           1}},
     };
 }
@@ -226,6 +312,9 @@ auto CommandHandler::process_with_fd(int fd,
     }
 
     if (cmd == "MULTI") [[unlikely]] {
+        if (transactions_[fd].in_multi) [[unlikely]] {
+            return ProcessResult::normal(credis::protocol::encode_error("ERR MULTI calls can not be nested"));
+        }
         transactions_[fd].in_multi = true;
         return ProcessResult::normal(credis::protocol::encode_simple_string("OK"));
     }
@@ -377,7 +466,7 @@ auto CommandHandler::execute_command(const std::vector<std::string>& args,
         return ProcessResult::normal(credis::protocol::encode_error("ERR wrong number of arguments for '"
                                                                     + credis::util::to_lower(cmd) + "' command"));
     }
-    return it->second.handler(args, fd, send_to_client);
+    return it->second.handler(ctx, args, fd, send_to_client);
 }
 
 template ProcessResult CommandHandler::execute_command<std::function<void(int, const std::string&)>>(

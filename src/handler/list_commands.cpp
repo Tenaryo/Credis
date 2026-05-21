@@ -12,6 +12,10 @@ namespace credis::handler {
 
 auto handle_rpush(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
     const std::string& key = args[1];
+    auto type = ctx.store.get_type(key);
+    if (type != "none" && type != "list") {
+        return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
+    }
     int64_t count = 0;
     for (size_t i = 2; i < args.size(); ++i) {
         count = ctx.store.rpush(key, args[i]);
@@ -21,6 +25,10 @@ auto handle_rpush(CommandContext& ctx, const std::vector<std::string>& args) -> 
 
 auto handle_lpush(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
     const std::string& key = args[1];
+    auto type = ctx.store.get_type(key);
+    if (type != "none" && type != "list") {
+        return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
+    }
     int64_t count = 0;
     for (size_t i = 2; i < args.size(); ++i) {
         count = ctx.store.lpush(key, args[i]);
