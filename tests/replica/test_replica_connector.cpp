@@ -54,6 +54,7 @@ TEST(ReplicaConnectorTest, MixedGetackAndCommands) {
 
     // GETACK should not appear in commands, only PING
     ASSERT_EQ(result.commands.size(), 1);
+    EXPECT_EQ(result.commands[0], ping);
 
     // ACK response should use offset 0 (no commands before first GETACK)
     auto expected_ack = credis::protocol::encode_array({"REPLCONF", "ACK", "0"});
@@ -84,6 +85,8 @@ TEST(ReplicaConnectorTest, MultipleGetacksWithCommands) {
 
         // PING and SET should be in commands, GETACK should not
         ASSERT_EQ(result.commands.size(), 2);
+        EXPECT_EQ(result.commands[0], ping);
+        EXPECT_EQ(result.commands[1], set_foo);
 
         // ACK should reflect offset before current GETACK was processed
         auto expected_ack = credis::protocol::encode_array(

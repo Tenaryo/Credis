@@ -11,7 +11,7 @@ namespace credis::replica {
 
 struct ProcessedBuffer {
     std::string ack_responses;
-    std::vector<std::string_view> commands;
+    std::vector<std::string> commands;
 };
 
 class ReplicaConnector {
