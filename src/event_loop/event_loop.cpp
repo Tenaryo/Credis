@@ -9,7 +9,7 @@
 namespace credis::event_loop {
 
 EventLoop::EventLoop(int max_events) : max_events_(max_events) {
-    epoll_fd_ = epoll_create1(0);
+    epoll_fd_ = epoll_create1(EPOLL_CLOEXEC);
     if (epoll_fd_ < 0) [[unlikely]] {
         LOG_ERROR("Failed to create epoll instance");
     }
@@ -26,7 +26,7 @@ EventLoop::EventLoop(EventLoop&& other) noexcept : epoll_fd_(other.epoll_fd_) {
 }
 
 auto EventLoop::operator=(EventLoop&& other) noexcept -> EventLoop& {
-    if (this != &other) [[likely]] {
+    if (this != &other) {
         if (epoll_fd_ >= 0) [[likely]] {
             close(epoll_fd_);
         }
