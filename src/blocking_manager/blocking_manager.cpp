@@ -69,27 +69,31 @@ auto BlockingManager::get_expired_clients() -> std::vector<int> {
     std::vector<int> expired;
     auto now = std::chrono::steady_clock::now();
 
-    for (auto& [key, queue] : blocked_clients_) {
-        while (!queue.empty()) {
-            auto& client = queue.front();
+    for (auto it = blocked_clients_.begin(); it != blocked_clients_.end();) {
+        auto& queue = it->second;
+        for (auto client_it = queue.begin(); client_it != queue.end();) {
+            auto& client = *client_it;
             if (!client.is_indefinite() && client.deadline <= now) {
                 expired.push_back(client.fd);
                 fd_to_client_.erase(client.fd);
-                queue.pop_front();
+                client_it = queue.erase(client_it);
             } else {
-                break;
+                ++client_it;
             }
         }
+        if (queue.empty()) {
+            it = blocked_clients_.erase(it);
+        } else {
+            ++it;
+        }
     }
-
-    std::erase_if(blocked_clients_, [](const auto& p) { return p.second.empty(); });
 
     return expired;
 }
 
 void BlockingManager::unblock_client(int fd) {
     auto it = fd_to_client_.find(fd);
-    if (it == fd_to_client_.end()) [[unlikely]] {
+    if (it == fd_to_client_.end()) {
         return;
     }
 
@@ -97,7 +101,7 @@ void BlockingManager::unblock_client(int fd) {
     auto queue_it = blocked_clients_.find(key);
     if (queue_it != blocked_clients_.end()) [[likely]] {
         queue_it->second.erase(it->second);
-        if (queue_it->second.empty()) [[unlikely]] {
+        if (queue_it->second.empty()) {
             blocked_clients_.erase(queue_it);
         }
     }
@@ -106,20 +110,16 @@ void BlockingManager::unblock_client(int fd) {
 }
 
 auto BlockingManager::get_next_deadline() const -> std::optional<std::chrono::steady_clock::time_point> {
-    if (blocked_clients_.empty()) [[unlikely]] {
-        return std::nullopt;
-    }
-
     std::optional<std::chrono::steady_clock::time_point> earliest;
     for (const auto& [key, queue] : blocked_clients_) {
-        if (!queue.empty() && !queue.front().is_indefinite()) [[likely]] {
-            auto deadline = queue.front().deadline;
-            if (!earliest || deadline < *earliest) [[likely]] {
-                earliest = deadline;
+        for (const auto& client : queue) {
+            if (!client.is_indefinite()) {
+                if (!earliest || client.deadline < *earliest) {
+                    earliest = client.deadline;
+                }
             }
         }
     }
-
     return earliest;
 }
 
