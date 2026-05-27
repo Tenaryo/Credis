@@ -140,21 +140,95 @@ Subscribed clients can only execute `SUBSCRIBE`, `UNSUBSCRIBE`, `PING`, `QUIT`, 
 ## Architecture
 
 ```
-src/
-  cli/              Command-line argument parser
-  connection/       TCP connection abstraction (read/write buffers)
-  event_loop/       epoll-based I/O event loop
-  handler/          Command routing and execution
-  protocol/         RESP protocol parser and encoder
-  rdb/              RDB file parser (loads snapshots on startup)
-  replica/          Master-replica handshake and command propagation
-  server/           TCP server socket, server config, application runner, ACL manager
-  store/            In-memory data store (String, List, Stream, SortedSet)
-  block_manager/    Blocking operation manager (BLPOP, XREAD BLOCK)
-  pubsub/           Pub/Sub channel manager
-  geo/              Geohash encoding/decoding and Haversine distance
-  util/             Integer parsing, string utilities, SHA-256
+┌─────────────────────────────────────────────────────────────────────┐
+│                             main.cpp                                │
+│                     assemble & wire dependency                       │
+└────────────────┬────────────────┬───────────────────────────────────┘
+                 │                │
+┌────────────────┘                └──────────────────────┐
+v                                                         v
+┌───────────────────────────┐    ┌───────────────────────────┐
+│       event_dispatch      │    │    ReplicaConnector       │
+│  glue: fd routing +       │    │  PING→REPLCONF→PSYNC→RDB │
+│  result dispatch           │    └───────────────────────────┘
+└──┬───┬───┬───┬───┬───┬───┘
+   │   │   │   │   │   │
+   v   v   v   v   v   v
+┌──────┐ ┌──────┐ ┌────────┐ ┌───────────┐ ┌──────────┐ ┌───────────┐
+│Event │ │Conn. │ │Command │ │Blocking   │ │PubSub    │ │Replica    │
+│Loop  │ │Pool  │ │Handler │ │Manager    │ │Manager   │ │Manager    │
+│epoll │ │fd→   │ │cmd     │ │BLPOP/     │ │SUB/PUB   │ │WAIT/      │
+│wait  │ │Conn  │ │table   │ │XREAD BLK  │ │          │ │offset     │
+└──┬───┘ └──┬───┘ └───┬────┘ └─────┬─────┘ └────┬─────┘ └─────┬─────┘
+   │        │         │             │             │              │
+   │   read/write     │        wake_client    push msg     ack tracking
+   │        │         │             │             │              │
+   │        v         v             │             │              │
+   │   ┌────────┐ ┌───────┐         │             │              │
+   │   │TCP fd  │ │ Store │◄────────┘             │              │
+   │   │buffer  │ │key-val│                       │              │
+   │   └────────┘ └───┬───┘                       │              │
+   │                  │                           │              │
+   │         ┌────────┼───────────────────────────┘              │
+   │         │        │                                          │
+   │    ┌────▼───┐ ┌──▼────┐                                     │
+   │    │RespEnc │ │RespPar│                                     │
+   │    │(+OK)   │ │(*3)   │                                     │
+   │    └────┬───┘ └───────┘                                     │
+   │         │                                                   │
+   └─────────┼───────────────────────────────────────────────────┘
+             │
+             v
+        ┌─────────┐
+        │ Client  │
+        └─────────┘
 ```
+
+### Data Flow
+
+```
+Request (main path):
+  Client → TCP → Connection.read() → RESP parse → CommandHandler
+  → Store (CRUD) → RESP encode → Connection.send() → Client
+
+Blocking (BLPOP / XREAD BLOCK):
+  BLPOP → BlockingManager.block() → return ProcessResult::Block
+  RPUSH → Store.rpush → BlockingManager.wake() → send to blocked fd
+
+Pub/Sub:
+  SUBSCRIBE → PubSubManager (fd→channels, channel→fds)
+  PUBLISH → PubSubManager → send to each subscriber fd
+
+Replication:
+  Master: SET → propagate → ReplicaManager → send to all replica fds
+  Replica: PING→REPLCONF→PSYNC→RDB → ReplicaConnector
+  WAIT:    ReplicaManager.start_wait → process_ack → reply with count
+
+Event Loop:
+  epoll_wait → dispatch_event(fd) → 4-way branch:
+    listener fd?  → accept → add_fd
+    replica fd?   → process_ack
+    master fd?    → process_propagated
+    client fd?    → read → process → send → consume
+```
+
+### Modules
+
+| Module | Role | Depends On |
+|--------|------|------------|
+| `event_loop/` | epoll-based I/O event loop. Injects `on_event` and `get_timeout` callbacks for zero dependency on business logic. | — |
+| `connection/` | TCP connection abstraction with dynamic read buffer (auto-grow to 512 MB) and non-blocking send. `ConnectionPool` maps fd → Connection. | — |
+| `store/` | In-memory data store. `Value = variant<String, List, Stream, SortedSet>`. Lazy expiration, optimistic locking (`version_counter_`) for WATCH/EXEC. | `util/` |
+| `protocol/` | RESP v2 parser (`parse_one` with consumed tracking for pipelining) and encoder. | `store/` |
+| `handler/` | Command routing. `CommandHandler` owns a `command_table_` (cmd → handler), dispatches via `execute_command`. Dependencies injected through `CommandContext`. | `store/`, `protocol/`, `blocking_manager/`, `pubsub/` |
+| `blocking_manager/` | O(1) dual-index blocking queue for BLPOP and XREAD BLOCK. `fd↔key` bidirectional lookup with timeout management. | — |
+| `pubsub/` | Pub/Sub channel manager with dual index (fd→channels, channel→fds) and subscribed-mode command restriction. | `util/` |
+| `replica/` | `ReplicaManager` tracks per-replica acknowledgment offsets for WAIT. `ReplicaConnector` performs full handshake (PING→REPLCONF→PSYNC→RDB). | `protocol/`, `server/` |
+| `rdb/` | RDB file parser supporting encoded strings, expire timestamps, and multiple key-value pairs. | `store/` |
+| `geo/` | Geohash encoding/decoding and Haversine distance calculation for Geo commands. | — |
+| `server/` | `TcpListener` (non-blocking socket), `ServerConfig`, `AclManager` (SHA-256 password auth), `event_dispatch` (I/O glue layer). | `handler/`, `connection/`, `event_loop/`, `replica/` |
+| `cli/` | Command-line argument parser (`--port`, `--replicaof`, `--dir`, `--dbfilename`). | `server/` |
+| `util/` | `Error` type, `Logger`, `SHA-256`, `parse_int<T>`/`parse_double`, transparent string hashing. | — |
 
 ### Key Design Decisions
 
@@ -320,11 +394,11 @@ Near-identical scaling curve to Redis, saturating at ~322K ops/s.
 
 ### Current Limitations
 
-- No pipeline support (only first command per read is processed)
 - Blocking write (`send_data` is synchronous)
 - No persistence (RDB load only, no SAVE/BGSAVE/AOF)
 - Single-threaded (no multi-core utilization)
 - Missing DEL, Hash, Set types
+- Graceful shutdown is basic (TODO: drain requests, flush RDB/AOF, notify replicas)
 
 ## API Documentation
 
