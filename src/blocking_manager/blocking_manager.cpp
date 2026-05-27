@@ -21,7 +21,7 @@ void BlockingManager::block_client_for_stream(int fd,
 
 auto BlockingManager::wake_client(const std::string& key) -> std::optional<BlockedClient> {
     auto it = blocked_clients_.find(key);
-    if (it == blocked_clients_.end() || it->second.empty()) [[unlikely]] {
+    if (it == blocked_clients_.end() || it->second.empty()) {
         return std::nullopt;
     }
 
@@ -29,7 +29,7 @@ auto BlockingManager::wake_client(const std::string& key) -> std::optional<Block
     it->second.pop_front();
     fd_to_client_.erase(client.fd);
 
-    if (it->second.empty()) [[unlikely]] {
+    if (it->second.empty()) {
         blocked_clients_.erase(it);
     }
 
@@ -39,18 +39,22 @@ auto BlockingManager::wake_client(const std::string& key) -> std::optional<Block
 auto BlockingManager::wake_client_for_stream(const std::string& key,
                                              const std::string& new_entry_id) -> std::optional<BlockedClient> {
     auto it = blocked_clients_.find(key);
-    if (it == blocked_clients_.end() || it->second.empty()) [[unlikely]] {
+    if (it == blocked_clients_.end() || it->second.empty()) {
         return std::nullopt;
     }
 
     auto new_sid = credis::protocol::StreamId::parse(new_entry_id);
+    if (!new_sid) [[unlikely]] {
+        return std::nullopt;
+    }
+
     for (auto client_it = it->second.begin(); client_it != it->second.end(); ++client_it) {
-        if (new_sid && client_it->last_id < *new_sid) [[likely]] {
+        if (client_it->last_id < *new_sid) {
             BlockedClient client = std::move(*client_it);
             it->second.erase(client_it);
             fd_to_client_.erase(client.fd);
 
-            if (it->second.empty()) [[unlikely]] {
+            if (it->second.empty()) {
                 blocked_clients_.erase(it);
             }
 
