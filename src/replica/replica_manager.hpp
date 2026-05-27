@@ -56,9 +56,6 @@ class ReplicaManager {
         return wait_state_.has_value();
     }
     [[nodiscard]] auto next_deadline() const -> std::optional<std::chrono::steady_clock::time_point>;
-    [[nodiscard]] auto wait_client_fd() const -> int {
-        return wait_state_ ? wait_state_->client_fd : -1;
-    }
     [[nodiscard]] auto offset() const -> int64_t {
         return master_offset_;
     }

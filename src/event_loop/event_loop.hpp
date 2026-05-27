@@ -32,10 +32,6 @@ class EventLoop {
     void stop() {
         running_ = false;
     }
-
-    [[nodiscard]] auto fd() const noexcept -> int {
-        return epoll_fd_;
-    }
 };
 
 } // namespace credis::event_loop
