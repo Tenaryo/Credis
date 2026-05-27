@@ -18,7 +18,7 @@ Connection::Connection(Connection&& other) noexcept
 }
 
 auto Connection::operator=(Connection&& other) noexcept -> Connection& {
-    if (this != &other) [[likely]] {
+    if (this != &other) {
         close();
         fd_ = other.fd_;
         buffer_ = std::move(other.buffer_);

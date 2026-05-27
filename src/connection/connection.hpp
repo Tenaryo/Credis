@@ -24,9 +24,11 @@ class Connection {
     [[nodiscard]] auto fd() const noexcept -> int {
         return fd_;
     }
-    void close();
     auto handle_read() -> std::optional<std::string_view>;
     void send_data(const char* data, size_t len) const;
+
+  private:
+    void close();
 
     static constexpr size_t kInitialBufferSize = 4096;
     static constexpr size_t kMaxBufferSize = 512 * 1024 * 1024;
