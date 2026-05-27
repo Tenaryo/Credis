@@ -97,11 +97,13 @@ TEST(E2EPubSub, SubscribeAndReceiveMessage) {
 
     auto result = handler.process_with_fd(2, make_resp({"PUBLISH", "news", "hello"}), send_fn);
 
-    ASSERT_EQ(delivered.size(), 1);
+    ASSERT_EQ(delivered.size(), 2);
     ASSERT_TRUE(delivered.contains(1));
 
+    auto subscribe_msg = "*3\r\n$9\r\nsubscribe\r\n$4\r\nnews\r\n:1\r\n";
     auto expected_msg = "*3\r\n$7\r\nmessage\r\n$4\r\nnews\r\n$5\r\nhello\r\n";
-    EXPECT_EQ(delivered[1][0], expected_msg);
+    EXPECT_EQ(delivered[1][0], subscribe_msg);
+    EXPECT_EQ(delivered[1][1], expected_msg);
 
     auto* normal = std::get_if<handler::ProcessResult::Normal>(&result.state);
     ASSERT_NE(normal, nullptr);

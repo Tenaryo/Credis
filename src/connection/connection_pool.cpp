@@ -18,6 +18,14 @@ auto ConnectionPool::read_from(int fd) -> std::optional<std::string_view> {
     return it->second->handle_read();
 }
 
+void ConnectionPool::consume(int fd, size_t n) {
+    auto it = connections_.find(fd);
+    if (it == connections_.end()) [[unlikely]] {
+        return;
+    }
+    it->second->consume(n);
+}
+
 void ConnectionPool::send_to(int fd, std::string_view response) {
     auto it = connections_.find(fd);
     if (it == connections_.end()) [[unlikely]] {

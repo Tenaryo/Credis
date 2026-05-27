@@ -68,3 +68,39 @@ TEST_F(HandlerStringTest, Echo) {
     auto response = handler_.process("*2\r\n$4\r\nECHO\r\n$5\r\nhello\r\n");
     EXPECT_EQ(response, "$5\r\nhello\r\n");
 }
+
+TEST_F(HandlerStringTest, PipelineMultipleCommands) {
+    auto input = "*3\r\n$3\r\nSET\r\n$1\r\na\r\n$1\r\n1\r\n"
+                 "*3\r\n$3\r\nSET\r\n$1\r\nb\r\n$1\r\n2\r\n"
+                 "*3\r\n$3\r\nSET\r\n$1\r\nc\r\n$1\r\n3\r\n";
+
+    std::vector<std::string> sent;
+    auto send_fn = [&](int, const std::string& msg) { sent.push_back(msg); };
+
+    auto result = handler_.process_with_fd(1, input, send_fn);
+
+    ASSERT_EQ(sent.size(), 3);
+    EXPECT_EQ(sent[0], "+OK\r\n");
+    EXPECT_EQ(sent[1], "+OK\r\n");
+    EXPECT_EQ(sent[2], "+OK\r\n");
+    EXPECT_GT(result.consumed, 0u);
+
+    EXPECT_EQ(handler_.process("*2\r\n$3\r\nGET\r\n$1\r\na\r\n"), "$1\r\n1\r\n");
+    EXPECT_EQ(handler_.process("*2\r\n$3\r\nGET\r\n$1\r\nb\r\n"), "$1\r\n2\r\n");
+    EXPECT_EQ(handler_.process("*2\r\n$3\r\nGET\r\n$1\r\nc\r\n"), "$1\r\n3\r\n");
+}
+
+TEST_F(HandlerStringTest, PipelineConsumePartial) {
+    std::string_view input = "*3\r\n$3\r\nSET\r\n$1\r\na\r\n$1\r\n1\r\n"
+                             "*3\r\n$3\r\nSET\r\n$1\r\nb\r\n$1\r\n2\r\n";
+
+    std::vector<std::string> sent;
+    auto send_fn = [&](int, const std::string& msg) { sent.push_back(msg); };
+
+    auto result = handler_.process_with_fd(1, input, send_fn);
+
+    ASSERT_EQ(sent.size(), 2);
+    EXPECT_EQ(result.consumed, input.size());
+    EXPECT_EQ(handler_.process("*2\r\n$3\r\nGET\r\n$1\r\na\r\n"), "$1\r\n1\r\n");
+    EXPECT_EQ(handler_.process("*2\r\n$3\r\nGET\r\n$1\r\nb\r\n"), "$1\r\n2\r\n");
+}

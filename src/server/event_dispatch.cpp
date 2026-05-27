@@ -68,6 +68,7 @@ void dispatch_event(int fd, EventContext& ctx) {
 
     auto result = ctx.handler.process_with_fd(
         fd, *data, [&ctx](int client_fd, const std::string& resp) { ctx.conn_pool.send_to(client_fd, resp); });
+    ctx.conn_pool.consume(fd, result.consumed);
 
     using credis::handler::ProcessResult;
 
@@ -88,14 +89,9 @@ void dispatch_event(int fd, EventContext& ctx) {
                 ctx.conn_pool.send_to(rfd, getack);
             }
         }
-    } else if (!std::holds_alternative<ProcessResult::Block>(result.state)) [[likely]] {
-        std::string resp;
-        if (std::holds_alternative<ProcessResult::Normal>(result.state)) [[likely]] {
-            resp = std::get<ProcessResult::Normal>(result.state).response;
-        } else [[unlikely]] {
-            resp = std::get<ProcessResult::ReplicaHandshake>(result.state).response;
-        }
-        ctx.conn_pool.send_to(fd, resp);
+    } else if (std::holds_alternative<ProcessResult::ReplicaHandshake>(result.state)) [[unlikely]] {
+        auto& hs = std::get<ProcessResult::ReplicaHandshake>(result.state);
+        ctx.conn_pool.send_to(fd, hs.response);
     }
 
     if (std::holds_alternative<ProcessResult::ReplicaHandshake>(result.state)) [[unlikely]] {

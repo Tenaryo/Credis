@@ -283,12 +283,45 @@ auto CommandHandler::process(std::string_view input) -> std::string {
 auto CommandHandler::process_with_fd(int fd,
                                      std::string_view input,
                                      std::function<void(int, const std::string&)> send_to_client) -> ProcessResult {
-    auto parsed = credis::protocol::parse_resp(input);
-    if (!parsed) [[unlikely]] {
-        return ProcessResult::normal(credis::protocol::encode_error("ERR " + parsed.error().to_string()));
+    size_t total_consumed = 0;
+    ProcessResult result = ProcessResult::normal("");
+
+    while (total_consumed < input.size()) {
+        auto parsed = credis::protocol::parse_one(input.substr(total_consumed));
+        if (!parsed) [[unlikely]] {
+            break;
+        }
+
+        total_consumed += parsed->consumed;
+
+        auto cmd_result = process_single_command(fd, std::move(parsed->args), send_to_client);
+
+        if (!cmd_result.propagate_args.empty()) [[unlikely]] {
+            result.propagate_args.insert(result.propagate_args.end(),
+                                         std::make_move_iterator(cmd_result.propagate_args.begin()),
+                                         std::make_move_iterator(cmd_result.propagate_args.end()));
+        }
+
+        if (!std::holds_alternative<ProcessResult::Normal>(cmd_result.state)) [[unlikely]] {
+            cmd_result.propagate_args = std::move(result.propagate_args);
+            cmd_result.consumed = total_consumed;
+            return cmd_result;
+        }
+
+        if (send_to_client) [[likely]] {
+            send_to_client(fd, std::get<ProcessResult::Normal>(cmd_result.state).response);
+        }
+        result.state = std::move(cmd_result.state);
     }
 
-    auto& args = *parsed;
+    result.consumed = total_consumed;
+    return result;
+}
+
+auto CommandHandler::process_single_command(
+    int fd,
+    std::vector<std::string> args,
+    const std::function<void(int, const std::string&)>& send_to_client) -> ProcessResult {
     if (args.empty()) [[unlikely]] {
         return ProcessResult::normal(credis::protocol::encode_error("ERR empty command"));
     }
