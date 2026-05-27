@@ -4,17 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![C++23](https://img.shields.io/badge/C%2B%2B-23-blue.svg)](https://en.cppreference.com/w/cpp/23)
 
-A Redis-compatible server written in C++23 (~3,600 LOC). Zero external dependencies — only the standard library and POSIX APIs.
-
-**Highlights:**
-- epoll-based single-threaded event loop
-- RESP v2 pipeline support (accumulating buffer + `parse_one` loop)
-- Master-replica replication with WAIT acknowledgment tracking
-- Pub/Sub, Streams, Sorted Sets, Geo commands
-- ACL authentication (SHA-256 hashed passwords)
-- Optimistic locking transactions (WATCH/MULTI/EXEC)
-- Blocking operations (BLPOP, XREAD BLOCK) with O(1) dual-index wake queue
-- Outperforms Redis 6.0 on most benchmarks, 291 KB binary
+A Redis 7.0-compatible server written from scratch in C++23. 3,600 lines, zero dependencies, 291 KB binary. Outperforms Redis 6.0 by up to 10.6% in throughput with 38% lower tail latency. Implements the full single-threaded epoll reactor, RESP v2 pipelining, master-replica replication with WAIT acknowledgment, blocking commands with O(1) dual-index wake queue, and optimistic locking transactions — all with no third-party libraries.
 
 ## Dependencies
 
