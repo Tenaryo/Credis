@@ -54,20 +54,20 @@ void EventLoop::run(
                     const std::function<std::chrono::milliseconds()>& get_timeout) const {
     std::vector<struct epoll_event> events(static_cast<size_t>(max_events_));
 
-    while (running_) [[likely]] {
+    while (running_) {
         auto timeout_ms = get_timeout();
         int timeout = timeout_ms.count() < 0 ? -1 : static_cast<int>(timeout_ms.count());
 
         int n = epoll_wait(epoll_fd_, events.data(), max_events_, timeout);
         if (n < 0) [[unlikely]] {
-            if (errno == EINTR) [[likely]] {
+            if (errno == EINTR) {
                 continue;
             }
             LOG_ERROR("epoll_wait failed");
             break;
         }
 
-        for (int i = 0; i < n; ++i) [[likely]] {
+        for (int i = 0; i < n; ++i) {
             int fd = events[i].data.fd;
             on_event(fd);
         }
