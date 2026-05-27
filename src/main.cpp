@@ -132,7 +132,6 @@ auto main(int argc, char* argv[]) -> int {
     std::signal(SIGTERM, [](int) { if (g_loop) g_loop->stop(); });
 
     loop.run(
-        listener->fd(),
         [&ctx](int fd) { credis::server::dispatch_event(fd, ctx); },
         [&ctx]() -> std::chrono::milliseconds { return credis::server::compute_timeout(ctx); });
     return 0;

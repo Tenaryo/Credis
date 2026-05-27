@@ -49,7 +49,7 @@ void EventLoop::remove_fd(int fd) const {
     epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr);
 }
 
-void EventLoop::run(int /* server_fd */,
+void EventLoop::run(
                     const std::function<void(int)>& on_event,
                     const std::function<std::chrono::milliseconds()>& get_timeout) const {
     std::vector<struct epoll_event> events(static_cast<size_t>(max_events_));
