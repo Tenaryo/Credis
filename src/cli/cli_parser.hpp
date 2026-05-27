@@ -9,9 +9,9 @@ namespace credis::cli {
 
 inline auto parse_port(int argc, char* argv[]) -> int {
     for (int i = 1; i < argc; ++i) {
-        if (std::string_view(argv[i]) == "--port" && i + 1 < argc) [[likely]] {
+        if (std::string_view(argv[i]) == "--port" && i + 1 < argc) {
             auto port = credis::util::parse_int<int>(argv[i + 1]);
-            if (port) [[likely]] {
+            if (port) {
                 return *port;
             }
         }
@@ -21,12 +21,12 @@ inline auto parse_port(int argc, char* argv[]) -> int {
 
 inline auto parse_replicaof(int argc, char* argv[]) -> std::optional<credis::server::ReplicaConfig> {
     for (int i = 1; i < argc; ++i) {
-        if (std::string_view(argv[i]) == "--replicaof" && i + 1 < argc) [[likely]] {
+        if (std::string_view(argv[i]) == "--replicaof" && i + 1 < argc) {
             std::string val = argv[i + 1];
             auto space = val.find(' ');
-            if (space != std::string::npos) [[likely]] {
+            if (space != std::string::npos) {
                 auto port = credis::util::parse_int<int>(val.substr(space + 1));
-                if (port) [[likely]] {
+                if (port) {
                     return credis::server::ReplicaConfig{val.substr(0, space), *port};
                 }
             }
@@ -37,7 +37,7 @@ inline auto parse_replicaof(int argc, char* argv[]) -> std::optional<credis::ser
 
 inline auto parse_dir(int argc, char* argv[]) -> std::string {
     for (int i = 1; i < argc; ++i) {
-        if (std::string_view(argv[i]) == "--dir" && i + 1 < argc) [[likely]] {
+        if (std::string_view(argv[i]) == "--dir" && i + 1 < argc) {
             return argv[i + 1];
         }
     }
@@ -46,7 +46,7 @@ inline auto parse_dir(int argc, char* argv[]) -> std::string {
 
 inline auto parse_dbfilename(int argc, char* argv[]) -> std::string {
     for (int i = 1; i < argc; ++i) {
-        if (std::string_view(argv[i]) == "--dbfilename" && i + 1 < argc) [[likely]] {
+        if (std::string_view(argv[i]) == "--dbfilename" && i + 1 < argc) {
             return argv[i + 1];
         }
     }
