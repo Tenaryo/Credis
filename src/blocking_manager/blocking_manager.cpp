@@ -127,8 +127,4 @@ auto BlockingManager::is_blocked(int fd) const -> bool {
     return fd_to_client_.contains(fd);
 }
 
-auto BlockingManager::blocked_count() const -> size_t {
-    return fd_to_client_.size();
-}
-
 } // namespace credis::blocking

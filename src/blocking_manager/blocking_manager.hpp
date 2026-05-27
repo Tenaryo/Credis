@@ -39,7 +39,6 @@ class BlockingManager {
     void unblock_client(int fd);
     auto get_next_deadline() const -> std::optional<std::chrono::steady_clock::time_point>;
     auto is_blocked(int fd) const -> bool;
-    auto blocked_count() const -> size_t;
 };
 
 } // namespace credis::blocking
