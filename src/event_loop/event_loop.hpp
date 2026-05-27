@@ -28,8 +28,7 @@ class EventLoop {
     void run(
         int server_fd,
         const std::function<void(int)>& on_event,
-        const std::function<std::chrono::milliseconds()>& get_timeout
-        = [] { return std::chrono::milliseconds(-1); }) const;
+        const std::function<std::chrono::milliseconds()>& get_timeout) const;
     void stop() {
         running_ = false;
     }
