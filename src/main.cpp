@@ -3,6 +3,8 @@
 #include <iostream>
 #include <optional>
 
+#include <csignal>
+
 #include "blocking_manager/blocking_manager.hpp"
 #include "cli/cli_parser.hpp"
 #include "connection/connection_pool.hpp"
@@ -19,6 +21,8 @@
 #include "util/logger.hpp"
 
 namespace {
+
+credis::event_loop::EventLoop* g_loop = nullptr;
 
 void load_rdb(credis::store::Store& store, const credis::server::ServerConfig& config) {
     if (config.dir.empty() || config.dbfilename.empty()) [[likely]] {
@@ -120,6 +124,13 @@ auto main(int argc, char* argv[]) -> int {
         *listener, loop, handler, conn_pool, replica_mgr, replica_conn, blocking, pubsub};
 
     // 10. Run event loop
+    // TODO: graceful shutdown — drain in-flight requests, flush RDB/AOF, notify replicas
+    // before returning from run(). Currently SIGINT/SIGTERM just stops the event loop;
+    // RAII destructors clean up fds and connections.
+    g_loop = &loop;
+    std::signal(SIGINT, [](int) { if (g_loop) g_loop->stop(); });
+    std::signal(SIGTERM, [](int) { if (g_loop) g_loop->stop(); });
+
     loop.run(
         listener->fd(),
         [&ctx](int fd) { credis::server::dispatch_event(fd, ctx); },
