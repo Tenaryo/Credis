@@ -97,8 +97,9 @@ auto encode_bulk_string(std::string_view s) -> std::string {
     return result;
 }
 
-auto encode_null_bulk_string() -> std::string {
-    return "$-1\r\n";
+auto encode_null_bulk_string() -> const std::string& {
+    static const std::string kNullBulk = "$-1\r\n";
+    return kNullBulk;
 }
 
 auto encode_integer(int64_t n) -> std::string {
@@ -201,8 +202,9 @@ auto encode_error(std::string_view s) -> std::string {
     return result;
 }
 
-auto encode_null_array() -> std::string {
-    return "*-1\r\n";
+auto encode_null_array() -> const std::string& {
+    static const std::string kNullArray = "*-1\r\n";
+    return kNullArray;
 }
 
 auto encode_stream_entries(
