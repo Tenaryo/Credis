@@ -28,13 +28,13 @@ class PubSubManager {
         }
         if (auto cit = channel_subscribers_.find(channel); cit != channel_subscribers_.end()) [[likely]] {
             cit->second.erase(fd);
-            if (cit->second.empty()) [[unlikely]] {
+            if (cit->second.empty()) {
                 channel_subscribers_.erase(cit);
             }
         }
         it->second.erase(std::string(channel));
         size_t remaining = it->second.size();
-        if (remaining == 0) [[unlikely]] {
+        if (remaining == 0) {
             subscriptions_.erase(it);
         }
         return remaining;
@@ -42,13 +42,13 @@ class PubSubManager {
 
     void unsubscribe(int fd) {
         auto it = subscriptions_.find(fd);
-        if (it == subscriptions_.end()) [[unlikely]] {
+        if (it == subscriptions_.end()) {
             return;
         }
         for (const auto& channel : it->second) {
             if (auto cit = channel_subscribers_.find(channel); cit != channel_subscribers_.end()) [[likely]] {
                 cit->second.erase(fd);
-                if (cit->second.empty()) [[unlikely]] {
+                if (cit->second.empty()) {
                     channel_subscribers_.erase(cit);
                 }
             }
