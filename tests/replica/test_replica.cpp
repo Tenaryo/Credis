@@ -6,7 +6,7 @@
 
 #include "handler/command_handler.hpp"
 #include "handler/process_result.hpp"
-#include "protocol/resp_parser.hpp"
+#include "protocol/resp_codec.hpp"
 #include "replica/replica_manager.hpp"
 #include "server/server_config.hpp"
 #include "store/store.hpp"

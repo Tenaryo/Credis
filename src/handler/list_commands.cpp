@@ -4,7 +4,7 @@
 #include <chrono>
 
 #include "blocking_manager/blocking_manager.hpp"
-#include "protocol/resp_parser.hpp"
+#include "protocol/resp_codec.hpp"
 #include "store/store.hpp"
 #include "util/parse.hpp"
 

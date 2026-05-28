@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-#include "protocol/resp_parser.hpp"
+#include "protocol/resp_codec.hpp"
 #include "pubsub/pubsub_manager.hpp"
 
 namespace credis::handler {

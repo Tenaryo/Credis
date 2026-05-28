@@ -59,7 +59,7 @@ target_link_libraries(credis_pubsub INTERFACE credis_util)
 
 add_library(
     credis_protocol STATIC
-    src/protocol/resp_parser.cpp
+    src/protocol/resp_codec.cpp
 )
 target_include_directories(credis_protocol PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(credis_protocol PUBLIC credis_store)

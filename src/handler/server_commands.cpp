@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include "protocol/resp_parser.hpp"
+#include "protocol/resp_codec.hpp"
 #include "pubsub/pubsub_manager.hpp"
 #include "rdb/rdb_constants.hpp"
 #include "server/acl_manager.hpp"

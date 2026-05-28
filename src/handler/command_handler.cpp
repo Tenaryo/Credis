@@ -13,7 +13,7 @@
 #include "handler/stream_commands.hpp"
 #include "handler/string_commands.hpp"
 #include "handler/zset_commands.hpp"
-#include "protocol/resp_parser.hpp"
+#include "protocol/resp_codec.hpp"
 #include "pubsub/pubsub_manager.hpp"
 #include "store/store.hpp"
 #include "util/string_utils.hpp"

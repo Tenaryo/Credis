@@ -8,7 +8,7 @@
 #include <cstring>
 #include <memory>
 
-#include "protocol/resp_parser.hpp"
+#include "protocol/resp_codec.hpp"
 #include "server/server_config.hpp"
 #include "util/parse.hpp"
 #include "util/string_utils.hpp"

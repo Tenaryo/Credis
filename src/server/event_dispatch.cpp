@@ -6,7 +6,7 @@
 #include "connection/connection_pool.hpp"
 #include "event_loop/event_loop.hpp"
 #include "handler/command_handler.hpp"
-#include "protocol/resp_parser.hpp"
+#include "protocol/resp_codec.hpp"
 #include "pubsub/pubsub_manager.hpp"
 #include "replica/replica_connector.hpp"
 #include "replica/replica_manager.hpp"

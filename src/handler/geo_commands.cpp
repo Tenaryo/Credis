@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "geo/geo_score.hpp"
-#include "protocol/resp_parser.hpp"
+#include "protocol/resp_codec.hpp"
 #include "store/store.hpp"
 #include "util/parse.hpp"
 #include "util/string_utils.hpp"

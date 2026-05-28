@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-#include "protocol/resp_parser.hpp"
+#include "protocol/resp_codec.hpp"
 #include "util/string_utils.hpp"
 
 namespace credis::replica {

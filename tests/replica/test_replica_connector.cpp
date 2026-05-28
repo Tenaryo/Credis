@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include "protocol/resp_parser.hpp"
+#include "protocol/resp_codec.hpp"
 #include "replica/replica_connector.hpp"
 
 namespace {

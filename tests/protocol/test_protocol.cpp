@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "protocol/resp_parser.hpp"
+#include "protocol/resp_codec.hpp"
 
 using namespace credis::protocol;
 
