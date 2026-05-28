@@ -133,6 +133,8 @@ class Store {
     auto llen(std::string_view key) -> int64_t;
     auto lpop(std::string_view key) -> std::optional<std::string>;
     auto lpop(std::string_view key, int64_t count) -> std::vector<std::string>;
+    auto rpop(std::string_view key) -> std::optional<std::string>;
+    auto rpop(std::string_view key, int64_t count) -> std::vector<std::string>;
     auto lrange(std::string_view key, int64_t start, int64_t stop) -> std::vector<std::string>;
 
     auto xadd(std::string key,

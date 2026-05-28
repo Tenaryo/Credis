@@ -52,3 +52,15 @@ TEST_F(HandlerListTest, LpopEmptyList) {
     auto response = handler_.process("*2\r\n$4\r\nLPOP\r\n$8\r\nemptylst\r\n");
     EXPECT_EQ(response, "$-1\r\n");
 }
+
+TEST_F(HandlerListTest, Rpop) {
+    handler_.process("*3\r\n$5\r\nRPUSH\r\n$4\r\nlist\r\n$1\r\na\r\n");
+    handler_.process("*3\r\n$5\r\nRPUSH\r\n$4\r\nlist\r\n$1\r\nb\r\n");
+    auto response = handler_.process("*2\r\n$4\r\nRPOP\r\n$4\r\nlist\r\n");
+    EXPECT_EQ(response, "$1\r\nb\r\n");
+}
+
+TEST_F(HandlerListTest, RpopEmptyList) {
+    auto response = handler_.process("*2\r\n$4\r\nRPOP\r\n$8\r\nemptylst\r\n");
+    EXPECT_EQ(response, "$-1\r\n");
+}

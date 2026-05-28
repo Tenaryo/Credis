@@ -57,4 +57,17 @@ auto handle_incr(CommandContext& ctx, const std::string& key) -> std::string {
     return credis::protocol::encode_integer(*result);
 }
 
+auto handle_mset(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
+    if ((args.size() - 1) % 2 != 0) {
+        return credis::protocol::encode_error("ERR wrong number of arguments for MSET");
+    }
+    for (size_t i = 1; i < args.size(); i += 2) {
+        if (!ctx.store.key_is_absent_or_holds<credis::store::String>(args[i])) {
+            return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
+        }
+        ctx.store.set(args[i], args[i + 1]);
+    }
+    return credis::protocol::kRespOk;
+}
+
 } // namespace credis::handler

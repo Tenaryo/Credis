@@ -104,3 +104,17 @@ TEST_F(HandlerStringTest, PipelineConsumePartial) {
     EXPECT_EQ(handler_.process("*2\r\n$3\r\nGET\r\n$1\r\na\r\n"), "$1\r\n1\r\n");
     EXPECT_EQ(handler_.process("*2\r\n$3\r\nGET\r\n$1\r\nb\r\n"), "$1\r\n2\r\n");
 }
+
+TEST_F(HandlerStringTest, MsetOk) {
+    auto input = "*5\r\n$4\r\nMSET\r\n$1\r\na\r\n$1\r\n1\r\n$1\r\nb\r\n$1\r\n2\r\n";
+    auto response = handler_.process(input);
+    EXPECT_EQ(response, "+OK\r\n");
+    EXPECT_EQ(handler_.process("*2\r\n$3\r\nGET\r\n$1\r\na\r\n"), "$1\r\n1\r\n");
+    EXPECT_EQ(handler_.process("*2\r\n$3\r\nGET\r\n$1\r\nb\r\n"), "$1\r\n2\r\n");
+}
+
+TEST_F(HandlerStringTest, MsetWrongNumberOfArgs) {
+    auto input = "*4\r\n$4\r\nMSET\r\n$1\r\na\r\n$1\r\n1\r\n$1\r\nb\r\n";
+    auto response = handler_.process(input);
+    EXPECT_TRUE(response.starts_with("-ERR"));
+}

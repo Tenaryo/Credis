@@ -166,6 +166,40 @@ auto Store::lpop(std::string_view key, int64_t count) -> std::vector<std::string
     return result;
 }
 
+auto Store::rpop(std::string_view key) -> std::optional<std::string> {
+    touch_key(key);
+    auto* list = get_list(key);
+    if ((list == nullptr) || list->empty()) {
+        return std::nullopt;
+    }
+    auto val = std::move(list->back());
+    list->pop_back();
+    return val;
+}
+
+auto Store::rpop(std::string_view key, int64_t count) -> std::vector<std::string> {
+    touch_key(key);
+    std::vector<std::string> result;
+    auto* list = get_list(key);
+    if ((list == nullptr) || list->empty()) {
+        return result;
+    }
+
+    if (count <= 0) {
+        return result;
+    }
+
+    int64_t actual_count = std::min(count, static_cast<int64_t>(list->size()));
+    result.reserve(static_cast<size_t>(actual_count));
+
+    for (int64_t i = 0; i < actual_count; ++i) {
+        result.push_back(std::move(list->back()));
+        list->pop_back();
+    }
+
+    return result;
+}
+
 auto Store::lrange(std::string_view key, int64_t start, int64_t stop) -> std::vector<std::string> {
     std::vector<std::string> result;
     auto* list = get_list(key);

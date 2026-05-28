@@ -59,6 +59,31 @@ auto handle_lpop(CommandContext& ctx, const std::vector<std::string>& args) -> s
     return credis::protocol::encode_array(elements);
 }
 
+auto handle_rpop(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
+    const std::string& key = args[1];
+
+    if (args.size() == 2) {
+        auto elements = ctx.store.rpop(key, 1);
+        if (elements.empty()) {
+            return credis::protocol::encode_null_bulk_string();
+        }
+        return credis::protocol::encode_bulk_string(elements[0]);
+    }
+
+    auto parsed = credis::util::parse_int<int64_t>(args[2]);
+    if (!parsed) {
+        return credis::protocol::encode_error("ERR value is not an integer or out of range");
+    }
+    int64_t count = *parsed;
+
+    if (count <= 0) {
+        return credis::protocol::encode_array({});
+    }
+
+    auto elements = ctx.store.rpop(key, count);
+    return credis::protocol::encode_array(elements);
+}
+
 auto handle_lrange(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
     const std::string& key = args[1];
 

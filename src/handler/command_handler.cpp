@@ -24,7 +24,7 @@ using namespace std::string_view_literals;
 
 auto is_write_command(std::string_view cmd) -> bool {
     static constexpr auto kWriteCommands = std::array{
-        "SET"sv, "DEL"sv, "INCR"sv, "RPUSH"sv, "LPUSH"sv, "LPOP"sv, "XADD"sv, "ZADD"sv, "ZREM"sv, "GEOADD"sv};
+        "SET"sv, "DEL"sv, "INCR"sv, "RPUSH"sv, "LPUSH"sv, "LPOP"sv, "RPOP"sv, "XADD"sv, "ZADD"sv, "ZREM"sv, "GEOADD"sv};
     return std::ranges::find(kWriteCommands, cmd) != kWriteCommands.end();
 }
 
@@ -69,6 +69,14 @@ void CommandHandler::register_commands() {
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_set(ctx, args));
+           },
+           3}},
+        {"MSET",
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_mset(ctx, args));
           },
           3}},
         {"GET",
@@ -123,6 +131,14 @@ void CommandHandler::register_commands() {
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_lpop(ctx, args));
+           },
+           2}},
+        {"RPOP",
+         {[](CommandContext& ctx,
+             const std::vector<std::string>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_rpop(ctx, args));
           },
           2}},
         {"LRANGE",

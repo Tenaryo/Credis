@@ -11,6 +11,7 @@ namespace credis::handler {
 auto handle_rpush(CommandContext& ctx, const std::vector<std::string>& args) -> std::string;
 auto handle_lpush(CommandContext& ctx, const std::vector<std::string>& args) -> std::string;
 auto handle_lpop(CommandContext& ctx, const std::vector<std::string>& args) -> std::string;
+auto handle_rpop(CommandContext& ctx, const std::vector<std::string>& args) -> std::string;
 auto handle_lrange(CommandContext& ctx, const std::vector<std::string>& args) -> std::string;
 auto handle_blpop(CommandContext& ctx, int fd, const std::vector<std::string>& args) -> ProcessResult;
 auto handle_rpush_with_blocking(CommandContext& ctx,
