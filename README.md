@@ -171,10 +171,10 @@ Event Loop:
 | `PING`, `ECHO`, `INFO`, `CONFIG GET`, `KEYS`, `TYPE` | |
 
 ### Strings
-| `SET` (with EX/PX), `GET`, `INCR` |
+| `SET` (with EX/PX), `GET`, `INCR`, `MSET` |
 
 ### Lists
-| `LPUSH`, `RPUSH`, `LPOP`, `LRANGE`, `LLEN`, `BLPOP` |
+| `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LRANGE`, `LLEN`, `BLPOP` |
 
 ### Streams
 | `XADD` (auto-ID), `XRANGE`, `XREAD`, `XREAD BLOCK` |
@@ -194,7 +194,7 @@ Event Loop:
 ### Replication & Auth
 | `REPLCONF`, `PSYNC`, `WAIT`, `AUTH`, `ACL WHOAMI`, `ACL GETUSER`, `ACL SETUSER` |
 
-**39 commands** total. Full details in [Commands Reference](#).
+**41 commands** total. Full details in [Commands Reference](#).
 
 ## Performance
 
