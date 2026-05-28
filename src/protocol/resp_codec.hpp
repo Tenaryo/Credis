@@ -10,6 +10,10 @@
 
 namespace credis::protocol {
 
+inline const std::string kRespOk = "+OK\r\n";
+inline const std::string kRespQueued = "+QUEUED\r\n";
+inline const std::string kRespPong = "+PONG\r\n";
+
 struct ParsedCommand {
     std::vector<std::string> args;
     size_t consumed;

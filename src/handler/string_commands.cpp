@@ -38,7 +38,7 @@ auto handle_set(CommandContext& ctx, const std::vector<std::string>& args) -> st
     }
 
     ctx.store.set(key, value, ttl_ms);
-    return credis::protocol::encode_simple_string("OK");
+    return credis::protocol::kRespOk;
 }
 
 auto handle_get(CommandContext& ctx, const std::string& key) -> std::string {

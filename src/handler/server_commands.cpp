@@ -16,7 +16,7 @@ auto handle_ping(CommandContext& ctx, int fd) -> std::string {
     if (ctx.pubsub_manager && fd >= 0 && ctx.pubsub_manager->get().is_subscribed(fd)) {
         return credis::protocol::encode_array({"pong", ""});
     }
-    return credis::protocol::encode_simple_string("PONG");
+    return credis::protocol::kRespPong;
 }
 
 auto handle_echo(std::string_view message) -> std::string {
@@ -105,7 +105,7 @@ auto handle_acl_setuser(CommandContext& ctx, const std::vector<std::string>& arg
             ctx.acl_manager->set_password(username, rule.substr(1));
         }
     }
-    return credis::protocol::encode_simple_string("OK");
+    return credis::protocol::kRespOk;
 }
 
 auto handle_auth(CommandContext& ctx, int fd, const std::vector<std::string>& args) -> std::string {
@@ -114,7 +114,7 @@ auto handle_auth(CommandContext& ctx, int fd, const std::vector<std::string>& ar
     }
     if (ctx.acl_manager->authenticate(args[1], args[2])) {
         ctx.authenticated_fds->insert(fd);
-        return credis::protocol::encode_simple_string("OK");
+        return credis::protocol::kRespOk;
     }
     return credis::protocol::encode_error("WRONGPASS invalid username-password pair or user is disabled.");
 }
@@ -123,7 +123,7 @@ auto handle_replconf(const std::vector<std::string>& args) -> std::string {
     if (args.size() >= 2 && credis::util::to_upper(args[1]) == "GETACK") {
         return credis::protocol::encode_array({"REPLCONF", "ACK", "0"});
     }
-    return credis::protocol::encode_simple_string("OK");
+    return credis::protocol::kRespOk;
 }
 
 auto handle_psync(CommandContext& ctx) -> ProcessResult {

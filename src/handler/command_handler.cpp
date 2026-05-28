@@ -352,7 +352,7 @@ auto CommandHandler::process_single_command(
             return ProcessResult::normal(credis::protocol::encode_error("ERR MULTI calls can not be nested"));
         }
         transactions_[fd].in_multi = true;
-        return ProcessResult::normal(credis::protocol::encode_simple_string("OK"));
+        return ProcessResult::normal(credis::protocol::kRespOk);
     }
 
     if (cmd == "EXEC") [[unlikely]] {
@@ -396,7 +396,7 @@ auto CommandHandler::process_single_command(
             return ProcessResult::normal(credis::protocol::encode_error("ERR DISCARD without MULTI"));
         }
         transactions_.erase(dit);
-        return ProcessResult::normal(credis::protocol::encode_simple_string("OK"));
+        return ProcessResult::normal(credis::protocol::kRespOk);
     }
 
     if (cmd == "WATCH") [[unlikely]] {
@@ -412,7 +412,7 @@ auto CommandHandler::process_single_command(
         for (size_t i = 1; i < args.size(); ++i) {
             tx.watched_keys[args[i]] = store_.get_key_version(args[i]);
         }
-        return ProcessResult::normal(credis::protocol::encode_simple_string("OK"));
+        return ProcessResult::normal(credis::protocol::kRespOk);
     }
 
     if (cmd == "UNWATCH") [[unlikely]] {
@@ -420,13 +420,13 @@ auto CommandHandler::process_single_command(
         if (uit != transactions_.end()) {
             uit->second.watched_keys.clear();
         }
-        return ProcessResult::normal(credis::protocol::encode_simple_string("OK"));
+        return ProcessResult::normal(credis::protocol::kRespOk);
     }
 
     auto it = transactions_.find(fd);
     if (it != transactions_.end() && it->second.in_multi) [[unlikely]] {
         it->second.queued_commands.push_back(args);
-        return ProcessResult::normal(credis::protocol::encode_simple_string("QUEUED"));
+        return ProcessResult::normal(credis::protocol::kRespQueued);
     }
 
     auto result = execute_command(args, fd, send_to_client);
