@@ -1,6 +1,7 @@
 #include "rdb_parser.hpp"
 
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <string>
 #include <unordered_map>
@@ -19,11 +20,25 @@ class Reader {
     Reader(const uint8_t* data, size_t size) : data_(data), size_(size) {
     }
 
+    [[nodiscard]] auto has_more() const -> bool {
+        return pos_ < size_;
+    }
+
+    [[nodiscard]] auto peek() const -> uint8_t {
+        return data_[pos_];
+    }
+
     auto read_byte() -> uint8_t {
+        if (pos_ >= size_) {
+            return 0;
+        }
         return data_[pos_++];
     }
 
     auto read_bytes(size_t n) -> std::vector<uint8_t> {
+        if (pos_ + n > size_) {
+            n = size_ - pos_;
+        }
         const auto* start = data_ + pos_;
         pos_ += n;
         return {start, start + n};
@@ -83,10 +98,13 @@ class Reader {
     }
 
     auto read_string() -> std::string {
+        if (!has_more()) {
+            return {};
+        }
         auto first = data_[pos_];
         auto hi2 = (first & 0xC0) >> 6;
 
-        if (hi2 == 3) [[unlikely]] {
+        if (hi2 == 3) {
             pos_++;
             switch (first & 0x3F) {
             case 0:
@@ -104,55 +122,50 @@ class Reader {
         auto bytes = read_bytes(len);
         return {bytes.begin(), bytes.end()};
     }
-
-    [[nodiscard]] auto has_more() const -> bool {
-        return pos_ < size_;
-    }
-    [[nodiscard]] auto pos() const -> size_t {
-        return pos_;
-    }
-    [[nodiscard]] auto peek() const -> uint8_t {
-        return data_[pos_];
-    }
 };
 
 } // namespace
 
 auto parse_rdb(const std::vector<uint8_t>& data) -> std::unordered_map<std::string, RdbEntry> {
     Reader reader(data.data(), data.size());
-    std::unordered_map<std::string, RdbEntry> result;
+
+    if (data.size() < 9 || std::memcmp(data.data(), "REDIS", 5) != 0) {
+        return {};
+    }
 
     for (int i = 0; i < 9; ++i) {
         reader.read_byte();
     }
 
-    while (reader.has_more()) [[likely]] {
+    std::unordered_map<std::string, RdbEntry> result;
+
+    while (reader.has_more()) {
         auto op = reader.read_byte();
 
-        if (op == 0xFA) [[likely]] {
+        if (op == 0xFA) {
             reader.read_string();
             reader.read_string();
-        } else if (op == 0xFE) [[unlikely]] {
+        } else if (op == 0xFE) {
             reader.read_length();
 
-            if (reader.has_more() && reader.peek() == 0xFB) [[unlikely]] {
+            if (reader.has_more() && reader.peek() == 0xFB) {
                 reader.read_byte();
                 reader.read_length();
                 reader.read_length();
             }
 
-            while (reader.has_more()) [[likely]] {
+            while (reader.has_more()) {
                 auto peek = reader.peek();
-                if (peek == 0xFF || peek == 0xFE || peek == 0xFA) [[unlikely]] {
+                if (peek == 0xFF || peek == 0xFE || peek == 0xFA) {
                     break;
                 }
 
                 std::optional<uint64_t> expire_ms;
 
-                if (peek == 0xFD) [[likely]] {
+                if (peek == 0xFD) {
                     reader.read_byte();
                     expire_ms = static_cast<uint64_t>(reader.read_le32()) * 1000;
-                } else if (peek == 0xFC) [[unlikely]] {
+                } else if (peek == 0xFC) {
                     reader.read_byte();
                     expire_ms = reader.read_le64();
                 }
@@ -164,7 +177,7 @@ auto parse_rdb(const std::vector<uint8_t>& data) -> std::unordered_map<std::stri
 
                 result.emplace(std::move(key), RdbEntry{credis::store::String(std::move(value)), expire_ms});
             }
-        } else if (op == 0xFF) [[unlikely]] {
+        } else if (op == 0xFF) {
             break;
         }
     }
@@ -174,15 +187,19 @@ auto parse_rdb(const std::vector<uint8_t>& data) -> std::unordered_map<std::stri
 
 auto load_rdb_file(const std::string& path) -> std::unordered_map<std::string, RdbEntry> {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
-    if (!file) [[unlikely]] {
+    if (!file) {
         return {};
     }
 
-    auto size = file.tellg();
+    auto pos = file.tellg();
+    if (pos < 0) {
+        return {};
+    }
+    auto size = static_cast<size_t>(pos);
     file.seekg(0);
 
-    std::vector<uint8_t> data(static_cast<size_t>(size));
-    file.read(reinterpret_cast<char*>(data.data()), size);
+    std::vector<uint8_t> data(size);
+    file.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(size));
 
     return parse_rdb(data);
 }
