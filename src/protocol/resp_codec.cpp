@@ -8,7 +8,7 @@ using credis::util::Error;
 using credis::util::ErrorCode;
 
 auto parse_one(std::string_view input) -> std::expected<ParsedCommand, Error> {
-    if (input.empty() || input[0] != '*') {
+    if (input.empty() || input[0] != '*') [[unlikely]] {
         return std::unexpected(Error(ErrorCode::kProtocolError, "Invalid RESP: expected array"));
     }
 
@@ -20,13 +20,16 @@ auto parse_one(std::string_view input) -> std::expected<ParsedCommand, Error> {
 
     int count = 0;
     auto [ptr, ec] = std::from_chars(input.data() + pos, input.data() + crlf, count);
-    if (ec != std::errc{} || count < 0) {
+    if (ec != std::errc{} || count < 0) [[unlikely]] {
         return std::unexpected(Error(ErrorCode::kProtocolError, "Invalid RESP: invalid array count"));
     }
 
     pos = crlf + 2;
 
+    // TODO: hand-roll single-pass without string_view::find for \r\n scanning;
+    // pre-compute count to reserve args vector and avoid reallocations
     std::vector<std::string> args;
+    args.reserve(static_cast<size_t>(count));
     for (int i = 0; i < count; ++i) {
         if (pos >= input.size() || input[pos] != '$') {
             return std::unexpected(Error(ErrorCode::kProtocolError, "Invalid RESP: expected bulk string"));
@@ -40,7 +43,7 @@ auto parse_one(std::string_view input) -> std::expected<ParsedCommand, Error> {
 
         int len = 0;
         auto [ptr2, ec2] = std::from_chars(input.data() + pos + 1, input.data() + crlf, len);
-        if (ec2 != std::errc{} || len < 0) {
+        if (ec2 != std::errc{} || len < 0) [[unlikely]] {
             return std::unexpected(Error(ErrorCode::kProtocolError, "Invalid RESP: invalid bulk string length"));
         }
 
