@@ -7,14 +7,6 @@ namespace credis::protocol {
 using credis::util::Error;
 using credis::util::ErrorCode;
 
-auto parse_resp(std::string_view input) -> std::expected<std::vector<std::string>, Error> {
-    auto result = parse_one(input);
-    if (!result) {
-        return std::unexpected(result.error());
-    }
-    return std::move(result->args);
-}
-
 auto parse_one(std::string_view input) -> std::expected<ParsedCommand, Error> {
     if (input.empty() || input[0] != '*') {
         return std::unexpected(Error(ErrorCode::kProtocolError, "Invalid RESP: expected array"));

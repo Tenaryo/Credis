@@ -15,7 +15,6 @@ struct ParsedCommand {
     size_t consumed;
 };
 
-auto parse_resp(std::string_view input) -> std::expected<std::vector<std::string>, credis::util::Error>;
 auto parse_one(std::string_view input) -> std::expected<ParsedCommand, credis::util::Error>;
 
 auto encode_simple_string(std::string_view s) -> std::string;

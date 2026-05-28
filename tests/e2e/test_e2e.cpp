@@ -147,8 +147,8 @@ TEST(E2ETypeValidation, ZaddThenSetWrontype) {
 TEST(E2ERespRoundTrip, ParseEncodeParse) {
     auto original = std::vector<std::string>{"SET", "foo", "bar"};
     auto encoded = protocol::encode_array(original);
-    auto parsed = protocol::parse_resp(encoded);
+    auto parsed = protocol::parse_one(encoded);
 
     ASSERT_TRUE(parsed.has_value());
-    EXPECT_EQ(*parsed, original);
+    EXPECT_EQ(parsed->args, original);
 }
