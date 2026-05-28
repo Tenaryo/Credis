@@ -10,7 +10,8 @@
 namespace credis::pubsub {
 
 class PubSubManager {
-    std::unordered_map<int, std::unordered_set<std::string>> subscriptions_;
+    using ChannelSet = std::unordered_set<std::string, credis::util::StringHash, std::equal_to<>>;
+    std::unordered_map<int, ChannelSet> subscriptions_;
     std::unordered_map<std::string, std::unordered_set<int>, credis::util::StringHash, std::equal_to<>>
         channel_subscribers_;
 
@@ -32,7 +33,9 @@ class PubSubManager {
                 channel_subscribers_.erase(cit);
             }
         }
-        it->second.erase(std::string(channel));
+        if (auto scit = it->second.find(channel); scit != it->second.end()) [[likely]] {
+            it->second.erase(scit);
+        }
         size_t remaining = it->second.size();
         if (remaining == 0) {
             subscriptions_.erase(it);
