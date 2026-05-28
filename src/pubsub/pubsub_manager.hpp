@@ -61,11 +61,6 @@ class PubSubManager {
         return it != subscriptions_.end() && !it->second.empty();
     }
 
-    [[nodiscard]] auto subscriber_count(std::string_view channel) const noexcept -> size_t {
-        auto it = channel_subscribers_.find(channel);
-        return it != channel_subscribers_.end() ? it->second.size() : 0;
-    }
-
     [[nodiscard]] auto get_subscribers(std::string_view channel) const noexcept -> const std::unordered_set<int>& {
         static const std::unordered_set<int> kEmpty;
         auto it = channel_subscribers_.find(channel);
