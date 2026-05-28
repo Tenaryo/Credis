@@ -98,6 +98,10 @@ struct HandlerFixture {
     credis::server::ServerConfig config;
     credis::handler::CommandHandler handler{store, config};
 
+    HandlerFixture() {
+        handler.set_replica_count_fn([] { return 1; });
+    }
+
     auto process(int fd, std::string_view input) -> credis::handler::ProcessResult {
         std::string client_response;
         auto send_fn = [&](int, const std::string& s) { client_response = s; };

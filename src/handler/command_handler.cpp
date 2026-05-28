@@ -313,7 +313,7 @@ auto CommandHandler::process_with_fd(int fd,
         auto cmd_name = credis::util::to_upper(parsed->args[0]);
         auto cmd_result = process_single_command(fd, std::move(parsed->args), send_to_client);
 
-        if (is_write_command(cmd_name)) [[likely]] {
+        if (is_write_command(cmd_name) && replica_count_fn_ && replica_count_fn_() > 0) {
             result.propagate_args.push_back(std::string(input.substr(cmd_start, parsed->consumed)));
         }
 
