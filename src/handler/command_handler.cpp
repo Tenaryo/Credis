@@ -314,11 +314,11 @@ auto CommandHandler::process_with_fd(int fd,
         auto cmd_result = process_single_command(fd, std::move(parsed->args), send_to_client);
 
         if (is_write_command(cmd_name) && replica_count_fn_ && replica_count_fn_() > 0) {
-            result.propagate_args.push_back(std::string(input.substr(cmd_start, parsed->consumed)));
+            result.propagate_cmds.push_back(std::string(input.substr(cmd_start, parsed->consumed)));
         }
 
         if (!std::holds_alternative<ProcessResult::Normal>(cmd_result.state)) [[unlikely]] {
-            cmd_result.propagate_args = std::move(result.propagate_args);
+            cmd_result.propagate_cmds = std::move(result.propagate_cmds);
             cmd_result.consumed = total_consumed;
             return cmd_result;
         }

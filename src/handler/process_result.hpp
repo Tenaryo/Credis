@@ -26,7 +26,7 @@ struct ProcessResult {
     };
 
     std::variant<Normal, Block, ReplicaHandshake, Wait> state;
-    std::vector<std::string> propagate_args;
+    std::vector<std::string> propagate_cmds;
     size_t consumed{0};
 
     static auto normal(std::string resp) -> ProcessResult {

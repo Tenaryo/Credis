@@ -90,8 +90,8 @@ void dispatch_event(int fd, EventContext& ctx) {
         ctx.replica_mgr.add_replica(fd);
     }
 
-    if (!result.propagate_args.empty()) {
-        for (const auto& raw_cmd : result.propagate_args) {
+    if (!result.propagate_cmds.empty()) {
+        for (const auto& raw_cmd : result.propagate_cmds) {
             ctx.replica_mgr.propagate(raw_cmd);
             for (int rfd : ctx.replica_mgr.replica_fds()) {
                 ctx.conn_pool.send_to(rfd, raw_cmd);
