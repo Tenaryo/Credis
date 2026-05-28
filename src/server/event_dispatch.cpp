@@ -112,24 +112,24 @@ auto compute_timeout(EventContext& ctx) -> std::chrono::milliseconds {
         ctx.conn_pool.send_to(fd, credis::protocol::encode_null_array());
     }
 
-    if (auto wait_result = ctx.replica_mgr.check_wait_timeout()) [[unlikely]] {
+    if (auto wait_result = ctx.replica_mgr.check_wait_timeout()) {
         ctx.conn_pool.send_to(wait_result->client_fd, credis::protocol::encode_integer(wait_result->count));
     }
 
     auto now = std::chrono::steady_clock::now();
     std::optional<std::chrono::steady_clock::time_point> earliest;
 
-    if (auto blocking_deadline = ctx.blocking.get_next_deadline()) [[likely]] {
+    if (auto blocking_deadline = ctx.blocking.get_next_deadline()) {
         earliest = *blocking_deadline;
     }
 
-    if (auto wait_deadline = ctx.replica_mgr.next_deadline()) [[unlikely]] {
-        if (!earliest || *wait_deadline < *earliest) [[unlikely]] {
+    if (auto wait_deadline = ctx.replica_mgr.next_deadline()) {
+        if (!earliest || *wait_deadline < *earliest) {
             earliest = *wait_deadline;
         }
     }
 
-    if (!earliest) [[unlikely]] {
+    if (!earliest) {
         return std::chrono::milliseconds(-1);
     }
     return *earliest <= now ? std::chrono::milliseconds(0)
