@@ -7,6 +7,22 @@ namespace credis::protocol {
 using credis::util::Error;
 using credis::util::ErrorCode;
 
+namespace {
+
+constexpr auto digit_count(size_t n) -> size_t {
+    if (n == 0) {
+        return 1;
+    }
+    size_t c = 0;
+    while (n > 0) {
+        n /= 10;
+        ++c;
+    }
+    return c;
+}
+
+} // namespace
+
 auto parse_one(std::string_view input) -> std::expected<ParsedCommand, Error> {
     if (input.empty() || input[0] != '*') [[unlikely]] {
         return std::unexpected(Error(ErrorCode::kProtocolError, "Invalid RESP: expected array"));
@@ -99,8 +115,7 @@ auto encode_array(const std::vector<std::string>& elements) -> std::string {
     auto count_str = std::to_string(elements.size());
     size_t total = 1 + count_str.size() + 2;
     for (const auto& elem : elements) {
-        auto len_str = std::to_string(elem.size());
-        total += 1 + len_str.size() + 2 + elem.size() + 2;
+        total += 1 + digit_count(elem.size()) + 2 + elem.size() + 2;
     }
     std::string result;
     result.reserve(total);
@@ -138,16 +153,12 @@ auto encode_entries(std::span<const credis::store::StreamEntry> entries) -> std:
     auto count_str = std::to_string(entries.size());
     size_t total = 1 + count_str.size() + 2;
     for (const auto& entry : entries) {
-        total += 3; // *2\r\n
-        auto id_len_str = std::to_string(entry.id.size());
-        total += 1 + id_len_str.size() + 2 + entry.id.size() + 2;
-        auto fields_count_str = std::to_string(entry.fields.size() * 2);
-        total += 1 + fields_count_str.size() + 2;
+        total += 3;
+        total += 1 + digit_count(entry.id.size()) + 2 + entry.id.size() + 2;
+        total += 1 + digit_count(entry.fields.size() * 2) + 2;
         for (const auto& [field, value] : entry.fields) {
-            auto flen = std::to_string(field.size());
-            auto vlen = std::to_string(value.size());
-            total += 1 + flen.size() + 2 + field.size() + 2;
-            total += 1 + vlen.size() + 2 + value.size() + 2;
+            total += 1 + digit_count(field.size()) + 2 + field.size() + 2;
+            total += 1 + digit_count(value.size()) + 2 + value.size() + 2;
         }
     }
     std::string result;
@@ -199,21 +210,16 @@ auto encode_stream_entries(
     auto count_str = std::to_string(streams.size());
     size_t total = 1 + count_str.size() + 2;
     for (const auto& [key, entries] : streams) {
-        total += 3; // *2\r\n
-        auto key_len = std::to_string(key.size());
-        total += 1 + key_len.size() + 2 + key.size() + 2;
-        // Estimate entries overhead conservatively — exact would double the loop
+        total += 3;
+        total += 1 + digit_count(key.size()) + 2 + key.size() + 2;
+        total += 1 + digit_count(entries.size()) + 2;
         for (const auto& entry : entries) {
-            total += 3; // *2\r\n
-            auto id_len_str = std::to_string(entry.id.size());
-            total += 1 + id_len_str.size() + 2 + entry.id.size() + 2;
-            auto fields_count_str = std::to_string(entry.fields.size() * 2);
-            total += 1 + fields_count_str.size() + 2;
+            total += 3;
+            total += 1 + digit_count(entry.id.size()) + 2 + entry.id.size() + 2;
+            total += 1 + digit_count(entry.fields.size() * 2) + 2;
             for (const auto& [field, value] : entry.fields) {
-                auto flen = std::to_string(field.size());
-                auto vlen = std::to_string(value.size());
-                total += 1 + flen.size() + 2 + field.size() + 2;
-                total += 1 + vlen.size() + 2 + value.size() + 2;
+                total += 1 + digit_count(field.size()) + 2 + field.size() + 2;
+                total += 1 + digit_count(value.size()) + 2 + value.size() + 2;
             }
         }
     }
@@ -229,7 +235,32 @@ auto encode_stream_entries(
         result += "\r\n";
         result += key;
         result += "\r\n";
-        result += encode_entries(entries);
+        result += '*';
+        result += std::to_string(entries.size());
+        result += "\r\n";
+        for (const auto& entry : entries) {
+            result += "*2\r\n";
+            result += '$';
+            result += std::to_string(entry.id.size());
+            result += "\r\n";
+            result += entry.id;
+            result += "\r\n";
+            result += '*';
+            result += std::to_string(entry.fields.size() * 2);
+            result += "\r\n";
+            for (const auto& [field, value] : entry.fields) {
+                result += '$';
+                result += std::to_string(field.size());
+                result += "\r\n";
+                result += field;
+                result += "\r\n";
+                result += '$';
+                result += std::to_string(value.size());
+                result += "\r\n";
+                result += value;
+                result += "\r\n";
+            }
+        }
     }
     return result;
 }
