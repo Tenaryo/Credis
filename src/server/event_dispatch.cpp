@@ -74,11 +74,7 @@ void dispatch_event(int fd, EventContext& ctx) {
 
     if (std::holds_alternative<ProcessResult::Wait>(result.state)) {
         auto& w = std::get<ProcessResult::Wait>(result.state);
-        int64_t acked = 0;
-        for (int rfd : ctx.replica_mgr.replica_fds()) {
-            (void)rfd;
-        }
-        if (ctx.replica_mgr.offset() == 0 || acked >= w.numreplicas) {
+        if (ctx.replica_mgr.offset() == 0 || ctx.replica_mgr.count_acked_for(ctx.replica_mgr.offset()) >= w.numreplicas) {
             ctx.conn_pool.send_to(
                 fd, credis::protocol::encode_integer(static_cast<int64_t>(ctx.replica_mgr.replica_fds().size())));
         } else {

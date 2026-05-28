@@ -30,9 +30,9 @@ class ReplicaManager {
     int64_t master_offset_{0};
     std::optional<WaitState> wait_state_;
 
+  public:
     auto count_acked_for(int64_t target) const -> int64_t;
 
-  public:
     void add_replica(int fd) {
         replica_fds_.insert(fd);
     }
