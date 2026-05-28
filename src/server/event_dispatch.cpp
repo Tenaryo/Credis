@@ -91,10 +91,11 @@ void dispatch_event(int fd, EventContext& ctx) {
     }
 
     if (!result.propagate_args.empty()) {
-        auto msg = credis::protocol::encode_array(result.propagate_args);
-        ctx.replica_mgr.propagate(msg);
-        for (int rfd : ctx.replica_mgr.replica_fds()) {
-            ctx.conn_pool.send_to(rfd, msg);
+        for (const auto& raw_cmd : result.propagate_args) {
+            ctx.replica_mgr.propagate(raw_cmd);
+            for (int rfd : ctx.replica_mgr.replica_fds()) {
+                ctx.conn_pool.send_to(rfd, raw_cmd);
+            }
         }
     }
 }

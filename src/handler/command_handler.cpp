@@ -24,7 +24,7 @@ using namespace std::string_view_literals;
 
 auto is_write_command(std::string_view cmd) -> bool {
     static constexpr auto kWriteCommands = std::array{
-        "SET"sv, "DEL"sv, "INCR"sv, "RPUSH"sv, "LPUSH"sv, "LPOP"sv, "RPOP"sv, "XADD"sv, "ZADD"sv, "ZREM"sv, "GEOADD"sv};
+        "SET"sv, "DEL"sv, "INCR"sv, "MSET"sv, "RPUSH"sv, "LPUSH"sv, "LPOP"sv, "RPOP"sv, "XADD"sv, "ZADD"sv, "ZREM"sv, "GEOADD"sv};
     return std::ranges::find(kWriteCommands, cmd) != kWriteCommands.end();
 }
 
@@ -308,14 +308,13 @@ auto CommandHandler::process_with_fd(int fd,
             break;
         }
 
+        size_t cmd_start = total_consumed;
         total_consumed += parsed->consumed;
-
+        auto cmd_name = credis::util::to_upper(parsed->args[0]);
         auto cmd_result = process_single_command(fd, std::move(parsed->args), send_to_client);
 
-        if (!cmd_result.propagate_args.empty()) [[unlikely]] {
-            result.propagate_args.insert(result.propagate_args.end(),
-                                         std::make_move_iterator(cmd_result.propagate_args.begin()),
-                                         std::make_move_iterator(cmd_result.propagate_args.end()));
+        if (is_write_command(cmd_name)) [[likely]] {
+            result.propagate_args.push_back(std::string(input.substr(cmd_start, parsed->consumed)));
         }
 
         if (!std::holds_alternative<ProcessResult::Normal>(cmd_result.state)) [[unlikely]] {
@@ -446,9 +445,6 @@ auto CommandHandler::process_single_command(
     }
 
     auto result = execute_command(args, fd, send_to_client);
-    if (is_write_command(cmd)) [[likely]] {
-        result.propagate_args = args;
-    }
     return result;
 }
 

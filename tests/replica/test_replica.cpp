@@ -151,10 +151,8 @@ TEST(CommandHandlerReplicaTest, SetCommandGeneratesPropagateArgs) {
 
     ASSERT_TRUE(std::holds_alternative<credis::handler::ProcessResult::Normal>(result.state));
 
-    ASSERT_EQ(result.propagate_args.size(), 3);
-    EXPECT_EQ(result.propagate_args[0], "SET");
-    EXPECT_EQ(result.propagate_args[1], "foo");
-    EXPECT_EQ(result.propagate_args[2], "bar");
+    ASSERT_EQ(result.propagate_args.size(), 1);
+    EXPECT_EQ(result.propagate_args[0], input);
 }
 
 } // namespace
