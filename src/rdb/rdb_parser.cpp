@@ -157,6 +157,7 @@ auto parse_rdb(const std::vector<uint8_t>& data) -> std::unordered_map<std::stri
                     expire_ms = reader.read_le64();
                 }
 
+                // TODO: only supports String (0x00); need List, Set, ZSet, Stream encodings
                 reader.read_byte();
                 auto key = reader.read_string();
                 auto value = reader.read_string();
