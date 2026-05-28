@@ -15,40 +15,40 @@
 namespace credis::server {
 
 void dispatch_event(int fd, EventContext& ctx) {
-    if (ctx.replica_conn && fd == ctx.replica_conn->master_fd()) [[unlikely]] {
+    if (ctx.replica_conn && fd == ctx.replica_conn->master_fd()) {
         auto result = ctx.replica_conn->process_propagated_commands();
         if (!result.has_value()) [[unlikely]] {
             ctx.replica_conn.reset();
         } else {
-            if (!result->commands.empty()) [[likely]] {
+            if (!result->commands.empty()) {
                 for (auto& cmd : result->commands) {
                     ctx.handler.process(cmd);
                 }
             }
-            if (!result->ack_responses.empty()) [[unlikely]] {
+            if (!result->ack_responses.empty()) {
                 ctx.replica_conn->send_response(result->ack_responses);
             }
         }
         return;
     }
 
-    if (ctx.replica_mgr.replica_fds().contains(fd)) [[unlikely]] {
+    if (ctx.replica_mgr.replica_fds().contains(fd)) {
         auto data = ctx.conn_pool.read_from(fd);
-        if (!data) [[unlikely]] {
+        if (!data) {
             ctx.replica_mgr.remove_replica(fd);
             ctx.conn_pool.remove(fd);
             ctx.loop.remove_fd(fd);
             return;
         }
         auto wait_result = ctx.replica_mgr.process_ack(fd, *data);
-        if (wait_result) [[unlikely]] {
+        if (wait_result) {
             ctx.conn_pool.send_to(wait_result->client_fd, credis::protocol::encode_integer(wait_result->count));
         }
         return;
     }
 
-    if (fd == ctx.listener.fd()) [[unlikely]] {
-        if (auto client = ctx.listener.accept_connection()) [[likely]] {
+    if (fd == ctx.listener.fd()) {
+        if (auto client = ctx.listener.accept_connection()) {
             ctx.conn_pool.add(*client);
             ctx.loop.add_fd(*client);
         }
@@ -56,7 +56,7 @@ void dispatch_event(int fd, EventContext& ctx) {
     }
 
     auto data = ctx.conn_pool.read_from(fd);
-    if (!data) [[unlikely]] {
+    if (!data) {
         ctx.replica_mgr.remove_replica(fd);
         ctx.blocking.unblock_client(fd);
         ctx.pubsub.unsubscribe(fd);
@@ -72,14 +72,13 @@ void dispatch_event(int fd, EventContext& ctx) {
 
     using credis::handler::ProcessResult;
 
-    if (std::holds_alternative<ProcessResult::Wait>(result.state)) [[unlikely]] {
+    if (std::holds_alternative<ProcessResult::Wait>(result.state)) {
         auto& w = std::get<ProcessResult::Wait>(result.state);
         int64_t acked = 0;
         for (int rfd : ctx.replica_mgr.replica_fds()) {
-            // count acked replicas at current offset
             (void)rfd;
         }
-        if (ctx.replica_mgr.offset() == 0 || acked >= w.numreplicas) [[unlikely]] {
+        if (ctx.replica_mgr.offset() == 0 || acked >= w.numreplicas) {
             ctx.conn_pool.send_to(
                 fd, credis::protocol::encode_integer(static_cast<int64_t>(ctx.replica_mgr.replica_fds().size())));
         } else {
@@ -89,16 +88,16 @@ void dispatch_event(int fd, EventContext& ctx) {
                 ctx.conn_pool.send_to(rfd, getack);
             }
         }
-    } else if (std::holds_alternative<ProcessResult::ReplicaHandshake>(result.state)) [[unlikely]] {
+    } else if (std::holds_alternative<ProcessResult::ReplicaHandshake>(result.state)) {
         auto& hs = std::get<ProcessResult::ReplicaHandshake>(result.state);
         ctx.conn_pool.send_to(fd, hs.response);
     }
 
-    if (std::holds_alternative<ProcessResult::ReplicaHandshake>(result.state)) [[unlikely]] {
+    if (std::holds_alternative<ProcessResult::ReplicaHandshake>(result.state)) {
         ctx.replica_mgr.add_replica(fd);
     }
 
-    if (!result.propagate_args.empty()) [[likely]] {
+    if (!result.propagate_args.empty()) {
         auto msg = credis::protocol::encode_array(result.propagate_args);
         ctx.replica_mgr.propagate(msg);
         for (int rfd : ctx.replica_mgr.replica_fds()) {
