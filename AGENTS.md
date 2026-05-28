@@ -71,3 +71,17 @@ void helper([[maybe_unused]] int debug_flag) { /* ... */ }
 ```sh
 ./run_tests.sh
 ```
+
+# Benchmark
+
+```sh
+# 启动 credis（zsh 下 & 可能卡住，用 subshell 解决）：
+(./build/redis --port 6380 > /dev/null 2>&1 &)
+
+# 运行 redis-benchmark（需安装 redis-tools）：
+redis-benchmark -p 6380 -n 200000 -c 50 -t set,get -q            # 标准压测
+redis-benchmark -p 6380 -n 200000 -c 50 -P 16 -t set,get -q      # 流水线压测 (-P)
+
+# 清理：
+pkill -f "build/redis"
+```
