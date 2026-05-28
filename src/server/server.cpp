@@ -46,7 +46,7 @@ auto TcpListener::create(int port) -> std::expected<TcpListener, Error> {
         return std::unexpected(Error(ErrorCode::kNetworkError, "listen failed"));
     }
 
-    return TcpListener(port, fd);
+    return TcpListener(fd);
 }
 
 TcpListener::~TcpListener() {
@@ -55,7 +55,7 @@ TcpListener::~TcpListener() {
     }
 }
 
-TcpListener::TcpListener(TcpListener&& other) noexcept : server_fd_(other.server_fd_), port_(other.port_) {
+TcpListener::TcpListener(TcpListener&& other) noexcept : server_fd_(other.server_fd_) {
     other.server_fd_ = -1;
 }
 
@@ -65,7 +65,6 @@ auto TcpListener::operator=(TcpListener&& other) noexcept -> TcpListener& {
             close(server_fd_);
         }
         server_fd_ = other.server_fd_;
-        port_ = other.port_;
         other.server_fd_ = -1;
     }
     return *this;

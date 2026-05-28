@@ -9,8 +9,7 @@ namespace credis::server {
 
 class TcpListener {
     int server_fd_{-1};
-    int port_;
-    TcpListener(int port, int fd) : server_fd_(fd), port_(port) {
+    TcpListener(int fd) : server_fd_(fd) {
     }
 
   public:
