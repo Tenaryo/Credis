@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "util/sha256.hpp"
+#include "util/string_hash.hpp"
 
 namespace credis::server {
 
@@ -16,7 +17,7 @@ struct AclUser {
 };
 
 class AclManager {
-    std::unordered_map<std::string, AclUser> users_;
+    std::unordered_map<std::string, AclUser, credis::util::StringHash, std::equal_to<>> users_;
 
   public:
     AclManager() {
@@ -24,7 +25,7 @@ class AclManager {
     }
 
     auto get_user(std::string_view username) const -> const AclUser* {
-        auto it = users_.find(std::string(username));
+        auto it = users_.find(username);
         return it != users_.end() ? &it->second : nullptr;
     }
 
@@ -36,7 +37,7 @@ class AclManager {
 
     auto authenticate(std::string_view username, std::string_view password) const -> bool {
         const auto* user = get_user(username);
-        if (user == nullptr) [[unlikely]] {
+        if (user == nullptr) {
             return false;
         }
         auto hash = credis::util::sha256(password);
