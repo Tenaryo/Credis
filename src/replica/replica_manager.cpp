@@ -1,6 +1,7 @@
 #include "replica_manager.hpp"
 
 #include "protocol/resp_codec.hpp"
+#include "util/parse.hpp"
 #include "util/string_utils.hpp"
 
 namespace credis::replica {
@@ -60,7 +61,9 @@ auto ReplicaManager::process_ack(int fd, std::string_view data) -> AckResult {
         auto& args = result->args;
         if (args.size() >= 3 && credis::util::to_upper(args[0]) == "REPLCONF"
             && credis::util::to_upper(args[1]) == "ACK") {
-            r->offset = std::stoll(args[2]);
+            if (auto offset = credis::util::parse_int<int64_t>(args[2])) {
+                r->offset = *offset;
+            }
         }
     }
 
