@@ -26,7 +26,8 @@ auto ReplicaManager::find(int fd) const -> const ReplicaState* {
 void ReplicaManager::remove_replica(int fd) {
     for (auto it = replicas_.begin(); it != replicas_.end(); ++it) {
         if (it->fd == fd) {
-            replicas_.erase(it);
+            std::swap(*it, replicas_.back());
+            replicas_.pop_back();
             return;
         }
     }
