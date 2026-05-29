@@ -83,9 +83,9 @@ TEST(ReplicaManagerTest, ProcessAckHandlesReplconfGetackReturnsWaitResult) {
     auto ack_data = credis::protocol::encode_array({"REPLCONF", "ACK", "100"});
     auto result = mgr.process_ack(5, ack_data);
 
-    ASSERT_TRUE(result.has_value());
-    EXPECT_EQ(result->client_fd, 1);
-    EXPECT_EQ(result->count, 1);
+    ASSERT_TRUE(result.wait.has_value());
+    EXPECT_EQ(result.wait->client_fd, 1);
+    EXPECT_EQ(result.wait->count, 1);
     EXPECT_FALSE(mgr.has_wait());
 }
 

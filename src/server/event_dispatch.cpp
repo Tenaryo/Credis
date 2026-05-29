@@ -40,10 +40,10 @@ void dispatch_event(int fd, EventContext& ctx) {
             ctx.loop.remove_fd(fd);
             return;
         }
-        auto wait_result = ctx.replica_mgr.process_ack(fd, *data);
-        ctx.conn_pool.consume(fd, data->size());
-        if (wait_result) {
-            ctx.conn_pool.send_to(wait_result->client_fd, credis::protocol::encode_integer(wait_result->count));
+        auto ack_result = ctx.replica_mgr.process_ack(fd, *data);
+        ctx.conn_pool.consume(fd, ack_result.consumed);
+        if (ack_result.wait) {
+            ctx.conn_pool.send_to(ack_result.wait->client_fd, credis::protocol::encode_integer(ack_result.wait->count));
         }
         return;
     }

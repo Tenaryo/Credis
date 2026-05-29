@@ -43,32 +43,38 @@ auto ReplicaManager::count_acked_for(int64_t target) const -> int64_t {
     return count;
 }
 
-auto ReplicaManager::process_ack(int fd, std::string_view data) -> std::optional<WaitResult> {
+auto ReplicaManager::process_ack(int fd, std::string_view data) -> AckResult {
     auto* r = find(fd);
     if (!r) {
-        return std::nullopt;
+        return {};
     }
 
-    r->buffer.append(data);
+    size_t consumed = 0;
+    while (consumed < data.size()) {
+        auto result = credis::protocol::parse_one(data.substr(consumed));
+        if (!result) {
+            break;
+        }
+        consumed += result->consumed;
 
-    while (auto result = credis::protocol::parse_one(r->buffer)) [[likely]] {
         auto& args = result->args;
         if (args.size() >= 3 && credis::util::to_upper(args[0]) == "REPLCONF"
             && credis::util::to_upper(args[1]) == "ACK") {
             r->offset = std::stoll(args[2]);
         }
-        r->buffer.erase(0, result->consumed);
     }
+
+    AckResult ack_result;
+    ack_result.consumed = consumed;
 
     if (wait_state_) [[unlikely]] {
         int64_t acked = count_acked_for(wait_state_->target_offset);
         if (acked >= wait_state_->numreplicas) {
-            WaitResult wr{wait_state_->client_fd, acked};
+            ack_result.wait.emplace(WaitResult{wait_state_->client_fd, acked});
             wait_state_.reset();
-            return wr;
         }
     }
-    return std::nullopt;
+    return ack_result;
 }
 
 void ReplicaManager::start_wait(int client_fd, int64_t numreplicas, int64_t timeout_ms) {

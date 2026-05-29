@@ -12,7 +12,16 @@ namespace credis::replica {
 struct ReplicaState {
     int fd;
     int64_t offset{0};
-    std::string buffer;
+};
+
+struct WaitResult {
+    int client_fd;
+    int64_t count;
+};
+
+struct AckResult {
+    std::optional<WaitResult> wait;
+    size_t consumed{0};
 };
 
 struct WaitState {
@@ -20,11 +29,6 @@ struct WaitState {
     int64_t numreplicas;
     int64_t target_offset;
     std::chrono::steady_clock::time_point deadline;
-};
-
-struct WaitResult {
-    int client_fd;
-    int64_t count;
 };
 
 class ReplicaManager {
@@ -39,7 +43,7 @@ class ReplicaManager {
     auto count_acked_for(int64_t target) const -> int64_t;
 
     void add_replica(int fd) {
-        replicas_.push_back({fd, 0, {}});
+        replicas_.push_back({fd, 0});
     }
     void remove_replica(int fd);
     [[nodiscard]] auto count() const -> size_t {
@@ -52,7 +56,7 @@ class ReplicaManager {
         return replicas_;
     }
 
-    auto process_ack(int fd, std::string_view data) -> std::optional<WaitResult>;
+    auto process_ack(int fd, std::string_view data) -> AckResult;
 
     void propagate(const std::string& msg) {
         master_offset_ += static_cast<int64_t>(msg.size());
