@@ -266,7 +266,7 @@ auto Store::xadd(std::string key, const std::string& id, const std::vector<std::
     std::string final_id;
 
     bool auto_full_id = (id == "*");
-    bool auto_seq = !auto_full_id && id.size() >= 2 && id.substr(id.size() - 2) == "-*";
+    bool auto_seq = !auto_full_id && id.size() >= 2 && id[id.size() - 2] == '-' && id[id.size() - 1] == '*';
 
     if (auto_full_id) {
         auto now = std::chrono::system_clock::now();
