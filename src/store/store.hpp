@@ -26,18 +26,19 @@ using Stream = std::vector<StreamEntry>;
 
 struct SortedSet {
     std::set<std::pair<double, std::string>> entries;
-    std::unordered_map<std::string, double, credis::util::StringHash, std::equal_to<>> member_scores;
+    std::unordered_map<std::string, decltype(entries)::iterator, credis::util::StringHash, std::equal_to<>>
+        member_scores;
 
     auto add(double score, std::string member) -> int64_t {
         auto it = member_scores.find(member);
         if (it != member_scores.end()) {
-            entries.erase({it->second, member});
-            it->second = score;
-            entries.emplace(score, member);
+            entries.erase(it->second);
+            auto [new_it, _] = entries.emplace(score, std::move(member));
+            it->second = new_it;
             return 0;
         }
-        member_scores.emplace(member, score);
-        entries.emplace(score, std::move(member));
+        auto [entry_it, _] = entries.emplace(score, std::move(member));
+        member_scores.emplace(entry_it->second, entry_it);
         return 1;
     }
 
@@ -46,7 +47,7 @@ struct SortedSet {
         if (it == member_scores.end()) {
             return 0;
         }
-        entries.erase({it->second, std::string(member)});
+        entries.erase(it->second);
         member_scores.erase(it);
         return 1;
     }

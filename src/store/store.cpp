@@ -398,12 +398,7 @@ auto Store::zrank(std::string_view key, std::string_view member) -> std::optiona
         return std::nullopt;
     }
 
-    auto entry_it = zset->entries.find({it->second, std::string(member)});
-    if (entry_it == zset->entries.end()) {
-        return std::nullopt;
-    }
-
-    return static_cast<int64_t>(std::distance(zset->entries.begin(), entry_it));
+    return static_cast<int64_t>(std::distance(zset->entries.begin(), it->second));
 }
 
 auto Store::zrange(std::string_view key, int64_t start, int64_t stop) -> std::vector<std::string> {
@@ -461,7 +456,7 @@ auto Store::zscore(std::string_view key, std::string_view member) -> std::option
         return std::nullopt;
     }
 
-    return it->second;
+    return it->second->first;
 }
 
 auto Store::zrem(std::string_view key, std::string_view member) -> int64_t {
@@ -480,7 +475,7 @@ auto Store::zgetall(std::string_view key) -> std::vector<std::pair<std::string, 
     }
     std::vector<std::pair<std::string, double>> result;
     result.reserve(zset->member_scores.size());
-    for (const auto& [member, score] : zset->member_scores) {
+    for (const auto& [score, member] : zset->entries) {
         result.emplace_back(member, score);
     }
     return result;
