@@ -17,5 +17,6 @@ struct RdbEntry {
 
 auto parse_rdb(const std::vector<uint8_t>& data) -> std::unordered_map<std::string, RdbEntry>;
 auto load_rdb_file(const std::string& path) -> std::unordered_map<std::string, RdbEntry>;
+void load_into_store(credis::store::Store& store, const std::string& dir, const std::string& dbfilename);
 
 } // namespace credis::rdb

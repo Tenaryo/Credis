@@ -23,35 +23,6 @@ namespace {
 
 credis::event_loop::EventLoop* g_loop = nullptr;
 
-void load_rdb(credis::store::Store& store, const credis::server::ServerConfig& config) {
-    if (config.dir.empty() || config.dbfilename.empty()) [[likely]] {
-        return;
-    }
-
-    auto path = std::filesystem::path(config.dir) / config.dbfilename;
-    auto entries = credis::rdb::load_rdb_file(path.string());
-
-    using namespace std::chrono;
-    auto now_ms = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
-
-    for (auto& [key, entry] : entries) {
-        if (!std::holds_alternative<credis::store::String>(entry.value)) [[unlikely]] {
-            continue;
-        }
-
-        std::optional<uint64_t> ttl;
-        if (entry.expire_ms) [[unlikely]] {
-            auto remaining = static_cast<int64_t>(*entry.expire_ms) - now_ms;
-            if (remaining <= 0) [[unlikely]] {
-                continue;
-            }
-            ttl = static_cast<uint64_t>(remaining);
-        }
-
-        store.set(key, std::move(std::get<credis::store::String>(entry.value)), ttl);
-    }
-}
-
 } // namespace
 
 auto main(int argc, char* argv[]) -> int {
@@ -87,7 +58,7 @@ auto main(int argc, char* argv[]) -> int {
     auto loop = credis::event_loop::EventLoop{};
 
     // 4. Load RDB file
-    load_rdb(store, server_config);
+    credis::rdb::load_into_store(store, server_config.dir, server_config.dbfilename);
 
     // 5. Replica handshake
     std::optional<credis::replica::ReplicaConnector> replica_conn
@@ -105,16 +76,16 @@ auto main(int argc, char* argv[]) -> int {
 
     // 7. Add initial fds to event loop
     loop.add_fd(listener->fd());
-    if (replica_conn) [[unlikely]] {
+    if (replica_conn) {
         loop.add_fd(replica_conn->master_fd());
 
         auto buffered = replica_conn->process_pending_buffer();
-        if (!buffered.commands.empty()) [[unlikely]] {
+        if (!buffered.commands.empty()) {
             for (auto& cmd : buffered.commands) {
                 handler.process(cmd);
             }
         }
-        if (!buffered.ack_responses.empty()) [[unlikely]] {
+        if (!buffered.ack_responses.empty()) {
             replica_conn->send_response(buffered.ack_responses);
         }
     }
@@ -143,4 +114,3 @@ auto main(int argc, char* argv[]) -> int {
              [&ctx]() -> std::chrono::milliseconds { return credis::server::compute_timeout(ctx); });
     return 0;
 }
-// test

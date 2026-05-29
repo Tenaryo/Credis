@@ -1,7 +1,9 @@
 #include "rdb_parser.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <string>
 #include <unordered_map>
@@ -202,6 +204,35 @@ auto load_rdb_file(const std::string& path) -> std::unordered_map<std::string, R
     file.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(size));
 
     return parse_rdb(data);
+}
+
+void load_into_store(credis::store::Store& store, const std::string& dir, const std::string& dbfilename) {
+    if (dir.empty() || dbfilename.empty()) {
+        return;
+    }
+
+    auto path = std::filesystem::path(dir) / dbfilename;
+    auto entries = load_rdb_file(path.string());
+
+    using namespace std::chrono;
+    auto now_ms = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+
+    for (auto& [key, entry] : entries) {
+        if (!std::holds_alternative<credis::store::String>(entry.value)) {
+            continue;
+        }
+
+        std::optional<uint64_t> ttl;
+        if (entry.expire_ms) {
+            auto remaining = static_cast<int64_t>(*entry.expire_ms) - now_ms;
+            if (remaining <= 0) {
+                continue;
+            }
+            ttl = static_cast<uint64_t>(remaining);
+        }
+
+        store.set(key, std::move(std::get<credis::store::String>(entry.value)), ttl);
+    }
 }
 
 } // namespace credis::rdb
