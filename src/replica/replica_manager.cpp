@@ -17,7 +17,7 @@ auto ReplicaManager::count_acked_for(int64_t target) const -> int64_t {
     int64_t count = 0;
     for (int rfd : replica_fds_) {
         auto it = replica_offsets_.find(rfd);
-        if (it != replica_offsets_.end() && it->second >= target) [[likely]] {
+        if (it != replica_offsets_.end() && it->second >= target) {
             ++count;
         }
     }
@@ -39,7 +39,7 @@ auto ReplicaManager::process_ack(int fd, std::string_view data) -> std::optional
 
     if (wait_state_) [[unlikely]] {
         int64_t acked = count_acked_for(wait_state_->target_offset);
-        if (acked >= wait_state_->numreplicas) [[unlikely]] {
+        if (acked >= wait_state_->numreplicas) {
             WaitResult wr{wait_state_->client_fd, acked};
             wait_state_.reset();
             return wr;
