@@ -13,11 +13,15 @@ auto handle_zadd(CommandContext& ctx, const std::vector<std::string>& args) -> s
     if (!ctx.store.key_is_absent_or_holds<credis::store::SortedSet>(key)) {
         return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
     }
-    auto score = credis::util::parse_double(args[2]);
-    if (!score) {
-        return credis::protocol::encode_error("ERR value is not a valid float");
+
+    int64_t added = 0;
+    for (size_t i = 2; i + 1 < args.size(); i += 2) {
+        auto score = credis::util::parse_double(args[i]);
+        if (!score) {
+            return credis::protocol::encode_error("ERR value is not a valid float");
+        }
+        added += ctx.store.zadd(key, *score, args[i + 1]);
     }
-    auto added = ctx.store.zadd(key, *score, args[3]);
     return credis::protocol::encode_integer(added);
 }
 
