@@ -20,7 +20,7 @@ auto Store::find_valid_entry(std::string_view key) -> Store::Entry* {
     if (it == data_.end()) {
         return nullptr;
     }
-    if (is_expired(it->second)) [[unlikely]] {
+    if (is_expired(it->second)) {
         data_.erase(it);
         return nullptr;
     }
