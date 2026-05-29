@@ -229,6 +229,7 @@ auto Store::lrange(std::string_view key, int64_t start, int64_t stop) -> std::ve
         stop = len - 1;
     }
 
+    result.reserve(static_cast<size_t>(stop - start + 1));
     for (int64_t i = start; i <= stop; ++i) {
         result.push_back((*list)[static_cast<size_t>(i)]);
     }
@@ -480,6 +481,7 @@ auto Store::zgetall(std::string_view key) -> std::vector<std::pair<std::string, 
 
 auto Store::keys() -> std::vector<std::string> {
     std::vector<std::string> result;
+    result.reserve(data_.size());
     for (auto it = data_.begin(); it != data_.end();) {
         if (is_expired(it->second)) {
             it = data_.erase(it);
