@@ -13,12 +13,16 @@ EventLoop::EventLoop(int max_events) : max_events_(max_events) {
     if (epoll_fd_ < 0) [[unlikely]] {
         LOG_ERROR("Failed to create epoll instance");
     }
+    instance_ = this;
+    std::signal(SIGINT, handle_signal);
+    std::signal(SIGTERM, handle_signal);
 }
 
 EventLoop::~EventLoop() {
     if (epoll_fd_ >= 0) [[likely]] {
         close(epoll_fd_);
     }
+    instance_ = nullptr;
 }
 
 EventLoop::EventLoop(EventLoop&& other) noexcept : epoll_fd_(other.epoll_fd_) {
@@ -37,7 +41,7 @@ auto EventLoop::operator=(EventLoop&& other) noexcept -> EventLoop& {
 }
 
 void EventLoop::add_fd(int fd, uint32_t events) const {
-    struct epoll_event ev {};
+    struct epoll_event ev{};
     ev.events = events;
     ev.data.fd = fd;
     if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &ev) < 0) [[unlikely]] {
@@ -49,8 +53,7 @@ void EventLoop::remove_fd(int fd) const {
     epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr);
 }
 
-void EventLoop::run(
-                    const std::function<void(int)>& on_event,
+void EventLoop::run(const std::function<void(int)>& on_event,
                     const std::function<std::chrono::milliseconds()>& get_timeout) const {
     std::vector<struct epoll_event> events(static_cast<size_t>(max_events_));
 

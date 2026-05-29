@@ -1,5 +1,3 @@
-#include <chrono>
-#include <csignal>
 #include <filesystem>
 #include <iostream>
 #include <optional>
@@ -18,12 +16,6 @@
 #include "server/server_config.hpp"
 #include "store/store.hpp"
 #include "util/logger.hpp"
-
-namespace {
-
-credis::event_loop::EventLoop* g_loop = nullptr;
-
-} // namespace
 
 auto main(int argc, char* argv[]) -> int {
     std::cout << std::unitbuf;
@@ -95,21 +87,6 @@ auto main(int argc, char* argv[]) -> int {
         *listener, loop, handler, conn_pool, replica_mgr, replica_conn, blocking, pubsub};
 
     // 10. Run event loop
-    // TODO: graceful shutdown — drain in-flight requests, flush RDB/AOF, notify replicas
-    // before returning from run(). Currently SIGINT/SIGTERM just stops the event loop;
-    // RAII destructors clean up fds and connections.
-    g_loop = &loop;
-    std::signal(SIGINT, [](int) {
-        if (g_loop != nullptr) {
-            g_loop->stop();
-        }
-    });
-    std::signal(SIGTERM, [](int) {
-        if (g_loop != nullptr) {
-            g_loop->stop();
-        }
-    });
-
     loop.run([&ctx](int fd) { credis::server::dispatch_event(fd, ctx); },
              [&ctx]() -> std::chrono::milliseconds { return credis::server::compute_timeout(ctx); });
     return 0;
