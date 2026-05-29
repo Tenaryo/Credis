@@ -32,8 +32,7 @@ auto Store::lower_bound(const Stream& stream, const credis::protocol::StreamId& 
     size_t hi = stream.size();
     while (lo < hi) {
         size_t mid = lo + (hi - lo) / 2;
-        auto sid = StreamId::parse(stream[mid].id);
-        if (sid && *sid < target) {
+        if (stream[mid].parsed_id < target) {
             lo = mid + 1;
         } else {
             hi = mid;
@@ -47,8 +46,7 @@ auto Store::upper_bound(const Stream& stream, const credis::protocol::StreamId& 
     size_t hi = stream.size();
     while (lo < hi) {
         size_t mid = lo + (hi - lo) / 2;
-        auto sid = StreamId::parse(stream[mid].id);
-        if (sid && !(target < *sid)) {
+        if (!(target < stream[mid].parsed_id)) {
             lo = mid + 1;
         } else {
             hi = mid;
@@ -277,8 +275,8 @@ auto Store::xadd(std::string key, const std::string& id, const std::vector<std::
         if (stream->empty()) {
             sequence = 0;
         } else {
-            auto last = StreamId::parse(stream->back().id);
-            sequence = (last && last->timestamp == timestamp) ? last->sequence + 1 : 0;
+            const auto& last = stream->back().parsed_id;
+            sequence = (last.timestamp == timestamp) ? last.sequence + 1 : 0;
         }
 
         final_id = StreamId{timestamp, sequence}.to_string();
@@ -296,9 +294,9 @@ auto Store::xadd(std::string key, const std::string& id, const std::vector<std::
         if (stream->empty()) {
             sequence = (timestamp == 0) ? 1 : 0;
         } else {
-            auto last = StreamId::parse(stream->back().id);
-            if (last && last->timestamp == timestamp) {
-                sequence = last->sequence + 1;
+            const auto& last = stream->back().parsed_id;
+            if (last.timestamp == timestamp) {
+                sequence = last.sequence + 1;
             } else {
                 sequence = (timestamp == 0) ? 1 : 0;
             }
@@ -320,14 +318,13 @@ auto Store::xadd(std::string key, const std::string& id, const std::vector<std::
     }
 
     if (!stream->empty()) {
-        auto last = StreamId::parse(stream->back().id);
-        if (!last || !(last < StreamId{timestamp, sequence})) {
+        if (!(stream->back().parsed_id < StreamId{timestamp, sequence})) {
             return "ERR The ID specified in XADD is equal or smaller than the target stream top "
                    "item";
         }
     }
 
-    stream->push_back(StreamEntry{final_id, fields});
+    stream->push_back(StreamEntry{final_id, StreamId{timestamp, sequence}, fields});
     return final_id;
 }
 
