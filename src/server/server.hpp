@@ -13,7 +13,7 @@ class TcpListener {
     }
 
   public:
-    static std::expected<TcpListener, credis::util::Error> create(int port);
+    static auto create(int port) -> std::expected<TcpListener, credis::util::Error>;
     ~TcpListener();
 
     TcpListener(const TcpListener&) = delete;
@@ -21,7 +21,7 @@ class TcpListener {
     TcpListener(TcpListener&&) noexcept;
     auto operator=(TcpListener&&) noexcept -> TcpListener&;
 
-    [[nodiscard]] std::expected<int, credis::util::Error> accept_connection() const;
+    [[nodiscard]] auto accept_connection() const -> std::expected<int, credis::util::Error>;
     [[nodiscard]] auto fd() const noexcept -> int {
         return server_fd_;
     }

@@ -34,7 +34,7 @@ class Connection {
     void compact();
 
     static constexpr size_t kInitialBufferSize = 4096;
-    static constexpr size_t kMaxBufferSize = 512 * 1024 * 1024;
+    static constexpr size_t kMaxBufferSize = 512ULL * 1024 * 1024;
 };
 
 } // namespace credis::connection

@@ -137,9 +137,8 @@ class Store {
     auto rpop(std::string_view key, int64_t count) -> std::vector<std::string>;
     auto lrange(std::string_view key, int64_t start, int64_t stop) -> std::vector<std::string>;
 
-    auto xadd(std::string key,
-              const std::string& id,
-              const std::vector<std::pair<std::string, std::string>>& fields) -> std::string;
+    auto xadd(std::string key, const std::string& id, const std::vector<std::pair<std::string, std::string>>& fields)
+        -> std::string;
 
     auto xrange(std::string_view key, std::string_view start, std::string_view end) -> std::span<const StreamEntry>;
 
@@ -159,7 +158,7 @@ class Store {
     auto keys() -> std::vector<std::string>;
 
     template <typename T>
-    [[nodiscard]] bool key_is_absent_or_holds(std::string_view key) const {
+    [[nodiscard]] auto key_is_absent_or_holds(std::string_view key) const -> bool {
         auto it = data_.find(key);
         if (it == data_.end()) {
             return true;
