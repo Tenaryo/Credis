@@ -87,10 +87,10 @@ void ReplicaManager::start_wait(int client_fd, int64_t numreplicas, int64_t time
 }
 
 auto ReplicaManager::check_wait_timeout() -> std::optional<WaitResult> {
-    if (!wait_state_) [[likely]] {
+    if (!wait_state_) {
         return std::nullopt;
     }
-    if (std::chrono::steady_clock::now() < wait_state_->deadline) [[likely]] {
+    if (std::chrono::steady_clock::now() < wait_state_->deadline) {
         return std::nullopt;
     }
     int64_t count = count_acked_for(wait_state_->target_offset);
