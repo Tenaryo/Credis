@@ -67,8 +67,9 @@ class CommandHandler {
     void remove_connection(int fd);
 
     auto process(std::string_view input) -> std::string;
-    auto process_with_fd(int fd, std::string_view input, std::function<void(int, const std::string&)> send_to_client)
-        -> ProcessResult;
+    auto process_with_fd(int fd,
+                         std::string_view input,
+                         const std::function<void(int, const std::string&)>& send_to_client) -> ProcessResult;
 
   private:
     template <typename SendFn>

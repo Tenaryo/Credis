@@ -308,7 +308,8 @@ auto CommandHandler::process(std::string_view input) -> std::string {
 
 auto CommandHandler::process_with_fd(int fd,
                                      std::string_view input,
-                                     std::function<void(int, const std::string&)> send_to_client) -> ProcessResult {
+                                     const std::function<void(int, const std::string&)>& send_to_client)
+    -> ProcessResult {
     size_t total_consumed = 0;
     ProcessResult result = ProcessResult::normal("");
 
