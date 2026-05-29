@@ -83,7 +83,7 @@ auto handle_acl(CommandContext& ctx, const std::vector<std::string>& args) -> st
 }
 
 auto handle_acl_getuser(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
-    const auto* user = ctx.acl_manager->get_user(args[2]);
+    const auto* user = ctx.acl_manager.get_user(args[2]);
     if (user == nullptr) {
         return credis::protocol::encode_null_array();
     }
@@ -102,7 +102,7 @@ auto handle_acl_setuser(CommandContext& ctx, const std::vector<std::string>& arg
     for (size_t i = 3; i < args.size(); ++i) {
         const auto& rule = args[i];
         if (!rule.empty() && rule[0] == '>') {
-            ctx.acl_manager->set_password(username, rule.substr(1));
+            ctx.acl_manager.set_password(username, rule.substr(1));
         }
     }
     return credis::protocol::kRespOk;
@@ -112,8 +112,8 @@ auto handle_auth(CommandContext& ctx, int fd, const std::vector<std::string>& ar
     if (args.size() < 3) {
         return credis::protocol::encode_error("ERR wrong number of arguments for 'auth' command");
     }
-    if (ctx.acl_manager->authenticate(args[1], args[2])) {
-        ctx.authenticated_fds->insert(fd);
+    if (ctx.acl_manager.authenticate(args[1], args[2])) {
+        ctx.authenticated_fds.insert(fd);
         return credis::protocol::kRespOk;
     }
     return credis::protocol::encode_error("WRONGPASS invalid username-password pair or user is disabled.");
@@ -127,8 +127,8 @@ auto handle_replconf(const std::vector<std::string>& args) -> std::string {
 }
 
 auto handle_psync(CommandContext& ctx) -> ProcessResult {
-    auto response
-        = "+FULLRESYNC " + ctx.config.master_replid + " " + std::to_string(ctx.offset_fn ? ctx.offset_fn() : 0) + "\r\n";
+    auto response = "+FULLRESYNC " + ctx.config.master_replid + " "
+                    + std::to_string(ctx.offset_fn ? ctx.offset_fn() : 0) + "\r\n";
     response += "$88\r\n";
     response.append(credis::rdb::kEmptyRdb.begin(), credis::rdb::kEmptyRdb.end());
     return ProcessResult::replica_handshake(response);

@@ -23,8 +23,18 @@ namespace {
 using namespace std::string_view_literals;
 
 auto is_write_command(std::string_view cmd) -> bool {
-    static constexpr auto kWriteCommands = std::array{
-        "SET"sv, "DEL"sv, "INCR"sv, "MSET"sv, "RPUSH"sv, "LPUSH"sv, "LPOP"sv, "RPOP"sv, "XADD"sv, "ZADD"sv, "ZREM"sv, "GEOADD"sv};
+    static constexpr auto kWriteCommands = std::array{"SET"sv,
+                                                      "DEL"sv,
+                                                      "INCR"sv,
+                                                      "MSET"sv,
+                                                      "RPUSH"sv,
+                                                      "LPUSH"sv,
+                                                      "LPOP"sv,
+                                                      "RPOP"sv,
+                                                      "XADD"sv,
+                                                      "ZADD"sv,
+                                                      "ZREM"sv,
+                                                      "GEOADD"sv};
     return std::ranges::find(kWriteCommands, cmd) != kWriteCommands.end();
 }
 
@@ -33,16 +43,16 @@ auto is_write_command(std::string_view cmd) -> bool {
 namespace credis::handler {
 
 CommandHandler::CommandHandler(credis::store::Store& store, credis::server::ServerConfig config)
-    : store_(store), config_(std::move(config)) {
-    if (config_.master_replid.empty()) {
-        config_.generate_replid();
+    : ctx_{store, std::move(config)} {
+    if (ctx_.config.master_replid.empty()) {
+        ctx_.config.generate_replid();
     }
     register_commands();
 }
 
 void CommandHandler::remove_connection(int fd) {
-    authenticated_fds_.erase(fd);
-    transactions_.erase(fd);
+    ctx_.authenticated_fds.erase(fd);
+    ctx_.transactions.erase(fd);
 }
 
 void CommandHandler::register_commands() {
@@ -69,8 +79,8 @@ void CommandHandler::register_commands() {
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_set(ctx, args));
-           },
-           3}},
+          },
+          3}},
         {"MSET",
          {[](CommandContext& ctx,
              const std::vector<std::string>& args,
@@ -131,8 +141,8 @@ void CommandHandler::register_commands() {
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_lpop(ctx, args));
-           },
-           2}},
+          },
+          2}},
         {"RPOP",
          {[](CommandContext& ctx,
              const std::vector<std::string>& args,
@@ -313,7 +323,7 @@ auto CommandHandler::process_with_fd(int fd,
         auto cmd_name = credis::util::to_upper(parsed->args[0]);
         auto cmd_result = process_single_command(fd, std::move(parsed->args), send_to_client);
 
-        if (is_write_command(cmd_name) && replica_count_fn_ && replica_count_fn_() > 0) {
+        if (is_write_command(cmd_name) && ctx_.replica_count_fn && ctx_.replica_count_fn() > 0) {
             result.propagate_cmds.push_back(std::string(input.substr(cmd_start, parsed->consumed)));
         }
 
@@ -333,10 +343,10 @@ auto CommandHandler::process_with_fd(int fd,
     return result;
 }
 
-auto CommandHandler::process_single_command(
-    int fd,
-    std::vector<std::string> args,
-    const std::function<void(int, const std::string&)>& send_to_client) -> ProcessResult {
+auto CommandHandler::process_single_command(int fd,
+                                            std::vector<std::string> args,
+                                            const std::function<void(int, const std::string&)>& send_to_client)
+    -> ProcessResult {
     if (args.empty()) [[unlikely]] {
         return ProcessResult::normal(credis::protocol::encode_error("ERR empty command"));
     }
@@ -344,7 +354,7 @@ auto CommandHandler::process_single_command(
     std::string& cmd = args[0];
     cmd = credis::util::to_upper(std::move(cmd));
 
-    if (pubsub_manager_ && pubsub_manager_->get().is_subscribed(fd)) [[unlikely]] {
+    if (ctx_.pubsub_manager && ctx_.pubsub_manager->get().is_subscribed(fd)) [[unlikely]] {
         static constexpr auto kSubscribedAllowed = std::array{
             "SUBSCRIBE"sv, "UNSUBSCRIBE"sv, "PSUBSCRIBE"sv, "PUNSUBSCRIBE"sv, "PING"sv, "QUIT"sv, "RESET"sv};
         if (std::ranges::find(kSubscribedAllowed, cmd) == kSubscribedAllowed.end()) [[unlikely]] {
@@ -353,26 +363,26 @@ auto CommandHandler::process_single_command(
         }
     }
 
-    if (cmd != "AUTH" && !authenticated_fds_.contains(fd)) [[unlikely]] {
-        const auto* user = acl_manager_.get_user("default");
+    if (cmd != "AUTH" && !ctx_.authenticated_fds.contains(fd)) [[unlikely]] {
+        const auto* user = ctx_.acl_manager.get_user("default");
         if ((user != nullptr) && user->nopass) [[likely]] {
-            authenticated_fds_.insert(fd);
+            ctx_.authenticated_fds.insert(fd);
         } else {
             return ProcessResult::normal(credis::protocol::encode_error("NOAUTH Authentication required."));
         }
     }
 
     if (cmd == "MULTI") [[unlikely]] {
-        if (transactions_[fd].in_multi) [[unlikely]] {
+        if (ctx_.transactions[fd].in_multi) [[unlikely]] {
             return ProcessResult::normal(credis::protocol::encode_error("ERR MULTI calls can not be nested"));
         }
-        transactions_[fd].in_multi = true;
+        ctx_.transactions[fd].in_multi = true;
         return ProcessResult::normal(credis::protocol::kRespOk);
     }
 
     if (cmd == "EXEC") [[unlikely]] {
-        auto it = transactions_.find(fd);
-        if (it == transactions_.end() || !it->second.in_multi) [[unlikely]] {
+        auto it = ctx_.transactions.find(fd);
+        if (it == ctx_.transactions.end() || !it->second.in_multi) [[unlikely]] {
             return ProcessResult::normal(credis::protocol::encode_error("ERR EXEC without MULTI"));
         }
 
@@ -380,14 +390,14 @@ auto CommandHandler::process_single_command(
 
         bool dirty = false;
         for (const auto& [key, version] : tx.watched_keys) {
-            if (store_.get_key_version(key) != version) [[unlikely]] {
+            if (ctx_.store.get_key_version(key) != version) [[unlikely]] {
                 dirty = true;
                 break;
             }
         }
 
         if (dirty) [[unlikely]] {
-            transactions_.erase(it);
+            ctx_.transactions.erase(it);
             return ProcessResult::normal(credis::protocol::encode_null_array());
         }
 
@@ -401,16 +411,16 @@ auto CommandHandler::process_single_command(
                 results.push_back(credis::protocol::encode_error("ERR command in EXEC not allowed"));
             }
         }
-        transactions_.erase(it);
+        ctx_.transactions.erase(it);
         return ProcessResult::normal(credis::protocol::encode_raw_array(results));
     }
 
     if (cmd == "DISCARD") [[unlikely]] {
-        auto dit = transactions_.find(fd);
-        if (dit == transactions_.end() || !dit->second.in_multi) [[unlikely]] {
+        auto dit = ctx_.transactions.find(fd);
+        if (dit == ctx_.transactions.end() || !dit->second.in_multi) [[unlikely]] {
             return ProcessResult::normal(credis::protocol::encode_error("ERR DISCARD without MULTI"));
         }
-        transactions_.erase(dit);
+        ctx_.transactions.erase(dit);
         return ProcessResult::normal(credis::protocol::kRespOk);
     }
 
@@ -419,27 +429,27 @@ auto CommandHandler::process_single_command(
             return ProcessResult::normal(
                 credis::protocol::encode_error("ERR wrong number of arguments for 'watch' command"));
         }
-        auto it = transactions_.find(fd);
-        if (it != transactions_.end() && it->second.in_multi) [[unlikely]] {
+        auto it = ctx_.transactions.find(fd);
+        if (it != ctx_.transactions.end() && it->second.in_multi) [[unlikely]] {
             return ProcessResult::normal(credis::protocol::encode_error("ERR WATCH inside MULTI is not allowed"));
         }
-        auto& tx = transactions_[fd];
+        auto& tx = ctx_.transactions[fd];
         for (size_t i = 1; i < args.size(); ++i) {
-            tx.watched_keys[args[i]] = store_.get_key_version(args[i]);
+            tx.watched_keys[args[i]] = ctx_.store.get_key_version(args[i]);
         }
         return ProcessResult::normal(credis::protocol::kRespOk);
     }
 
     if (cmd == "UNWATCH") [[unlikely]] {
-        auto uit = transactions_.find(fd);
-        if (uit != transactions_.end()) {
+        auto uit = ctx_.transactions.find(fd);
+        if (uit != ctx_.transactions.end()) {
             uit->second.watched_keys.clear();
         }
         return ProcessResult::normal(credis::protocol::kRespOk);
     }
 
-    auto it = transactions_.find(fd);
-    if (it != transactions_.end() && it->second.in_multi) [[unlikely]] {
+    auto it = ctx_.transactions.find(fd);
+    if (it != ctx_.transactions.end() && it->second.in_multi) [[unlikely]] {
         it->second.queued_commands.push_back(args);
         return ProcessResult::normal(credis::protocol::kRespQueued);
     }
@@ -449,18 +459,8 @@ auto CommandHandler::process_single_command(
 }
 
 template <typename SendFn>
-auto CommandHandler::execute_command(const std::vector<std::string>& args,
-                                     int fd,
-                                     SendFn&& send_to_client) -> ProcessResult {
-    CommandContext ctx{store_,
-                       config_,
-                       blocking_manager_,
-                       pubsub_manager_,
-                       &acl_manager_,
-                       replica_count_fn_,
-                       offset_fn_,
-                       &transactions_,
-                       &authenticated_fds_};
+auto CommandHandler::execute_command(const std::vector<std::string>& args, int fd, SendFn&& send_to_client)
+    -> ProcessResult {
     const std::string& cmd = args[0];
 
     if (cmd == "CONFIG") [[unlikely]] {
@@ -468,13 +468,13 @@ auto CommandHandler::execute_command(const std::vector<std::string>& args,
             return ProcessResult::normal(
                 credis::protocol::encode_error("ERR wrong number of arguments for 'config' command"));
         }
-        return ProcessResult::normal(handle_config_get(ctx, args[2]));
+        return ProcessResult::normal(handle_config_get(ctx_, args[2]));
     }
     if (cmd == "ACL") [[unlikely]] {
-        return ProcessResult::normal(handle_acl(ctx, args));
+        return ProcessResult::normal(handle_acl(ctx_, args));
     }
     if (cmd == "AUTH") [[unlikely]] {
-        return ProcessResult::normal(handle_auth(ctx, fd, args));
+        return ProcessResult::normal(handle_auth(ctx_, fd, args));
     }
     if (cmd == "REPLCONF") [[unlikely]] {
         return ProcessResult::normal(handle_replconf(args));
@@ -483,28 +483,28 @@ auto CommandHandler::execute_command(const std::vector<std::string>& args,
         return handle_wait(args);
     }
     if (cmd == "PSYNC") [[unlikely]] {
-        return handle_psync(ctx);
+        return handle_psync(ctx_);
     }
     if (cmd == "SUBSCRIBE") [[unlikely]] {
         if (args.size() < 2) [[unlikely]] {
             return ProcessResult::normal(
                 credis::protocol::encode_error("ERR wrong number of arguments for 'subscribe' command"));
         }
-        return ProcessResult::normal(handle_subscribe(ctx, fd, args[1]));
+        return ProcessResult::normal(handle_subscribe(ctx_, fd, args[1]));
     }
     if (cmd == "UNSUBSCRIBE") [[unlikely]] {
         if (args.size() < 2) [[unlikely]] {
             return ProcessResult::normal(
                 credis::protocol::encode_error("ERR wrong number of arguments for 'unsubscribe' command"));
         }
-        return ProcessResult::normal(handle_unsubscribe(ctx, fd, args[1]));
+        return ProcessResult::normal(handle_unsubscribe(ctx_, fd, args[1]));
     }
     if (cmd == "PUBLISH") [[unlikely]] {
         if (args.size() < 3) [[unlikely]] {
             return ProcessResult::normal(
                 credis::protocol::encode_error("ERR wrong number of arguments for 'publish' command"));
         }
-        return ProcessResult::normal(handle_publish(ctx, args[1], args[2], send_to_client));
+        return ProcessResult::normal(handle_publish(ctx_, args[1], args[2], send_to_client));
     }
 
     auto it = command_table_.find(cmd);
@@ -515,7 +515,7 @@ auto CommandHandler::execute_command(const std::vector<std::string>& args,
         return ProcessResult::normal(credis::protocol::encode_error("ERR wrong number of arguments for '"
                                                                     + credis::util::to_lower(cmd) + "' command"));
     }
-    return it->second.handler(ctx, args, fd, send_to_client);
+    return it->second.handler(ctx_, args, fd, send_to_client);
 }
 
 template ProcessResult CommandHandler::execute_command<std::function<void(int, const std::string&)>>(
