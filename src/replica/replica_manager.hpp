@@ -5,10 +5,15 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <unordered_map>
-#include <unordered_set>
+#include <vector>
 
 namespace credis::replica {
+
+struct ReplicaState {
+    int fd;
+    int64_t offset{0};
+    std::string buffer;
+};
 
 struct WaitState {
     int client_fd;
@@ -23,24 +28,28 @@ struct WaitResult {
 };
 
 class ReplicaManager {
-    std::unordered_set<int> replica_fds_;
-    std::unordered_map<int, int64_t> replica_offsets_;
-    std::unordered_map<int, std::string> replica_buffers_;
+    std::vector<ReplicaState> replicas_;
     int64_t master_offset_{0};
     std::optional<WaitState> wait_state_;
+
+    auto find(int fd) -> ReplicaState*;
+    [[nodiscard]] auto find(int fd) const -> const ReplicaState*;
 
   public:
     auto count_acked_for(int64_t target) const -> int64_t;
 
     void add_replica(int fd) {
-        replica_fds_.insert(fd);
+        replicas_.push_back({fd, 0, {}});
     }
     void remove_replica(int fd);
     [[nodiscard]] auto count() const -> size_t {
-        return replica_fds_.size();
+        return replicas_.size();
     }
-    [[nodiscard]] auto replica_fds() const -> const std::unordered_set<int>& {
-        return replica_fds_;
+    [[nodiscard]] auto contains(int fd) const -> bool {
+        return find(fd) != nullptr;
+    }
+    [[nodiscard]] auto replicas() const -> const std::vector<ReplicaState>& {
+        return replicas_;
     }
 
     auto process_ack(int fd, std::string_view data) -> std::optional<WaitResult>;

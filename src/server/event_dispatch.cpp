@@ -32,7 +32,7 @@ void dispatch_event(int fd, EventContext& ctx) {
         return;
     }
 
-    if (ctx.replica_mgr.replica_fds().contains(fd)) {
+    if (ctx.replica_mgr.contains(fd)) {
         auto data = ctx.conn_pool.read_from(fd);
         if (!data) {
             ctx.replica_mgr.remove_replica(fd);
@@ -77,12 +77,12 @@ void dispatch_event(int fd, EventContext& ctx) {
         auto& w = std::get<ProcessResult::Wait>(result.state);
         if (ctx.replica_mgr.offset() == 0 || ctx.replica_mgr.count_acked_for(ctx.replica_mgr.offset()) >= w.numreplicas) {
             ctx.conn_pool.send_to(
-                fd, credis::protocol::encode_integer(static_cast<int64_t>(ctx.replica_mgr.replica_fds().size())));
+                fd, credis::protocol::encode_integer(static_cast<int64_t>(ctx.replica_mgr.count())));
         } else {
             ctx.replica_mgr.start_wait(fd, w.numreplicas, w.timeout_ms);
             auto getack = credis::protocol::encode_array({"REPLCONF", "GETACK", "*"});
-            for (int rfd : ctx.replica_mgr.replica_fds()) {
-                ctx.conn_pool.send_to(rfd, getack);
+            for (const auto& r : ctx.replica_mgr.replicas()) {
+                ctx.conn_pool.send_to(r.fd, getack);
             }
         }
     } else if (std::holds_alternative<ProcessResult::ReplicaHandshake>(result.state)) {
@@ -94,8 +94,8 @@ void dispatch_event(int fd, EventContext& ctx) {
     if (!result.propagate_cmds.empty()) {
         for (const auto& raw_cmd : result.propagate_cmds) {
             ctx.replica_mgr.propagate(raw_cmd);
-            for (int rfd : ctx.replica_mgr.replica_fds()) {
-                ctx.conn_pool.send_to(rfd, raw_cmd);
+            for (const auto& r : ctx.replica_mgr.replicas()) {
+                ctx.conn_pool.send_to(r.fd, raw_cmd);
             }
         }
     }

@@ -1,23 +1,41 @@
 #include "replica_manager.hpp"
 
-#include <algorithm>
-
 #include "protocol/resp_codec.hpp"
 #include "util/string_utils.hpp"
 
 namespace credis::replica {
 
+auto ReplicaManager::find(int fd) -> ReplicaState* {
+    for (auto& r : replicas_) {
+        if (r.fd == fd) {
+            return &r;
+        }
+    }
+    return nullptr;
+}
+
+auto ReplicaManager::find(int fd) const -> const ReplicaState* {
+    for (const auto& r : replicas_) {
+        if (r.fd == fd) {
+            return &r;
+        }
+    }
+    return nullptr;
+}
+
 void ReplicaManager::remove_replica(int fd) {
-    replica_fds_.erase(fd);
-    replica_offsets_.erase(fd);
-    replica_buffers_.erase(fd);
+    for (auto it = replicas_.begin(); it != replicas_.end(); ++it) {
+        if (it->fd == fd) {
+            replicas_.erase(it);
+            return;
+        }
+    }
 }
 
 auto ReplicaManager::count_acked_for(int64_t target) const -> int64_t {
     int64_t count = 0;
-    for (int rfd : replica_fds_) {
-        auto it = replica_offsets_.find(rfd);
-        if (it != replica_offsets_.end() && it->second >= target) {
+    for (const auto& r : replicas_) {
+        if (r.offset >= target) {
             ++count;
         }
     }
@@ -25,16 +43,20 @@ auto ReplicaManager::count_acked_for(int64_t target) const -> int64_t {
 }
 
 auto ReplicaManager::process_ack(int fd, std::string_view data) -> std::optional<WaitResult> {
-    auto& buffer = replica_buffers_[fd];
-    buffer.append(data);
+    auto* r = find(fd);
+    if (!r) {
+        return std::nullopt;
+    }
 
-    while (auto result = credis::protocol::parse_one(buffer)) [[likely]] {
+    r->buffer.append(data);
+
+    while (auto result = credis::protocol::parse_one(r->buffer)) [[likely]] {
         auto& args = result->args;
         if (args.size() >= 3 && credis::util::to_upper(args[0]) == "REPLCONF"
             && credis::util::to_upper(args[1]) == "ACK") {
-            replica_offsets_[fd] = std::stoll(args[2]);
+            r->offset = std::stoll(args[2]);
         }
-        buffer.erase(0, result->consumed);
+        r->buffer.erase(0, result->consumed);
     }
 
     if (wait_state_) [[unlikely]] {
