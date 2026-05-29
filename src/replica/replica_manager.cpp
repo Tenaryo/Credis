@@ -31,7 +31,7 @@ auto ReplicaManager::process_ack(int fd, std::string_view data) -> std::optional
     while (auto result = credis::protocol::parse_one(buffer)) [[likely]] {
         auto& args = result->args;
         if (args.size() >= 3 && credis::util::to_upper(args[0]) == "REPLCONF"
-            && credis::util::to_upper(args[1]) == "ACK") [[unlikely]] {
+            && credis::util::to_upper(args[1]) == "ACK") {
             replica_offsets_[fd] = std::stoll(args[2]);
         }
         buffer.erase(0, result->consumed);
