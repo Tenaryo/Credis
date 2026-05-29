@@ -19,7 +19,7 @@ ReplicaConnector::ReplicaConnector(std::string host, int port) : host_(std::move
 }
 
 ReplicaConnector::~ReplicaConnector() {
-    if (fd_ >= 0) [[likely]] {
+    if (fd_ >= 0) {
         ::close(fd_);
     }
 }
@@ -31,8 +31,8 @@ ReplicaConnector::ReplicaConnector(ReplicaConnector&& other) noexcept
 }
 
 auto ReplicaConnector::operator=(ReplicaConnector&& other) noexcept -> ReplicaConnector& {
-    if (this != &other) [[likely]] {
-        if (fd_ >= 0) [[likely]] {
+    if (this != &other) {
+        if (fd_ >= 0) {
             ::close(fd_);
         }
         host_ = std::move(other.host_);
@@ -145,7 +145,7 @@ auto ReplicaConnector::send_psync() -> bool {
     }
 
     size_t remaining = all.size() - crlf - 2;
-    if (remaining > 0) [[likely]] {
+    if (remaining > 0) {
         pending_buffer_.assign(buf + crlf + 2, remaining);
     }
 
@@ -161,21 +161,21 @@ auto ReplicaConnector::receive_rdb() -> std::optional<std::string> {
 
     auto find_crlf = [&]() -> size_t {
         for (size_t i = 0; i + 1 < header_buf.size(); ++i) {
-            if (header_buf[i] == '\r' && header_buf[i + 1] == '\n') [[likely]] {
+            if (header_buf[i] == '\r' && header_buf[i + 1] == '\n') {
                 return i;
             }
         }
         return std::string::npos;
     };
 
-    if (!pending_buffer_.empty()) [[unlikely]] {
+    if (!pending_buffer_.empty()) {
         header_buf = std::move(pending_buffer_);
         pending_buffer_.clear();
     }
 
-    while (true) [[likely]] {
+    while (true) {
         auto crlf_pos = find_crlf();
-        if (crlf_pos != std::string::npos) [[likely]] {
+        if (crlf_pos != std::string::npos) {
             if (header_buf.empty() || header_buf[0] != '$') [[unlikely]] {
                 return std::nullopt;
             }
@@ -201,7 +201,7 @@ auto ReplicaConnector::receive_rdb() -> std::optional<std::string> {
                 copied += static_cast<size_t>(rd);
             }
 
-            if (available > static_cast<size_t>(len)) [[unlikely]] {
+            if (available > static_cast<size_t>(len)) {
                 size_t extra_offset = header_size + static_cast<size_t>(len);
                 pending_buffer_.assign(header_buf.data() + extra_offset, header_buf.size() - extra_offset);
             }
@@ -220,18 +220,18 @@ auto ReplicaConnector::receive_rdb() -> std::optional<std::string> {
 
 auto ReplicaConnector::process_buffer_impl() -> ProcessedBuffer {
     ProcessedBuffer result;
-    while (true) [[likely]] {
+    while (true) {
         auto parsed = credis::protocol::parse_one(pending_buffer_);
-        if (!parsed) [[unlikely]] {
+        if (!parsed) {
             break;
         }
 
         bool is_getack = parsed->args.size() >= 2 && credis::util::to_upper(parsed->args[0]) == "REPLCONF"
                          && credis::util::to_upper(parsed->args[1]) == "GETACK";
 
-        if (is_getack) [[unlikely]] {
+        if (is_getack) {
             result.ack_responses += credis::protocol::encode_array({"REPLCONF", "ACK", std::to_string(offset_)});
-        } else [[likely]] {
+        } else {
             result.commands.emplace_back(pending_buffer_.data(), parsed->consumed);
         }
         offset_ += static_cast<int64_t>(parsed->consumed);
@@ -273,7 +273,7 @@ void ReplicaConnector::send_response(std::string_view data) const {
 auto connect_if_replica(const credis::server::ServerConfig& config,
                         int listening_port) -> std::optional<ReplicaConnector> {
     const auto& replica = config.replica;
-    if (!replica) [[likely]] {
+    if (!replica) {
         return std::nullopt;
     }
     auto connector = ReplicaConnector(replica->host, replica->port);
