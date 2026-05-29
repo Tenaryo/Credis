@@ -84,7 +84,7 @@ auto ReplicaConnector::send_and_check(const std::vector<std::string>& args, Pred
 
     auto msg = credis::protocol::encode_array(args);
     size_t sent = 0;
-    while (sent < msg.size()) [[likely]] {
+    while (sent < msg.size()) {
         auto n = ::send(fd_, msg.data() + sent, msg.size() - sent, MSG_NOSIGNAL);
         if (n <= 0) [[unlikely]] {
             return false;
@@ -120,7 +120,7 @@ auto ReplicaConnector::send_psync() -> bool {
 
     auto msg = credis::protocol::encode_array({"PSYNC", "?", "-1"});
     size_t sent = 0;
-    while (sent < msg.size()) [[likely]] {
+    while (sent < msg.size()) {
         auto n = ::send(fd_, msg.data() + sent, msg.size() - sent, MSG_NOSIGNAL);
         if (n <= 0) [[unlikely]] {
             return false;
@@ -193,7 +193,7 @@ auto ReplicaConnector::receive_rdb() -> std::optional<std::string> {
             size_t copied = std::min(available, static_cast<size_t>(len));
             std::memcpy(rdb_data.data(), header_buf.data() + header_size, copied);
 
-            while (copied < static_cast<size_t>(len)) [[likely]] {
+            while (copied < static_cast<size_t>(len)) {
                 auto rd = ::read(fd_, rdb_data.data() + copied, static_cast<size_t>(len) - copied);
                 if (rd <= 0) [[unlikely]] {
                     return std::nullopt;
@@ -261,7 +261,7 @@ auto ReplicaConnector::process_pending_buffer() -> ProcessedBuffer {
 
 void ReplicaConnector::send_response(std::string_view data) const {
     size_t sent = 0;
-    while (sent < data.size()) [[likely]] {
+    while (sent < data.size()) {
         auto n = ::send(fd_, data.data() + sent, data.size() - sent, MSG_NOSIGNAL);
         if (n <= 0) [[unlikely]] {
             break;
