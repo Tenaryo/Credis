@@ -40,7 +40,7 @@ class ReplicaManager {
     [[nodiscard]] auto find(int fd) const -> const ReplicaState*;
 
   public:
-    auto count_acked_for(int64_t target) const -> int64_t;
+    [[nodiscard]] auto count_acked_for(int64_t target) const -> int64_t;
 
     void add_replica(int fd) {
         replicas_.push_back({fd, 0});

@@ -46,7 +46,7 @@ auto ReplicaManager::count_acked_for(int64_t target) const -> int64_t {
 
 auto ReplicaManager::process_ack(int fd, std::string_view data) -> AckResult {
     auto* r = find(fd);
-    if (!r) {
+    if (r == nullptr) {
         return {};
     }
 
