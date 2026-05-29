@@ -41,6 +41,7 @@ void dispatch_event(int fd, EventContext& ctx) {
             return;
         }
         auto wait_result = ctx.replica_mgr.process_ack(fd, *data);
+        ctx.conn_pool.consume(fd, data->size());
         if (wait_result) {
             ctx.conn_pool.send_to(wait_result->client_fd, credis::protocol::encode_integer(wait_result->count));
         }
