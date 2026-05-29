@@ -25,7 +25,7 @@ EventLoop::~EventLoop() {
     instance_ = nullptr;
 }
 
-EventLoop::EventLoop(EventLoop&& other) noexcept : epoll_fd_(other.epoll_fd_) {
+EventLoop::EventLoop(EventLoop&& other) noexcept : epoll_fd_(other.epoll_fd_), max_events_(other.max_events_) {
     other.epoll_fd_ = -1;
 }
 

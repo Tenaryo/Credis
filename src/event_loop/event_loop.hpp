@@ -14,7 +14,7 @@ class EventLoop {
     bool running_{true};
     static inline EventLoop* instance_{nullptr};
 
-    static void handle_signal(int) {
+    static void handle_signal(int /*sig*/) {
         if (instance_ != nullptr) {
             instance_->stop();
         }
