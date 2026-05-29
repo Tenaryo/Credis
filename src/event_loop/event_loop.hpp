@@ -11,13 +11,10 @@ namespace credis::event_loop {
 class EventLoop {
     int epoll_fd_{-1};
     int max_events_;
-    bool running_{true};
-    static inline EventLoop* instance_{nullptr};
+    static inline bool running_{true};
 
     static void handle_signal(int /*sig*/) {
-        if (instance_ != nullptr) {
-            instance_->stop();
-        }
+        running_ = false;
     }
 
     static constexpr int kDefaultMaxEvents = 1024;

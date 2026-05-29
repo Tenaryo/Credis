@@ -13,7 +13,6 @@ EventLoop::EventLoop(int max_events) : max_events_(max_events) {
     if (epoll_fd_ < 0) [[unlikely]] {
         LOG_ERROR("Failed to create epoll instance");
     }
-    instance_ = this;
     std::signal(SIGINT, handle_signal);
     std::signal(SIGTERM, handle_signal);
 }
@@ -22,7 +21,6 @@ EventLoop::~EventLoop() {
     if (epoll_fd_ >= 0) [[likely]] {
         close(epoll_fd_);
     }
-    instance_ = nullptr;
 }
 
 EventLoop::EventLoop(EventLoop&& other) noexcept : epoll_fd_(other.epoll_fd_), max_events_(other.max_events_) {
