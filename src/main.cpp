@@ -1,9 +1,8 @@
 #include <chrono>
+#include <csignal>
 #include <filesystem>
 #include <iostream>
 #include <optional>
-
-#include <csignal>
 
 #include "blocking_manager/blocking_manager.hpp"
 #include "cli/cli_parser.hpp"
@@ -129,11 +128,19 @@ auto main(int argc, char* argv[]) -> int {
     // before returning from run(). Currently SIGINT/SIGTERM just stops the event loop;
     // RAII destructors clean up fds and connections.
     g_loop = &loop;
-    std::signal(SIGINT, [](int) { if (g_loop) g_loop->stop(); });
-    std::signal(SIGTERM, [](int) { if (g_loop) g_loop->stop(); });
+    std::signal(SIGINT, [](int) {
+        if (g_loop != nullptr) {
+            g_loop->stop();
+        }
+    });
+    std::signal(SIGTERM, [](int) {
+        if (g_loop != nullptr) {
+            g_loop->stop();
+        }
+    });
 
-    loop.run(
-        [&ctx](int fd) { credis::server::dispatch_event(fd, ctx); },
-        [&ctx]() -> std::chrono::milliseconds { return credis::server::compute_timeout(ctx); });
+    loop.run([&ctx](int fd) { credis::server::dispatch_event(fd, ctx); },
+             [&ctx]() -> std::chrono::milliseconds { return credis::server::compute_timeout(ctx); });
     return 0;
 }
+// test
