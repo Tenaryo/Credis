@@ -26,7 +26,7 @@ using Stream = std::vector<StreamEntry>;
 
 struct SortedSet {
     std::set<std::pair<double, std::string>> entries;
-    std::unordered_map<std::string, double> member_scores;
+    std::unordered_map<std::string, double, credis::util::StringHash, std::equal_to<>> member_scores;
 
     auto add(double score, std::string member) -> int64_t {
         auto it = member_scores.find(member);
@@ -42,7 +42,7 @@ struct SortedSet {
     }
 
     auto remove(std::string_view member) -> int64_t {
-        auto it = member_scores.find(std::string(member));
+        auto it = member_scores.find(member);
         if (it == member_scores.end()) {
             return 0;
         }

@@ -258,9 +258,8 @@ auto Store::get_type(std::string_view key) -> std::string {
     return "none";
 }
 
-auto Store::xadd(std::string key,
-                 const std::string& id,
-                 const std::vector<std::pair<std::string, std::string>>& fields) -> std::string {
+auto Store::xadd(std::string key, const std::string& id, const std::vector<std::pair<std::string, std::string>>& fields)
+    -> std::string {
     touch_key(key);
     auto* stream = get_or_create_stream(std::move(key));
 
@@ -394,7 +393,7 @@ auto Store::zrank(std::string_view key, std::string_view member) -> std::optiona
         return std::nullopt;
     }
 
-    auto it = zset->member_scores.find(std::string(member));
+    auto it = zset->member_scores.find(member);
     if (it == zset->member_scores.end()) {
         return std::nullopt;
     }
@@ -457,7 +456,7 @@ auto Store::zscore(std::string_view key, std::string_view member) -> std::option
         return std::nullopt;
     }
 
-    auto it = zset->member_scores.find(std::string(member));
+    auto it = zset->member_scores.find(member);
     if (it == zset->member_scores.end()) {
         return std::nullopt;
     }
