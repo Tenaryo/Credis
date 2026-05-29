@@ -9,9 +9,9 @@
 
 namespace credis::handler {
 
-auto handle_set(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
-    const std::string& key = args[1];
-    const std::string& value = args[2];
+auto handle_set(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
+    std::string_view key = args[1];
+    std::string_view value = args[2];
 
     if (!ctx.store.key_is_absent_or_holds<credis::store::String>(key)) {
         return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
@@ -20,7 +20,7 @@ auto handle_set(CommandContext& ctx, const std::vector<std::string>& args) -> st
     std::optional<uint64_t> ttl_ms;
 
     for (size_t i = 3; i < args.size(); ++i) {
-        auto option = credis::util::to_upper(args[i]);
+        auto option = credis::util::to_upper(std::string(args[i]));
 
         if (option == "EX" || option == "PX") {
             if (i + 1 >= args.size()) {
@@ -37,16 +37,16 @@ auto handle_set(CommandContext& ctx, const std::vector<std::string>& args) -> st
         }
     }
 
-    ctx.store.set(key, value, ttl_ms);
+    ctx.store.set(std::string(key), std::string(value), ttl_ms);
     return credis::protocol::kRespOk;
 }
 
-auto handle_get(CommandContext& ctx, const std::string& key) -> std::string {
+auto handle_get(CommandContext& ctx, std::string_view key) -> std::string {
     auto value = ctx.store.get(key);
     return value ? credis::protocol::encode_bulk_string(*value) : credis::protocol::encode_null_bulk_string();
 }
 
-auto handle_incr(CommandContext& ctx, const std::string& key) -> std::string {
+auto handle_incr(CommandContext& ctx, std::string_view key) -> std::string {
     if (!ctx.store.key_is_absent_or_holds<credis::store::String>(key)) {
         return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
     }
@@ -57,7 +57,7 @@ auto handle_incr(CommandContext& ctx, const std::string& key) -> std::string {
     return credis::protocol::encode_integer(*result);
 }
 
-auto handle_mset(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
+auto handle_mset(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
     if ((args.size() - 1) % 2 != 0) {
         return credis::protocol::encode_error("ERR wrong number of arguments for MSET");
     }
@@ -65,7 +65,7 @@ auto handle_mset(CommandContext& ctx, const std::vector<std::string>& args) -> s
         if (!ctx.store.key_is_absent_or_holds<credis::store::String>(args[i])) {
             return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
         }
-        ctx.store.set(args[i], args[i + 1]);
+        ctx.store.set(std::string(args[i]), std::string(args[i + 1]));
     }
     return credis::protocol::kRespOk;
 }

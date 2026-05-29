@@ -145,10 +145,13 @@ TEST(E2ETypeValidation, ZaddThenSetWrontype) {
 }
 
 TEST(E2ERespRoundTrip, ParseEncodeParse) {
-    auto original = std::vector<std::string>{"SET", "foo", "bar"};
-    auto encoded = protocol::encode_array(original);
+    std::vector<std::string> original_strings{"SET", "foo", "bar"};
+    auto encoded = protocol::encode_array(original_strings);
     auto parsed = protocol::parse_one(encoded);
 
     ASSERT_TRUE(parsed.has_value());
-    EXPECT_EQ(parsed->args, original);
+    ASSERT_EQ(parsed->args.size(), original_strings.size());
+    for (size_t i = 0; i < original_strings.size(); ++i) {
+        EXPECT_EQ(parsed->args[i], original_strings[i]);
+    }
 }

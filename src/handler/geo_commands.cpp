@@ -15,7 +15,7 @@
 
 namespace credis::handler {
 
-auto handle_geoadd(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
+auto handle_geoadd(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
     if (!ctx.store.key_is_absent_or_holds<credis::store::SortedSet>(args[1])) {
         return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
     }
@@ -35,11 +35,11 @@ auto handle_geoadd(CommandContext& ctx, const std::vector<std::string>& args) ->
     }
 
     auto score = static_cast<double>(credis::geo::encode(*lat, *lon));
-    auto added = ctx.store.zadd(args[1], score, args[4]);
+    auto added = ctx.store.zadd(std::string(args[1]), score, std::string(args[4]));
     return credis::protocol::encode_integer(added);
 }
 
-auto handle_geopos(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
+auto handle_geopos(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
     const auto& key = args[1];
     auto count = args.size() - 2;
 
@@ -66,7 +66,7 @@ auto handle_geopos(CommandContext& ctx, const std::vector<std::string>& args) ->
     return resp;
 }
 
-auto handle_geodist(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
+auto handle_geodist(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
     auto score1 = ctx.store.zscore(args[1], args[2]);
     auto score2 = ctx.store.zscore(args[1], args[3]);
     if (!score1 || !score2) {
@@ -80,10 +80,10 @@ auto handle_geodist(CommandContext& ctx, const std::vector<std::string>& args) -
     return credis::protocol::encode_bulk_string(buf);
 }
 
-auto handle_geosearch(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
+auto handle_geosearch(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
     const auto& key = args[1];
 
-    if (credis::util::to_upper(args[2]) != "FROMLONLAT") {
+    if (credis::util::to_upper(std::string(args[2])) != "FROMLONLAT") {
         return credis::protocol::encode_error("ERR syntax error");
     }
 
@@ -93,7 +93,7 @@ auto handle_geosearch(CommandContext& ctx, const std::vector<std::string>& args)
         return credis::protocol::encode_error("ERR value is not a valid float");
     }
 
-    if (credis::util::to_upper(args[5]) != "BYRADIUS") {
+    if (credis::util::to_upper(std::string(args[5])) != "BYRADIUS") {
         return credis::protocol::encode_error("ERR syntax error");
     }
 
@@ -102,7 +102,7 @@ auto handle_geosearch(CommandContext& ctx, const std::vector<std::string>& args)
         return credis::protocol::encode_error("ERR value is not a valid float");
     }
 
-    auto unit = credis::util::to_upper(args[7]);
+    auto unit = credis::util::to_upper(std::string(args[7]));
     static constexpr std::pair<std::string_view, double> kUnitFactors[]
         = {{"M", 1.0}, {"KM", 1000.0}, {"MI", 1609.34}, {"FT", 0.3048}};
     const auto* factor_it = std::ranges::find_if(kUnitFactors, [&](const auto& p) { return p.first == unit; });

@@ -59,7 +59,7 @@ void CommandHandler::register_commands() {
     command_table_ = {
         {"PING",
          {[](CommandContext& ctx,
-             const std::vector<std::string>&,
+             const std::vector<std::string_view>&,
              int fd,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_ping(ctx, fd));
@@ -67,7 +67,7 @@ void CommandHandler::register_commands() {
           1}},
         {"ECHO",
          {[](CommandContext&,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_echo(args[1]));
@@ -75,7 +75,7 @@ void CommandHandler::register_commands() {
           2}},
         {"SET",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_set(ctx, args));
@@ -83,7 +83,7 @@ void CommandHandler::register_commands() {
           3}},
         {"MSET",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_mset(ctx, args));
@@ -91,7 +91,7 @@ void CommandHandler::register_commands() {
           3}},
         {"GET",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_get(ctx, args[1]));
@@ -99,7 +99,7 @@ void CommandHandler::register_commands() {
           2}},
         {"INCR",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_incr(ctx, args[1]));
@@ -107,7 +107,7 @@ void CommandHandler::register_commands() {
           2}},
         {"RPUSH",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>& send) -> ProcessResult {
               if (send) {
@@ -118,7 +118,7 @@ void CommandHandler::register_commands() {
           3}},
         {"LPUSH",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>& send) -> ProcessResult {
               if (send) {
@@ -129,7 +129,7 @@ void CommandHandler::register_commands() {
           3}},
         {"LLEN",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(credis::protocol::encode_integer(ctx.store.llen(args[1])));
@@ -137,7 +137,7 @@ void CommandHandler::register_commands() {
           2}},
         {"LPOP",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_lpop(ctx, args));
@@ -145,7 +145,7 @@ void CommandHandler::register_commands() {
           2}},
         {"RPOP",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_rpop(ctx, args));
@@ -153,7 +153,7 @@ void CommandHandler::register_commands() {
           2}},
         {"LRANGE",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_lrange(ctx, args));
@@ -161,7 +161,7 @@ void CommandHandler::register_commands() {
           4}},
         {"BLPOP",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int fd,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return handle_blpop(ctx, fd, args);
@@ -169,7 +169,7 @@ void CommandHandler::register_commands() {
           3}},
         {"TYPE",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(credis::protocol::encode_simple_string(ctx.store.get_type(args[1])));
@@ -177,7 +177,7 @@ void CommandHandler::register_commands() {
           2}},
         {"KEYS",
          {[](CommandContext& ctx,
-             const std::vector<std::string>&,
+             const std::vector<std::string_view>&,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(credis::protocol::encode_array(ctx.store.keys()));
@@ -185,7 +185,7 @@ void CommandHandler::register_commands() {
           2}},
         {"XADD",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>& send) -> ProcessResult {
               return handle_xadd_with_blocking(ctx, args, send);
@@ -193,7 +193,7 @@ void CommandHandler::register_commands() {
           4}},
         {"ZADD",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_zadd(ctx, args));
@@ -201,7 +201,7 @@ void CommandHandler::register_commands() {
           4}},
         {"ZRANK",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_zrank(ctx, args));
@@ -209,7 +209,7 @@ void CommandHandler::register_commands() {
           3}},
         {"ZRANGE",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_zrange(ctx, args));
@@ -217,7 +217,7 @@ void CommandHandler::register_commands() {
           4}},
         {"ZCARD",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_zcard(ctx, args[1]));
@@ -225,7 +225,7 @@ void CommandHandler::register_commands() {
           2}},
         {"ZSCORE",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_zscore(ctx, args));
@@ -233,7 +233,7 @@ void CommandHandler::register_commands() {
           3}},
         {"ZREM",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_zrem(ctx, args));
@@ -241,7 +241,7 @@ void CommandHandler::register_commands() {
           3}},
         {"GEOADD",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_geoadd(ctx, args));
@@ -249,7 +249,7 @@ void CommandHandler::register_commands() {
           5}},
         {"GEOPOS",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_geopos(ctx, args));
@@ -257,7 +257,7 @@ void CommandHandler::register_commands() {
           3}},
         {"GEODIST",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_geodist(ctx, args));
@@ -265,7 +265,7 @@ void CommandHandler::register_commands() {
           4}},
         {"GEOSEARCH",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_geosearch(ctx, args));
@@ -273,7 +273,7 @@ void CommandHandler::register_commands() {
           8}},
         {"XRANGE",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_xrange(ctx, args));
@@ -281,7 +281,7 @@ void CommandHandler::register_commands() {
           4}},
         {"XREAD",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int fd,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return handle_xread_with_blocking(ctx, fd, args);
@@ -289,7 +289,7 @@ void CommandHandler::register_commands() {
           4}},
         {"INFO",
          {[](CommandContext& ctx,
-             const std::vector<std::string>& args,
+             const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
               return ProcessResult::normal(handle_info(ctx, args));
@@ -321,8 +321,8 @@ auto CommandHandler::process_with_fd(int fd,
 
         size_t cmd_start = total_consumed;
         total_consumed += parsed->consumed;
-        auto cmd_name = credis::util::to_upper(parsed->args[0]);
-        auto cmd_result = process_single_command(fd, std::move(parsed->args), send_to_client);
+        std::string cmd_name = credis::util::to_upper(std::string(parsed->args[0]));
+        auto cmd_result = process_single_command(fd, std::move(parsed->args), cmd_name, send_to_client);
 
         if (is_write_command(cmd_name) && ctx_.replica_count_fn && ctx_.replica_count_fn() > 0) {
             result.propagate_cmds.push_back(std::string(input.substr(cmd_start, parsed->consumed)));
@@ -345,22 +345,20 @@ auto CommandHandler::process_with_fd(int fd,
 }
 
 auto CommandHandler::process_single_command(int fd,
-                                            std::vector<std::string> args,
+                                            std::vector<std::string_view> args,
+                                            std::string_view cmd,
                                             const std::function<void(int, const std::string&)>& send_to_client)
     -> ProcessResult {
     if (args.empty()) [[unlikely]] {
         return ProcessResult::normal(credis::protocol::encode_error("ERR empty command"));
     }
 
-    std::string& cmd = args[0];
-    cmd = credis::util::to_upper(std::move(cmd));
-
     if (ctx_.pubsub_manager && ctx_.pubsub_manager->get().is_subscribed(fd)) [[unlikely]] {
         static constexpr auto kSubscribedAllowed = std::array{
             "SUBSCRIBE"sv, "UNSUBSCRIBE"sv, "PSUBSCRIBE"sv, "PUNSUBSCRIBE"sv, "PING"sv, "QUIT"sv, "RESET"sv};
         if (std::ranges::find(kSubscribedAllowed, cmd) == kSubscribedAllowed.end()) [[unlikely]] {
             return ProcessResult::normal(
-                credis::protocol::encode_error("ERR Can't execute '" + cmd + "' in subscribed mode"));
+                credis::protocol::encode_error("ERR Can't execute '" + std::string(cmd) + "' in subscribed mode"));
         }
     }
 
@@ -404,8 +402,11 @@ auto CommandHandler::process_single_command(int fd,
 
         std::vector<std::string> results;
         results.reserve(tx.queued_commands.size());
-        for (const auto& queued_args : tx.queued_commands) {
-            auto cmd_result = execute_command(queued_args, fd, send_to_client);
+        for (auto& queued_args : tx.queued_commands) {
+            auto cmd_result = execute_command(std::vector<std::string_view>(queued_args.begin(), queued_args.end()),
+                                              queued_args[0],
+                                              fd,
+                                              send_to_client);
             if (auto* normal = std::get_if<ProcessResult::Normal>(&cmd_result.state)) [[likely]] {
                 results.push_back(std::move(normal->response));
             } else {
@@ -436,7 +437,7 @@ auto CommandHandler::process_single_command(int fd,
         }
         auto& tx = ctx_.transactions[fd];
         for (size_t i = 1; i < args.size(); ++i) {
-            tx.watched_keys[args[i]] = ctx_.store.get_key_version(args[i]);
+            tx.watched_keys[std::string(args[i])] = ctx_.store.get_key_version(args[i]);
         }
         return ProcessResult::normal(credis::protocol::kRespOk);
     }
@@ -449,23 +450,22 @@ auto CommandHandler::process_single_command(int fd,
         return ProcessResult::normal(credis::protocol::kRespOk);
     }
 
-    auto it = ctx_.transactions.find(fd);
-    if (it != ctx_.transactions.end() && it->second.in_multi) [[unlikely]] {
-        it->second.queued_commands.push_back(args);
+    auto tx_it = ctx_.transactions.find(fd);
+    if (tx_it != ctx_.transactions.end() && tx_it->second.in_multi) [[unlikely]] {
+        tx_it->second.queued_commands.emplace_back(args.begin(), args.end());
         return ProcessResult::normal(credis::protocol::kRespQueued);
     }
 
-    auto result = execute_command(args, fd, send_to_client);
-    return result;
+    return execute_command(std::move(args), cmd, fd, send_to_client);
 }
 
 template <typename SendFn>
-auto CommandHandler::execute_command(const std::vector<std::string>& args, int fd, SendFn&& send_to_client)
-    -> ProcessResult {
-    const std::string& cmd = args[0];
-
+auto CommandHandler::execute_command(std::vector<std::string_view> args,
+                                     std::string_view cmd,
+                                     int fd,
+                                     SendFn&& send_to_client) -> ProcessResult {
     if (cmd == "CONFIG") [[unlikely]] {
-        if (args.size() < 3 || credis::util::to_upper(args[1]) != "GET") [[unlikely]] {
+        if (args.size() < 3 || credis::util::to_upper(std::string(args[1])) != "GET") [[unlikely]] {
             return ProcessResult::normal(
                 credis::protocol::encode_error("ERR wrong number of arguments for 'config' command"));
         }
@@ -510,17 +510,18 @@ auto CommandHandler::execute_command(const std::vector<std::string>& args, int f
 
     auto it = command_table_.find(cmd);
     if (it == command_table_.end()) [[unlikely]] {
-        return ProcessResult::normal(credis::protocol::encode_error("ERR unknown command '" + cmd + "'"));
+        return ProcessResult::normal(credis::protocol::encode_error("ERR unknown command '" + std::string(cmd) + "'"));
     }
     if (args.size() < it->second.min_args) [[unlikely]] {
-        return ProcessResult::normal(credis::protocol::encode_error("ERR wrong number of arguments for '"
-                                                                    + credis::util::to_lower(cmd) + "' command"));
+        return ProcessResult::normal(
+            credis::protocol::encode_error("ERR wrong number of arguments for '" + std::string(cmd) + "' command"));
     }
     return it->second.handler(ctx_, args, fd, send_to_client);
 }
 
 template ProcessResult CommandHandler::execute_command<std::function<void(int, const std::string&)>>(
-    const std::vector<std::string>&,
+    std::vector<std::string_view>,
+    std::string_view,
     int,
     std::function<void(int, const std::string&)>&&);
 

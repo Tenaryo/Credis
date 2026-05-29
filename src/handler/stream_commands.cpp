@@ -14,9 +14,9 @@
 
 namespace credis::handler {
 
-auto handle_xadd(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
-    const std::string& key = args[1];
-    const std::string& id = args[2];
+auto handle_xadd(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
+    std::string key(args[1]);
+    std::string id(args[2]);
 
     if (!ctx.store.key_is_absent_or_holds<credis::store::Stream>(key)) {
         return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
@@ -28,7 +28,7 @@ auto handle_xadd(CommandContext& ctx, const std::vector<std::string>& args) -> s
 
     std::vector<std::pair<std::string, std::string>> fields;
     for (size_t i = 3; i < args.size(); i += 2) {
-        fields.emplace_back(args[i], args[i + 1]);
+        fields.emplace_back(std::string(args[i]), std::string(args[i + 1]));
     }
 
     std::string result = ctx.store.xadd(key, id, fields);
@@ -40,19 +40,19 @@ auto handle_xadd(CommandContext& ctx, const std::vector<std::string>& args) -> s
     return credis::protocol::encode_bulk_string(result);
 }
 
-auto handle_xrange(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
-    const std::string& key = args[1];
-    const std::string& start = args[2];
-    const std::string& end = args[3];
+auto handle_xrange(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
+    std::string_view key = args[1];
+    std::string_view start = args[2];
+    std::string_view end = args[3];
 
     auto entries = ctx.store.xrange(key, start, end);
     return credis::protocol::encode_entries(entries);
 }
 
-auto handle_xread(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
+auto handle_xread(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
     size_t streams_idx = 0;
     for (size_t i = 1; i < args.size(); ++i) {
-        if (credis::util::to_upper(args[i]) == "STREAMS") {
+        if (credis::util::to_upper(std::string(args[i])) == "STREAMS") {
             streams_idx = i;
             break;
         }
@@ -71,23 +71,24 @@ auto handle_xread(CommandContext& ctx, const std::vector<std::string>& args) -> 
     std::vector<std::pair<std::string, std::span<const credis::store::StreamEntry>>> results;
 
     for (size_t i = 0; i < num_streams; ++i) {
-        const std::string& key = args[streams_idx + 1 + i];
-        const std::string& id = args[streams_idx + 1 + num_streams + i];
+        std::string_view key = args[streams_idx + 1 + i];
+        std::string_view id = args[streams_idx + 1 + num_streams + i];
 
         auto entries = ctx.store.xread(key, id);
-        results.emplace_back(key, entries);
+        results.emplace_back(std::string(key), entries);
     }
 
     return credis::protocol::encode_stream_entries(results);
 }
 
-auto handle_xread_with_blocking(CommandContext& ctx, int fd, const std::vector<std::string>& args) -> ProcessResult {
+auto handle_xread_with_blocking(CommandContext& ctx, int fd, const std::vector<std::string_view>& args)
+    -> ProcessResult {
     bool has_block = false;
     int64_t timeout_ms = 0;
     size_t start_idx = 1;
 
     if (args.size() > start_idx) {
-        if (credis::util::to_upper(args[start_idx]) == "BLOCK") {
+        if (credis::util::to_upper(std::string(args[start_idx])) == "BLOCK") {
             has_block = true;
             if (start_idx + 1 >= args.size()) {
                 return ProcessResult::normal(credis::protocol::encode_error("ERR syntax error"));
@@ -104,7 +105,7 @@ auto handle_xread_with_blocking(CommandContext& ctx, int fd, const std::vector<s
 
     size_t streams_idx = 0;
     for (size_t i = start_idx; i < args.size(); ++i) {
-        if (credis::util::to_upper(args[i]) == "STREAMS") {
+        if (credis::util::to_upper(std::string(args[i])) == "STREAMS") {
             streams_idx = i;
             break;
         }
@@ -128,17 +129,17 @@ auto handle_xread_with_blocking(CommandContext& ctx, int fd, const std::vector<s
     std::vector<std::pair<std::string, std::span<const credis::store::StreamEntry>>> results;
 
     for (size_t i = 0; i < num_streams; ++i) {
-        const std::string& key = args[streams_idx + 1 + i];
-        const std::string& id_arg = args[streams_idx + 1 + num_streams + i];
+        std::string_view key = args[streams_idx + 1 + i];
+        std::string_view id_arg = args[streams_idx + 1 + num_streams + i];
 
-        std::string id = id_arg;
+        std::string id(id_arg);
         if (id_arg == "$") {
             auto max_id = ctx.store.get_stream_max_id(key);
             id = max_id.value_or("0-0");
         }
 
         auto entries = ctx.store.xread(key, id);
-        results.emplace_back(key, entries);
+        results.emplace_back(std::string(key), entries);
     }
 
     bool has_data = std::ranges::any_of(results, [](const auto& p) { return !p.second.empty(); });
@@ -148,10 +149,10 @@ auto handle_xread_with_blocking(CommandContext& ctx, int fd, const std::vector<s
     }
 
     if (ctx.blocking_manager) {
-        const std::string& key = args[streams_idx + 1];
-        const std::string& id_arg = args[streams_idx + 1 + num_streams];
+        const std::string key(args[streams_idx + 1]);
+        std::string_view id_arg = args[streams_idx + 1 + num_streams];
 
-        std::string id = id_arg;
+        std::string id(id_arg);
         if (id_arg == "$") {
             auto max_id = ctx.store.get_stream_max_id(key);
             id = max_id.value_or("0-0");
@@ -166,10 +167,10 @@ auto handle_xread_with_blocking(CommandContext& ctx, int fd, const std::vector<s
 }
 
 auto handle_xadd_with_blocking(CommandContext& ctx,
-                               const std::vector<std::string>& args,
+                               const std::vector<std::string_view>& args,
                                const std::function<void(int, const std::string&)>& send_to_client) -> ProcessResult {
-    const std::string& key = args[1];
-    const std::string& id = args[2];
+    std::string key(args[1]);
+    std::string id(args[2]);
 
     if (!ctx.store.key_is_absent_or_holds<credis::store::Stream>(key)) {
         return ProcessResult::normal(
@@ -183,7 +184,7 @@ auto handle_xadd_with_blocking(CommandContext& ctx,
 
     std::vector<std::pair<std::string, std::string>> fields;
     for (size_t i = 3; i < args.size(); i += 2) {
-        fields.emplace_back(args[i], args[i + 1]);
+        fields.emplace_back(std::string(args[i]), std::string(args[i + 1]));
     }
 
     std::string new_id = ctx.store.xadd(key, id, fields);

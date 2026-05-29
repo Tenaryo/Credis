@@ -44,7 +44,7 @@ auto parse_one(std::string_view input) -> std::expected<ParsedCommand, Error> {
 
     // TODO: hand-roll single-pass without string_view::find for \r\n scanning;
     // pre-compute count to reserve args vector and avoid reallocations
-    std::vector<std::string> args;
+    std::vector<std::string_view> args;
     args.reserve(static_cast<size_t>(count));
     for (int i = 0; i < count; ++i) {
         if (pos >= input.size() || input[pos] != '$') {

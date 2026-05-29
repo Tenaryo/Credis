@@ -15,7 +15,7 @@ inline const std::string kRespQueued = "+QUEUED\r\n";
 inline const std::string kRespPong = "+PONG\r\n";
 
 struct ParsedCommand {
-    std::vector<std::string> args;
+    std::vector<std::string_view> args;
     size_t consumed;
 };
 

@@ -23,15 +23,15 @@ auto handle_echo(std::string_view message) -> std::string {
     return credis::protocol::encode_bulk_string(message);
 }
 
-auto handle_info(CommandContext& ctx, const std::vector<std::string>& /* args */) -> std::string {
+auto handle_info(CommandContext& ctx, const std::vector<std::string_view>& /* args */) -> std::string {
     const auto* role = ctx.config.is_replica() ? "slave" : "master";
     auto info = "# Replication\r\nrole:" + std::string(role) + "\r\nmaster_replid:" + ctx.config.master_replid
                 + "\r\nmaster_repl_offset:" + std::to_string(ctx.offset_fn ? ctx.offset_fn() : 0) + "\r\n";
     return credis::protocol::encode_bulk_string(info);
 }
 
-auto handle_config_get(CommandContext& ctx, const std::string& param) -> std::string {
-    auto upper = credis::util::to_upper(param);
+auto handle_config_get(CommandContext& ctx, std::string_view param) -> std::string {
+    auto upper = credis::util::to_upper(std::string(param));
     if (upper == "DIR") {
         return "*2\r\n$3\r\ndir\r\n" + credis::protocol::encode_bulk_string(ctx.config.dir);
     }
@@ -59,11 +59,11 @@ auto handle_acl_whoami() -> std::string {
     return credis::protocol::encode_bulk_string("default");
 }
 
-auto handle_acl(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
+auto handle_acl(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
     if (args.size() < 2) {
         return credis::protocol::encode_error("ERR unknown subcommand for 'ACL'. Try ACL HELP.");
     }
-    auto subcmd = credis::util::to_upper(args[1]);
+    auto subcmd = credis::util::to_upper(std::string(args[1]));
     if (subcmd == "WHOAMI") {
         return handle_acl_whoami();
     }
@@ -82,7 +82,7 @@ auto handle_acl(CommandContext& ctx, const std::vector<std::string>& args) -> st
     return credis::protocol::encode_error("ERR unknown subcommand for 'ACL'. Try ACL HELP.");
 }
 
-auto handle_acl_getuser(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
+auto handle_acl_getuser(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
     const auto* user = ctx.acl_manager.get_user(args[2]);
     if (user == nullptr) {
         return credis::protocol::encode_null_array();
@@ -97,7 +97,7 @@ auto handle_acl_getuser(CommandContext& ctx, const std::vector<std::string>& arg
                                                credis::protocol::encode_array(user->passwords)});
 }
 
-auto handle_acl_setuser(CommandContext& ctx, const std::vector<std::string>& args) -> std::string {
+auto handle_acl_setuser(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
     const auto& username = args[2];
     for (size_t i = 3; i < args.size(); ++i) {
         const auto& rule = args[i];
@@ -108,7 +108,7 @@ auto handle_acl_setuser(CommandContext& ctx, const std::vector<std::string>& arg
     return credis::protocol::kRespOk;
 }
 
-auto handle_auth(CommandContext& ctx, int fd, const std::vector<std::string>& args) -> std::string {
+auto handle_auth(CommandContext& ctx, int fd, const std::vector<std::string_view>& args) -> std::string {
     if (args.size() < 3) {
         return credis::protocol::encode_error("ERR wrong number of arguments for 'auth' command");
     }
@@ -119,8 +119,8 @@ auto handle_auth(CommandContext& ctx, int fd, const std::vector<std::string>& ar
     return credis::protocol::encode_error("WRONGPASS invalid username-password pair or user is disabled.");
 }
 
-auto handle_replconf(const std::vector<std::string>& args) -> std::string {
-    if (args.size() >= 2 && credis::util::to_upper(args[1]) == "GETACK") {
+auto handle_replconf(const std::vector<std::string_view>& args) -> std::string {
+    if (args.size() >= 2 && credis::util::to_upper(std::string(args[1])) == "GETACK") {
         return credis::protocol::encode_array({"REPLCONF", "ACK", "0"});
     }
     return credis::protocol::kRespOk;
@@ -134,7 +134,7 @@ auto handle_psync(CommandContext& ctx) -> ProcessResult {
     return ProcessResult::replica_handshake(response);
 }
 
-auto handle_wait(const std::vector<std::string>& args) -> ProcessResult {
+auto handle_wait(const std::vector<std::string_view>& args) -> ProcessResult {
     if (args.size() < 3) {
         return ProcessResult::normal(
             credis::protocol::encode_error("ERR wrong number of arguments for 'wait' command"));

@@ -46,7 +46,7 @@ auto ReplicaConnector::operator=(ReplicaConnector&& other) noexcept -> ReplicaCo
 }
 
 auto ReplicaConnector::connect_to_master() -> bool {
-    struct addrinfo hints {};
+    struct addrinfo hints{};
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
 
@@ -71,8 +71,8 @@ auto ReplicaConnector::connect_to_master() -> bool {
     return true;
 }
 
-auto ReplicaConnector::send_and_expect(const std::vector<std::string>& args,
-                                       std::string_view expected_response) -> bool {
+auto ReplicaConnector::send_and_expect(const std::vector<std::string>& args, std::string_view expected_response)
+    -> bool {
     return send_and_check(args, [expected_response](std::string_view resp) { return resp == expected_response; });
 }
 
@@ -226,8 +226,8 @@ auto ReplicaConnector::process_buffer_impl() -> ProcessedBuffer {
             break;
         }
 
-        bool is_getack = parsed->args.size() >= 2 && credis::util::to_upper(parsed->args[0]) == "REPLCONF"
-                         && credis::util::to_upper(parsed->args[1]) == "GETACK";
+        bool is_getack = parsed->args.size() >= 2 && credis::util::to_upper(std::string(parsed->args[0])) == "REPLCONF"
+                         && credis::util::to_upper(std::string(parsed->args[1])) == "GETACK";
 
         if (is_getack) {
             result.ack_responses += credis::protocol::encode_array({"REPLCONF", "ACK", std::to_string(offset_)});
@@ -270,8 +270,8 @@ void ReplicaConnector::send_response(std::string_view data) const {
     }
 }
 
-auto connect_if_replica(const credis::server::ServerConfig& config,
-                        int listening_port) -> std::optional<ReplicaConnector> {
+auto connect_if_replica(const credis::server::ServerConfig& config, int listening_port)
+    -> std::optional<ReplicaConnector> {
     const auto& replica = config.replica;
     if (!replica) {
         return std::nullopt;
