@@ -96,7 +96,7 @@ class Store {
             auto [it, _] = data_.emplace(std::move(key), Entry{T{}, {}});
             entry = &it->second;
         }
-        if (!std::holds_alternative<T>(entry->value)) [[unlikely]] {
+        if (!std::holds_alternative<T>(entry->value)) {
             entry->value = T{};
         }
         return &std::get<T>(entry->value);
