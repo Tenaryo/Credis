@@ -70,7 +70,7 @@ auto ReplicaManager::process_ack(int fd, std::string_view data) -> AckResult {
     AckResult ack_result;
     ack_result.consumed = consumed;
 
-    if (wait_state_) [[unlikely]] {
+    if (wait_state_) {
         int64_t acked = count_acked_for(wait_state_->target_offset);
         if (acked >= wait_state_->numreplicas) {
             ack_result.wait.emplace(WaitResult{wait_state_->client_fd, acked});
