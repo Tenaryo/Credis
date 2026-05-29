@@ -163,7 +163,7 @@ target_compile_options(
         -Wshadow
         -Wconversion
         $<$<CONFIG:Debug>:-g -O0>
-        $<$<CONFIG:Release>:-O3>
+        $<$<CONFIG:Release>:-O3 -march=native>
 )
 
 # ============================================================
@@ -210,6 +210,8 @@ target_link_libraries(redis PRIVATE credis_core)
 # ============================================================
 
 option(ENABLE_SANITIZERS "Enable Address and Undefined Behavior Sanitizers" OFF)
+
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
 
 if (ENABLE_SANITIZERS)
     target_compile_options(credis_core INTERFACE -fsanitize=address,undefined -fno-omit-frame-pointer)
