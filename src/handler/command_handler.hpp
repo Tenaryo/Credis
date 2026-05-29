@@ -34,6 +34,7 @@ struct CommandContext {
     std::optional<std::reference_wrapper<credis::pubsub::PubSubManager>> pubsub_manager;
     credis::server::AclManager* acl_manager{nullptr};
     std::function<size_t()> replica_count_fn;
+    std::function<int64_t()> offset_fn;
     std::unordered_map<int, TransactionState>* transactions{nullptr};
     std::unordered_set<int>* authenticated_fds{nullptr};
 };
@@ -44,6 +45,7 @@ class CommandHandler {
     std::optional<std::reference_wrapper<credis::blocking::BlockingManager>> blocking_manager_;
     std::optional<std::reference_wrapper<credis::pubsub::PubSubManager>> pubsub_manager_;
     std::function<size_t()> replica_count_fn_;
+    std::function<int64_t()> offset_fn_;
     credis::server::AclManager acl_manager_;
     std::unordered_map<int, TransactionState> transactions_;
     std::unordered_set<int> authenticated_fds_;
@@ -59,6 +61,9 @@ class CommandHandler {
     }
     void set_replica_count_fn(std::function<size_t()> fn) {
         replica_count_fn_ = std::move(fn);
+    }
+    void set_offset_fn(std::function<int64_t()> fn) {
+        offset_fn_ = std::move(fn);
     }
     [[nodiscard]] auto config() const noexcept -> const credis::server::ServerConfig& {
         return config_;

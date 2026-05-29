@@ -13,7 +13,6 @@ struct ReplicaConfig {
 struct ServerConfig {
     std::optional<ReplicaConfig> replica;
     std::string master_replid;
-    int64_t master_repl_offset = 0;
     std::string dir;
     std::string dbfilename;
     std::string appendonly = "no";

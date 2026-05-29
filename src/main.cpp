@@ -102,6 +102,7 @@ auto main(int argc, char* argv[]) -> int {
     handler.set_blocking_manager(blocking);
     handler.set_pubsub_manager(pubsub);
     handler.set_replica_count_fn([&replica_mgr] { return replica_mgr.count(); });
+    handler.set_offset_fn([&replica_mgr] { return replica_mgr.offset(); });
 
     // 7. Add initial fds to event loop
     loop.add_fd(listener->fd());

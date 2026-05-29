@@ -26,7 +26,7 @@ auto handle_echo(std::string_view message) -> std::string {
 auto handle_info(CommandContext& ctx, const std::vector<std::string>& /* args */) -> std::string {
     const auto* role = ctx.config.is_replica() ? "slave" : "master";
     auto info = "# Replication\r\nrole:" + std::string(role) + "\r\nmaster_replid:" + ctx.config.master_replid
-                + "\r\nmaster_repl_offset:" + std::to_string(ctx.config.master_repl_offset) + "\r\n";
+                + "\r\nmaster_repl_offset:" + std::to_string(ctx.offset_fn ? ctx.offset_fn() : 0) + "\r\n";
     return credis::protocol::encode_bulk_string(info);
 }
 
@@ -128,7 +128,7 @@ auto handle_replconf(const std::vector<std::string>& args) -> std::string {
 
 auto handle_psync(CommandContext& ctx) -> ProcessResult {
     auto response
-        = "+FULLRESYNC " + ctx.config.master_replid + " " + std::to_string(ctx.config.master_repl_offset) + "\r\n";
+        = "+FULLRESYNC " + ctx.config.master_replid + " " + std::to_string(ctx.offset_fn ? ctx.offset_fn() : 0) + "\r\n";
     response += "$88\r\n";
     response.append(credis::rdb::kEmptyRdb.begin(), credis::rdb::kEmptyRdb.end());
     return ProcessResult::replica_handshake(response);

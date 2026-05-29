@@ -458,6 +458,7 @@ auto CommandHandler::execute_command(const std::vector<std::string>& args,
                        pubsub_manager_,
                        &acl_manager_,
                        replica_count_fn_,
+                       offset_fn_,
                        &transactions_,
                        &authenticated_fds_};
     const std::string& cmd = args[0];
