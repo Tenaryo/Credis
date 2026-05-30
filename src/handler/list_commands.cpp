@@ -38,11 +38,8 @@ auto handle_lpop(CommandContext& ctx, const std::vector<std::string_view>& args)
     const std::string_view key = args[1];
 
     if (args.size() == 2) {
-        auto elements = ctx.store.lpop(key, 1);
-        if (elements.empty()) {
-            return credis::protocol::encode_null_bulk_string();
-        }
-        return credis::protocol::encode_bulk_string(elements[0]);
+        auto element = ctx.store.lpop(key);
+        return element ? credis::protocol::encode_bulk_string(*element) : credis::protocol::encode_null_bulk_string();
     }
 
     auto parsed = credis::util::parse_int<int64_t>(args[2]);
@@ -63,11 +60,8 @@ auto handle_rpop(CommandContext& ctx, const std::vector<std::string_view>& args)
     const std::string_view key = args[1];
 
     if (args.size() == 2) {
-        auto elements = ctx.store.rpop(key, 1);
-        if (elements.empty()) {
-            return credis::protocol::encode_null_bulk_string();
-        }
-        return credis::protocol::encode_bulk_string(elements[0]);
+        auto element = ctx.store.rpop(key);
+        return element ? credis::protocol::encode_bulk_string(*element) : credis::protocol::encode_null_bulk_string();
     }
 
     auto parsed = credis::util::parse_int<int64_t>(args[2]);
@@ -150,14 +144,17 @@ auto handle_lpush_with_blocking(CommandContext& ctx,
                                 const std::vector<std::string_view>& args,
                                 const std::function<void(int, const std::string&)>& send_to_client) -> ProcessResult {
     const std::string_view key = args[1];
-    int64_t count = ctx.store.llen(key);
+    int64_t count = 0;
 
     for (size_t i = 2; i < args.size(); ++i) {
         if (ctx.blocking_manager) {
             auto blocked = ctx.blocking_manager->get().wake_client(std::string(key));
             if (blocked) {
-                send_to_client(blocked->fd, credis::protocol::encode_array({std::string(key), std::string(args[i])}));
-                ++count;
+                count = ctx.store.lpush(std::string(key), std::string(args[i]));
+                auto elements = ctx.store.lpop(key, 1);
+                if (!elements.empty()) {
+                    send_to_client(blocked->fd, credis::protocol::encode_array({std::string(key), elements[0]}));
+                }
                 continue;
             }
         }
