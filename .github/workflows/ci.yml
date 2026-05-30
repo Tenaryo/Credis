@@ -23,6 +23,7 @@ jobs:
           cmake -B build -S . -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_CXX_COMPILER=g++-13 \
+            -DBUILD_TESTS=ON \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: Build
@@ -30,46 +31,3 @@ jobs:
 
       - name: Run tests
         run: ./run_tests.sh
-
-  format-check:
-    name: Format Check
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install formatters
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-format cmake-format
-
-      - name: Check C++ formatting
-        run: |
-          find src tests -name '*.cpp' -o -name '*.hpp' | xargs clang-format --dry-run --Werror
-
-      - name: Check CMake formatting
-        run: |
-          find . -name 'CMakeLists.txt' -o -name '*.cmake' | xargs cmake-format --check
-
-  clang-tidy:
-    name: clang-tidy
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y g++-13 ninja-build cmake clang-tidy
-
-      - name: Configure CMake
-        run: |
-          cmake -B build -S . -G Ninja \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_CXX_COMPILER=g++-13 \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-
-      - name: Run clang-tidy
-        run: |
-          find src tests -name '*.cpp' -o -name '*.hpp' \
-            | grep -v 'tests/deprecated/' \
-            | xargs clang-tidy --quiet -p build

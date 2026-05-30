@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-05-30
+
+### Added
+- `RPOP` list operation (single-element and counted variants)
+- `MSET` bulk string set command
+- ZADD multi score/member pair support
+- RDB `load_into_store` convenience function
+- Piped response batching in `process_with_fd` for pipeline throughput
+- Store `mset` bulk interface for efficient multi-key writes
+- PGO build support via `ENABLE_PGO` CMake option
+- Pre-commit hooks with clang-format and clang-tidy (non-blocking)
+
+### Changed
+- **RESP parser**: `parse_one` now returns `vector<string_view>` args (zero-copy)
+  — full `std::string` copy deferred to MULTI queuing path
+- **SortedSet**: three-round micro-architecture optimization
+  — transparent hashing (`find(string_view)` zero-alloc)
+  — map stores set iterator (O(1) ZREM, ZRANK single lookup)
+  — `string_view` key + `set::extract` (single string copy, zero-copy updates)
+- **ReplicaManager**: three hash tables replaced with single `vector<ReplicaState>`
+  — eliminated dual buffer via `process_ack` returning consumed count
+  — `master_repl_offset` moved to `offset_fn` callback
+- **Store**: `find_valid_entry` and `get_or_create_typed` cleaned
+  — `keys()`/`lrange()` vectors pre-reserved
+  — Stream `parsed_id` cached in `StreamEntry` to eliminate parse in binary search
+- **CommandHandler**: 9 duplicated fields consolidated into single `CommandContext`
+  — `send_to_client` passed by const-ref
+- **EventLoop**: signal handling internalized (SIGINT/SIGTERM registration), `g_loop` eliminated
+- **Build**: Release adds `-march=native` + LTO
+- **Utilities**: `to_upper`/`to_lower` accept `string_view`
+- README benchmark section fully updated with PGO results
+- Test count: 144 (up from 138)
+
+### Fixed
+- `lpush_with_blocking` missing `lpush` on wake path (value never entered list)
+- Replica connection buffer leak (missing `consume` in dispatch)
+- `replica_config.master_repl_offset` dead field replaced with live callback
+
 ## [1.0.0] - 2026-04-15
 
 ### Added

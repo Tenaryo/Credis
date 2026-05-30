@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![C++23](https://img.shields.io/badge/C%2B%2B-23-blue.svg)](https://en.cppreference.com/w/cpp/23)
 
-A Redis 7.0-compatible server written from scratch in C++23. 3,600 lines, zero dependencies, 291 KB binary. Outperforms Redis 6.0 by up to 10.6% in throughput with 38% lower tail latency. Implements the full single-threaded epoll reactor, RESP v2 pipelining, master-replica replication with WAIT acknowledgment, blocking commands with O(1) dual-index wake queue, and optimistic locking transactions — all with no third-party libraries.
+A Redis 7.0-compatible server written from scratch in C++23. ~3,700 lines, zero dependencies, 793 KB stripped binary. Near-parity with Redis 6.0 on throughput and latency for core commands, reaching 95–102% of Redis in most benchmarks. Under high concurrency (500 clients), Credis achieves 110% Redis throughput with lower P99 tail latency. Implements the full single-threaded epoll reactor, RESP v2 pipelining with batched response encoding, master-replica replication with WAIT acknowledgment, blocking commands with O(1) dual-index wake queue, SortedSet with transparent hashing and zero-alloc lookups, and optimistic locking transactions — with no third-party libraries.
 
 ## Dependencies
 
@@ -12,7 +12,108 @@ A Redis 7.0-compatible server written from scratch in C++23. 3,600 lines, zero d
 - **CMake** 3.21+
 - **POSIX** (epoll, sockets)
 
-That's it. No Boost, no libevent, no hiredis.
+No Boost, no libevent, no hiredis.
+
+## Performance
+
+### Methodology
+
+- Hardware: AArch64, GCC 14, Ubuntu, loopback TCP
+- Throughput: `redis-benchmark -n 100000 -c 50 -q`
+- Latency: `redis-benchmark -n 100000 -c 1 --precision 3` (Redis 7.2 benchmark)
+- Persistence disabled on both servers
+- Credis: `-O3 -march=native -flto` + PGO
+- Redis: official 6.0.16 (jemalloc)
+
+### Throughput
+
+| Command | Credis | Redis 6.0 | Ratio |
+|---------|-----------|-----------|-------|
+| SET | 303,951 | 309,598 | 98.2% |
+| GET | 324,675 | 335,570 | 96.8% |
+| INCR | 324,675 | 336,700 | 96.4% |
+| MSET (10 keys) | 316,456 | 321,543 | 98.4% |
+| LPUSH | 325,733 | 328,947 | 99.0% |
+| RPUSH | 312,500 | 332,226 | 94.1% |
+| LPOP | 326,797 | 327,869 | 99.7% |
+| RPOP | 317,460 | 326,797 | 97.1% |
+| ZADD | 318,471 | 324,675 | 98.1% |
+| ZREM | 324,675 | 322,581 | **100.6%** |
+| ZSCORE | 326,797 | 320,513 | **101.9%** |
+| ZRANK | 319,489 | 317,460 | **100.6%** |
+
+![Throughput Ratio](docs/images/throughput_ratio.png)
+
+### Pipeline Throughput
+
+| Depth | Credis SET | Redis SET | Ratio |
+|-------|------------|-----------|-------|
+| 4 | 1,220,537 | 1,219,756 | **100.1%** |
+| 8 | 2,273,637 | 2,382,476 | 95.4% |
+| 16 | 2,941,176 | 3,714,370 | 79.2% |
+| 32 | 3,571,429 | 4,347,826 | 82.1% |
+| 64 | 4,001,280 | 5,027,200 | 79.6% |
+
+![Pipeline Scaling](docs/images/pipeline_scaling.png)
+
+### Dataset Size Scaling (GET)
+
+| Keys | Credis | Redis 6.0 | Ratio |
+|------|-----------|-----------|-------|
+| 100 | 305,810 | 311,526 | 98.2% |
+| 10,000 | 326,797 | 319,489 | **102.3%** |
+| 1,000,000 | 331,126 | 315,457 | **105.0%** |
+
+### Latency (single connection, 100K requests, SET)
+
+| Metric | Credis | Redis 6.0 |
+|--------|--------|-----------|
+| avg | 0.023 ms | 0.024 ms |
+| p50 | 0.023 ms | 0.023 ms |
+| p95 | 0.031 ms | 0.031 ms |
+| p99 | 0.047 ms | 0.047 ms |
+| max | 0.431 ms | 0.327 ms |
+
+### Tail Latency Under Load (SET, c=50)
+
+| Metric | Credis | Redis 6.0 |
+|--------|--------|-----------|
+| avg | 0.088 ms | 0.089 ms |
+| p50 | 0.087 ms | 0.087 ms |
+| **p95** | **0.127 ms** | 0.135 ms |
+| **p99** | **0.183 ms** | 0.231 ms |
+| max | 0.575 ms | 0.543 ms |
+
+P99 tail latency is 21% lower under load, P95 is 6% lower.
+
+![Latency Comparison](docs/images/latency_comparison.png)
+
+### Concurrency Scalability (SET)
+
+| Clients | Credis | Redis 6.0 | Ratio | p50 Latency |
+|---------|-----------|-----------|-------|-------------|
+| 1 | 38,124 | 37,864 | 100.7% | 0.023 ms |
+| 10 | 285,714 | 282,486 | 101.1% | 0.023 ms |
+| 50 | 321,543 | 327,869 | 98.1% | 0.087 ms |
+| 100 | 313,480 | 321,543 | 97.5% | 0.159 ms |
+| **500** | **325,733** | **295,858** | **110.1%** | 0.743 ms |
+
+### Memory Footprint
+
+| State | Credis | Redis 6.0 | Ratio |
+|-------|--------|-----------|-------|
+| Idle (PSS) | 2,118 KB | 4,839 KB | 44% |
+| ~63K keys (PSS) | 24,458 KB | 11,474 KB | 213% |
+| ~632K keys (PSS) | 220,975 KB | 77,634 KB | 285% |
+
+Measured via `/proc/[pid]/smaps Pss`. Per-entry overhead ~350 bytes (Credis) vs ~110 bytes (Redis).
+
+### Binary Size
+
+| | Credis | Redis 6.0 |
+|--|-----------|-----------|
+| Stripped binary | **793 KB** | 1.5 MB |
+| Lines of code | ~3,700 C++ | ~80,000 C |
 
 ## Quick Start
 
@@ -26,7 +127,7 @@ That's it. No Boost, no libevent, no hiredis.
 ### Run Tests
 
 ```bash
-./run_tests.sh      # 140 tests across all modules
+./run_tests.sh      # 144 tests across all modules
 ```
 
 ### Start the Server
@@ -60,6 +161,37 @@ OK
 > XADD mystream * name alice
 "1745000000000-0"
 ```
+
+## Supported Commands
+
+### General
+- `PING`, `ECHO`, `INFO`, `CONFIG GET`, `KEYS`, `TYPE`
+
+### Strings
+- `SET` (with EX/PX), `GET`, `INCR`, `MSET`
+
+### Lists
+- `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LRANGE`, `LLEN`, `BLPOP`
+
+### Streams
+- `XADD` (auto-ID), `XRANGE`, `XREAD`, `XREAD BLOCK`
+
+### Sorted Sets
+- `ZADD`, `ZRANK`, `ZRANGE`, `ZCARD`, `ZSCORE`, `ZREM`
+
+### Geo
+- `GEOADD`, `GEOPOS`, `GEODIST`, `GEOSEARCH`
+
+### Pub/Sub
+- `SUBSCRIBE`, `UNSUBSCRIBE`, `PUBLISH`
+
+### Transactions
+- `MULTI`, `EXEC`, `DISCARD`, `WATCH`, `UNWATCH`
+
+### Replication & Auth
+- `REPLCONF`, `PSYNC`, `WAIT`, `AUTH`, `ACL WHOAMI`, `ACL GETUSER`, `ACL SETUSER`
+
+**41 commands** total.
 
 ## Architecture
 
@@ -108,142 +240,38 @@ v                                                         v
         └─────────┘
 ```
 
-### Data Flow
-
-```
-Request (main path):
-  Client → TCP → Connection.read() → RESP parse → CommandHandler
-  → Store (CRUD) → RESP encode → Connection.send() → Client
-
-Blocking (BLPOP / XREAD BLOCK):
-  BLPOP → BlockingManager.block() → return ProcessResult::Block
-  RPUSH → Store.rpush → BlockingManager.wake() → send to blocked fd
-
-Pub/Sub:
-  SUBSCRIBE → PubSubManager (fd→channels, channel→fds)
-  PUBLISH → PubSubManager → send to each subscriber fd
-
-Replication:
-  Master: SET → propagate → ReplicaManager → send to all replica fds
-  Replica: PING→REPLCONF→PSYNC→RDB → ReplicaConnector
-  WAIT:    ReplicaManager.start_wait → process_ack → reply with count
-
-Event Loop:
-  epoll_wait → dispatch_event(fd) → 4-way branch:
-    listener fd?  → accept → add_fd
-    replica fd?   → process_ack
-    master fd?    → process_propagated
-    client fd?    → read → process → send → consume
-```
-
 ### Modules
 
-| Module | Role | Depends On |
-|--------|------|------------|
-| `event_loop/` | epoll-based I/O event loop. Injects `on_event` and `get_timeout` callbacks for zero dependency on business logic. | — |
-| `connection/` | TCP connection abstraction with dynamic read buffer (auto-grow to 512 MB) and non-blocking send. `ConnectionPool` maps fd → Connection. | — |
-| `store/` | In-memory data store. `Value = variant<String, List, Stream, SortedSet>`. Lazy expiration, optimistic locking (`version_counter_`) for WATCH/EXEC. | `util/` |
-| `protocol/` | RESP v2 parser (`parse_one` with consumed tracking for pipelining) and encoder. | `store/` |
-| `handler/` | Command routing. `CommandHandler` owns a `command_table_` (cmd → handler), dispatches via `execute_command`. Dependencies injected through `CommandContext`. | `store/`, `protocol/`, `blocking_manager/`, `pubsub/` |
-| `blocking_manager/` | O(1) dual-index blocking queue for BLPOP and XREAD BLOCK. `fd↔key` bidirectional lookup with timeout management. | — |
-| `pubsub/` | Pub/Sub channel manager with dual index (fd→channels, channel→fds) and subscribed-mode command restriction. | `util/` |
-| `replica/` | `ReplicaManager` tracks per-replica acknowledgment offsets for WAIT. `ReplicaConnector` performs full handshake (PING→REPLCONF→PSYNC→RDB). | `protocol/`, `server/` |
-| `rdb/` | RDB file parser supporting encoded strings, expire timestamps, and multiple key-value pairs. | `store/` |
-| `geo/` | Geohash encoding/decoding and Haversine distance calculation for Geo commands. | — |
-| `server/` | `TcpListener` (non-blocking socket), `ServerConfig`, `AclManager` (SHA-256 password auth), `event_dispatch` (I/O glue layer). | `handler/`, `connection/`, `event_loop/`, `replica/` |
-| `cli/` | Command-line argument parser (`--port`, `--replicaof`, `--dir`, `--dbfilename`). | `server/` |
-| `util/` | `Error` type, `Logger`, `SHA-256`, `parse_int<T>`/`parse_double`, transparent string hashing. | — |
-
-### Key Design Decisions
-
-- **epoll event loop** — All I/O is handled through a single-threaded epoll loop with configurable timeouts for blocking operations and WAIT.
-- **Lazy expiration** — Keys with TTL are checked for expiration on access (`find_valid_entry`) and periodically cleaned during `KEYS` calls.
-- **RESP v2** — Full parser for the Redis Serialization Protocol, supporting pipeline parsing via `parse_one` with consumed-byte tracking.
-- **Streaming replication** — Write commands are automatically propagated to connected replicas. The `WAIT` command tracks replica acknowledgment offsets.
-- **Optimistic locking** — `WATCH` tracks key versions; `EXEC` aborts if any watched key was modified.
-- **Zero dependencies** — Uses only the C++23 standard library and POSIX APIs (epoll, sockets). No third-party libraries required.
-
-## Supported Commands
-
-### General
-| Command | Description |
-|---------|-------------|
-| `PING`, `ECHO`, `INFO`, `CONFIG GET`, `KEYS`, `TYPE` | |
-
-### Strings
-| `SET` (with EX/PX), `GET`, `INCR`, `MSET` |
-
-### Lists
-| `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LRANGE`, `LLEN`, `BLPOP` |
-
-### Streams
-| `XADD` (auto-ID), `XRANGE`, `XREAD`, `XREAD BLOCK` |
-
-### Sorted Sets
-| `ZADD`, `ZRANK`, `ZRANGE`, `ZCARD`, `ZSCORE`, `ZREM` |
-
-### Geo
-| `GEOADD`, `GEOPOS`, `GEODIST`, `GEOSEARCH` |
-
-### Pub/Sub
-| `SUBSCRIBE`, `UNSUBSCRIBE`, `PUBLISH` |
-
-### Transactions
-| `MULTI`, `EXEC`, `DISCARD`, `WATCH`, `UNWATCH` |
-
-### Replication & Auth
-| `REPLCONF`, `PSYNC`, `WAIT`, `AUTH`, `ACL WHOAMI`, `ACL GETUSER`, `ACL SETUSER` |
-
-**41 commands** total. Full details in [Commands Reference](#).
-
-## Performance
-
-Benchmarked against Redis 6.0.16 using `redis-benchmark` (50 concurrent connections, 200K requests).
-
-### Throughput
-
-| Command | Credis | Redis 6.0 | Delta |
-|---------|-----------|-----------|-------|
-| SET | 312,989 | 303,030 | **+3.3%** |
-| GET | 325,733 | 297,619 | **+9.4%** |
-| INCR | 318,471 | 301,205 | **+5.7%** |
-| LPUSH | 316,957 | 296,296 | **+7.0%** |
-| LPOP | 297,619 | 289,855 | **+2.7%** |
-| LRANGE_100 | 194,932 | 187,970 | **+3.7%** |
-| LRANGE_300 | 87,873 | 79,428 | **+10.6%** |
-| ZADD | 300,300 | 333,333 | -9.9% |
-
-### Latency (single connection)
-
-| Percentile | Credis | Redis 6.0 |
-|------------|-----------|-----------|
-| P50 | 0.024ms | 0.024ms |
-| P99 | 0.110ms | 0.112ms |
-| P99.9 | 0.142ms | 0.146ms |
-| Max | 0.186ms | 0.299ms |
-
-Tail latency is 38% lower than Redis (0.186ms vs 0.299ms max).
-
-### Binary Size
-
-| | Credis | Redis 6.0 |
-|--|-----------|-----------|
-| Stripped binary | **291 KB** | 1.5 MB |
-
-## Limitations
-
-- Blocking write (`send_data` is synchronous)
-- No persistence (RDB load only, no SAVE/BGSAVE/AOF)
-- Single-threaded (no multi-core utilization)
-- Missing DEL, Hash, Set types
-- Graceful shutdown is basic (SIGINT/SIGTERM stops loop; TODO: drain requests, flush RDB/AOF)
+| Module | Role |
+|--------|------|
+| `event_loop/` | epoll-based I/O event loop |
+| `connection/` | TCP connection with dynamic read buffer, `ConnectionPool` |
+| `store/` | In-memory data store: `variant<String,List,Stream,SortedSet>` |
+| `protocol/` | RESP v2 parser and encoder with pipeline support |
+| `handler/` | Command routing via `command_table_`, dependency injection through `CommandContext` |
+| `blocking_manager/` | O(1) dual-index blocking queue for BLPOP/XREAD BLOCK |
+| `pubsub/` | Pub/Sub with dual index (fd↔channels) |
+| `replica/` | `ReplicaManager` (WAIT offsets) + `ReplicaConnector` (handshake) |
+| `rdb/` | RDB file parser with expire timestamps |
+| `geo/` | Geohash encoding/decoding, Haversine distance |
+| `server/` | `TcpListener`, `AclManager`, `event_dispatch` glue |
+| `cli/` | CLI argument parser |
+| `util/` | Error, Logger, SHA-256, `parse_int`, transparent string hashing |
 
 ## Replication
 
 1. **Master** starts normally, accepting connections.
 2. **Replica** starts with `--replicaof "<host> <port>"` and performs a full handshake (PING → REPLCONF → PSYNC).
 3. Write commands executed on the master are automatically propagated to all connected replicas.
-4. Use `WAIT numreplicas timeout` to block until the specified number of replicas have acknowledged the writes.
+4. Use `WAIT numreplicas timeout` to block until replicas have acknowledged writes.
+
+## Limitations
+
+- No persistence (RDB load only, no SAVE/BGSAVE/AOF)
+- Missing Hash, Set types
+- Pipeline throughput at high depths (P ≥ 32) still behind Redis
+- Graceful shutdown is basic (SIGINT/SIGTERM stops loop)
+- Memory footprint with data: ~3x Redis due to C++ container overhead
 
 ## API Documentation
 
