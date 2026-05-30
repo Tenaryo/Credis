@@ -519,10 +519,4 @@ auto CommandHandler::execute_command(std::vector<std::string_view> args,
     return it->second.handler(ctx_, args, fd, send_to_client);
 }
 
-template ProcessResult CommandHandler::execute_command<std::function<void(int, const std::string&)>>(
-    std::vector<std::string_view>,
-    std::string_view,
-    int,
-    std::function<void(int, const std::string&)>&&);
-
 } // namespace credis::handler
