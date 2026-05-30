@@ -126,6 +126,7 @@ class Store {
 
   public:
     void set(std::string key, std::string value, std::optional<uint64_t> ttl_ms = std::nullopt);
+    void mset(const std::vector<std::pair<std::string, std::string>>& pairs);
     auto get(std::string_view key) -> std::optional<std::string>;
     auto incr(std::string_view key) -> std::optional<int64_t>;
     auto exists(std::string_view key) -> bool;

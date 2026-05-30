@@ -24,17 +24,10 @@ target_include_directories(credis_util PUBLIC ${CMAKE_SOURCE_DIR}/src)
 add_library(credis_event_loop STATIC src/event_loop/event_loop.cpp)
 target_include_directories(credis_event_loop PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
-add_library(
-    credis_connection STATIC
-    src/connection/connection.cpp
-    src/connection/connection_pool.cpp
-)
+add_library(credis_connection STATIC src/connection/connection.cpp src/connection/connection_pool.cpp)
 target_include_directories(credis_connection PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
-add_library(
-    credis_server STATIC
-    src/server/server.cpp
-)
+add_library(credis_server STATIC src/server/server.cpp)
 target_include_directories(credis_server PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
 # --- L0: INTERFACE (header-only) libraries ---
@@ -44,10 +37,7 @@ target_include_directories(credis_geo INTERFACE ${CMAKE_SOURCE_DIR}/src)
 
 # --- L1: depends on L0 ---
 
-add_library(
-    credis_store STATIC
-    src/store/store.cpp
-)
+add_library(credis_store STATIC src/store/store.cpp)
 target_include_directories(credis_store PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(credis_store PUBLIC credis_util)
 
@@ -57,34 +47,21 @@ target_link_libraries(credis_pubsub INTERFACE credis_util)
 
 # --- L2: depends on store ---
 
-add_library(
-    credis_protocol STATIC
-    src/protocol/resp_codec.cpp
-)
+add_library(credis_protocol STATIC src/protocol/resp_codec.cpp)
 target_include_directories(credis_protocol PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(credis_protocol PUBLIC credis_store)
 
-add_library(
-    credis_rdb STATIC
-    src/rdb/rdb_parser.cpp
-)
+add_library(credis_rdb STATIC src/rdb/rdb_parser.cpp)
 target_include_directories(credis_rdb PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(credis_rdb PUBLIC credis_store)
 
-add_library(
-    credis_blocking_manager STATIC
-    src/blocking_manager/blocking_manager.cpp
-)
+add_library(credis_blocking_manager STATIC src/blocking_manager/blocking_manager.cpp)
 target_include_directories(credis_blocking_manager PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(credis_blocking_manager PUBLIC credis_store)
 
 # --- L3: replica (depends on protocol + server + util) ---
 
-add_library(
-    credis_replica STATIC
-    src/replica/replica_connector.cpp
-    src/replica/replica_manager.cpp
-)
+add_library(credis_replica STATIC src/replica/replica_connector.cpp src/replica/replica_manager.cpp)
 target_include_directories(credis_replica PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(
     credis_replica
@@ -114,16 +91,19 @@ target_link_libraries(
 
 # --- L5: event dispatch (integration glue) ---
 
-add_library(
-    credis_event_dispatch STATIC
-    src/server/event_dispatch.cpp
-)
+add_library(credis_event_dispatch STATIC src/server/event_dispatch.cpp)
 target_include_directories(credis_event_dispatch PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(
     credis_event_dispatch
-    PRIVATE credis_handler credis_connection credis_event_loop
-            credis_replica credis_blocking_manager credis_pubsub
-            credis_protocol credis_server credis_store
+    PRIVATE credis_handler
+            credis_connection
+            credis_event_loop
+            credis_replica
+            credis_blocking_manager
+            credis_pubsub
+            credis_protocol
+            credis_server
+            credis_store
 )
 
 # ============================================================
@@ -133,21 +113,20 @@ target_link_libraries(
 add_library(credis_core INTERFACE)
 target_link_libraries(
     credis_core
-    INTERFACE
-        credis_util
-        credis_geo
-        credis_event_loop
-        credis_connection
-        credis_store
-        credis_pubsub
-        credis_protocol
-        credis_rdb
-        credis_blocking_manager
-        credis_replica
-        credis_server
-        credis_handler
-        credis_event_dispatch
-        Threads::Threads
+    INTERFACE credis_util
+              credis_geo
+              credis_event_loop
+              credis_connection
+              credis_store
+              credis_pubsub
+              credis_protocol
+              credis_rdb
+              credis_blocking_manager
+              credis_replica
+              credis_server
+              credis_handler
+              credis_event_dispatch
+              Threads::Threads
 )
 
 target_compile_features(credis_core INTERFACE cxx_std_23)
@@ -155,15 +134,16 @@ target_include_directories(credis_core INTERFACE ${CMAKE_SOURCE_DIR}/src)
 
 target_compile_options(
     credis_core
-    INTERFACE
-        -Wall
-        -Wextra
-        -Wpedantic
-        -Werror
-        -Wshadow
-        -Wconversion
-        $<$<CONFIG:Debug>:-g -O0>
-        $<$<CONFIG:Release>:-O3 -march=native>
+    INTERFACE -Wall
+              -Wextra
+              -Wpedantic
+              -Werror
+              -Wshadow
+              -Wconversion
+              $<$<CONFIG:Debug>:-g
+              -O0>
+              $<$<CONFIG:Release>:-O3
+              -march=native>
 )
 
 # ============================================================
@@ -173,18 +153,18 @@ target_compile_options(
 target_precompile_headers(
     credis_util
     PUBLIC
-        <charconv>
-        <chrono>
-        <deque>
-        <expected>
-        <functional>
-        <optional>
-        <set>
-        <string>
-        <unordered_map>
-        <unordered_set>
-        <variant>
-        <vector>
+    <charconv>
+    <chrono>
+    <deque>
+    <expected>
+    <functional>
+    <optional>
+    <set>
+    <string>
+    <unordered_map>
+    <unordered_set>
+    <variant>
+    <vector>
 )
 
 target_precompile_headers(credis_event_loop REUSE_FROM credis_util)
@@ -212,6 +192,12 @@ target_link_libraries(redis PRIVATE credis_core)
 option(ENABLE_SANITIZERS "Enable Address and Undefined Behavior Sanitizers" OFF)
 
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+
+option(ENABLE_PGO "Enable Profile-Guided Optimization (use existing .gcda)" OFF)
+if (ENABLE_PGO)
+    target_compile_options(credis_core INTERFACE -fprofile-use -fprofile-correction)
+    target_link_options(credis_core INTERFACE -fprofile-use -fprofile-correction)
+endif ()
 
 if (ENABLE_SANITIZERS)
     target_compile_options(credis_core INTERFACE -fsanitize=address,undefined -fno-omit-frame-pointer)

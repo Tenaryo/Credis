@@ -65,8 +65,13 @@ auto handle_mset(CommandContext& ctx, const std::vector<std::string_view>& args)
         if (!ctx.store.key_is_absent_or_holds<credis::store::String>(args[i])) {
             return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
         }
-        ctx.store.set(std::string(args[i]), std::string(args[i + 1]));
     }
+    std::vector<std::pair<std::string, std::string>> pairs;
+    pairs.reserve((args.size() - 1) / 2);
+    for (size_t i = 1; i < args.size(); i += 2) {
+        pairs.emplace_back(std::string(args[i]), std::string(args[i + 1]));
+    }
+    ctx.store.mset(pairs);
     return credis::protocol::kRespOk;
 }
 

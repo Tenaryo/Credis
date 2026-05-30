@@ -65,6 +65,16 @@ void Store::set(std::string key, std::string value, std::optional<uint64_t> ttl_
     data_[std::move(key)] = std::move(entry);
 }
 
+void Store::mset(const std::vector<std::pair<std::string, std::string>>& pairs) {
+    for (const auto& [key, value] : pairs) {
+        touch_key(key);
+    }
+    for (const auto& [key, value] : pairs) {
+        data_.emplace(
+            std::piecewise_construct, std::forward_as_tuple(key), std::forward_as_tuple(Entry{String(value), {}}));
+    }
+}
+
 auto Store::get(std::string_view key) -> std::optional<std::string> {
     Entry* entry = find_valid_entry(key);
     if ((entry == nullptr) || !std::holds_alternative<String>(entry->value)) {

@@ -312,6 +312,8 @@ auto CommandHandler::process_with_fd(int fd,
     -> ProcessResult {
     size_t total_consumed = 0;
     ProcessResult result = ProcessResult::normal("");
+    std::string batch_resp;
+    batch_resp.reserve(input.size());
 
     while (total_consumed < input.size()) {
         auto parsed = credis::protocol::parse_one(input.substr(total_consumed));
@@ -329,15 +331,20 @@ auto CommandHandler::process_with_fd(int fd,
         }
 
         if (!std::holds_alternative<ProcessResult::Normal>(cmd_result.state)) {
+            if (!batch_resp.empty() && send_to_client) {
+                send_to_client(fd, batch_resp);
+            }
             cmd_result.propagate_cmds = std::move(result.propagate_cmds);
             cmd_result.consumed = total_consumed;
             return cmd_result;
         }
 
-        if (send_to_client) {
-            send_to_client(fd, std::get<ProcessResult::Normal>(cmd_result.state).response);
-        }
+        batch_resp += std::get<ProcessResult::Normal>(cmd_result.state).response;
         result.state = std::move(cmd_result.state);
+    }
+
+    if (!batch_resp.empty() && send_to_client) {
+        send_to_client(fd, batch_resp);
     }
 
     result.consumed = total_consumed;
