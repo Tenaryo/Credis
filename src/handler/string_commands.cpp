@@ -20,7 +20,7 @@ auto handle_set(CommandContext& ctx, const std::vector<std::string_view>& args) 
     std::optional<uint64_t> ttl_ms;
 
     for (size_t i = 3; i < args.size(); ++i) {
-        auto option = credis::util::to_upper(std::string(args[i]));
+        auto option = credis::util::to_upper(args[i]);
 
         if (option == "EX" || option == "PX") {
             if (i + 1 >= args.size()) {

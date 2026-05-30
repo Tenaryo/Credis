@@ -226,8 +226,8 @@ auto ReplicaConnector::process_buffer_impl() -> ProcessedBuffer {
             break;
         }
 
-        bool is_getack = parsed->args.size() >= 2 && credis::util::to_upper(std::string(parsed->args[0])) == "REPLCONF"
-                         && credis::util::to_upper(std::string(parsed->args[1])) == "GETACK";
+        bool is_getack = parsed->args.size() >= 2 && credis::util::to_upper(parsed->args[0]) == "REPLCONF"
+                         && credis::util::to_upper(parsed->args[1]) == "GETACK";
 
         if (is_getack) {
             result.ack_responses += credis::protocol::encode_array({"REPLCONF", "ACK", std::to_string(offset_)});

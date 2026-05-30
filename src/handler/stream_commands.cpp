@@ -52,7 +52,7 @@ auto handle_xrange(CommandContext& ctx, const std::vector<std::string_view>& arg
 auto handle_xread(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
     size_t streams_idx = 0;
     for (size_t i = 1; i < args.size(); ++i) {
-        if (credis::util::to_upper(std::string(args[i])) == "STREAMS") {
+        if (credis::util::to_upper(args[i]) == "STREAMS") {
             streams_idx = i;
             break;
         }
@@ -88,7 +88,7 @@ auto handle_xread_with_blocking(CommandContext& ctx, int fd, const std::vector<s
     size_t start_idx = 1;
 
     if (args.size() > start_idx) {
-        if (credis::util::to_upper(std::string(args[start_idx])) == "BLOCK") {
+        if (credis::util::to_upper(args[start_idx]) == "BLOCK") {
             has_block = true;
             if (start_idx + 1 >= args.size()) {
                 return ProcessResult::normal(credis::protocol::encode_error("ERR syntax error"));
@@ -105,7 +105,7 @@ auto handle_xread_with_blocking(CommandContext& ctx, int fd, const std::vector<s
 
     size_t streams_idx = 0;
     for (size_t i = start_idx; i < args.size(); ++i) {
-        if (credis::util::to_upper(std::string(args[i])) == "STREAMS") {
+        if (credis::util::to_upper(args[i]) == "STREAMS") {
             streams_idx = i;
             break;
         }

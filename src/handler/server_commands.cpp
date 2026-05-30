@@ -31,7 +31,7 @@ auto handle_info(CommandContext& ctx, const std::vector<std::string_view>& /* ar
 }
 
 auto handle_config_get(CommandContext& ctx, std::string_view param) -> std::string {
-    auto upper = credis::util::to_upper(std::string(param));
+    auto upper = credis::util::to_upper(param);
     if (upper == "DIR") {
         return "*2\r\n$3\r\ndir\r\n" + credis::protocol::encode_bulk_string(ctx.config.dir);
     }
@@ -63,7 +63,7 @@ auto handle_acl(CommandContext& ctx, const std::vector<std::string_view>& args) 
     if (args.size() < 2) {
         return credis::protocol::encode_error("ERR unknown subcommand for 'ACL'. Try ACL HELP.");
     }
-    auto subcmd = credis::util::to_upper(std::string(args[1]));
+    auto subcmd = credis::util::to_upper(args[1]);
     if (subcmd == "WHOAMI") {
         return handle_acl_whoami();
     }
@@ -120,7 +120,7 @@ auto handle_auth(CommandContext& ctx, int fd, const std::vector<std::string_view
 }
 
 auto handle_replconf(const std::vector<std::string_view>& args) -> std::string {
-    if (args.size() >= 2 && credis::util::to_upper(std::string(args[1])) == "GETACK") {
+    if (args.size() >= 2 && credis::util::to_upper(args[1]) == "GETACK") {
         return credis::protocol::encode_array({"REPLCONF", "ACK", "0"});
     }
     return credis::protocol::kRespOk;

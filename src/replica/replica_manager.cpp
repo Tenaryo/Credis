@@ -59,8 +59,8 @@ auto ReplicaManager::process_ack(int fd, std::string_view data) -> AckResult {
         consumed += result->consumed;
 
         auto& args = result->args;
-        if (args.size() >= 3 && credis::util::to_upper(std::string(args[0])) == "REPLCONF"
-            && credis::util::to_upper(std::string(args[1])) == "ACK") {
+        if (args.size() >= 3 && credis::util::to_upper(args[0]) == "REPLCONF"
+            && credis::util::to_upper(args[1]) == "ACK") {
             if (auto offset = credis::util::parse_int<int64_t>(args[2])) {
                 r->offset = *offset;
             }

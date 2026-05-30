@@ -321,7 +321,7 @@ auto CommandHandler::process_with_fd(int fd,
 
         size_t cmd_start = total_consumed;
         total_consumed += parsed->consumed;
-        std::string cmd_name = credis::util::to_upper(std::string(parsed->args[0]));
+        std::string cmd_name = credis::util::to_upper(parsed->args[0]);
         auto cmd_result = process_single_command(fd, std::move(parsed->args), cmd_name, send_to_client);
 
         if (is_write_command(cmd_name) && ctx_.replica_count_fn && ctx_.replica_count_fn() > 0) {
@@ -465,7 +465,7 @@ auto CommandHandler::execute_command(std::vector<std::string_view> args,
                                      int fd,
                                      SendFn&& send_to_client) -> ProcessResult {
     if (cmd == "CONFIG") [[unlikely]] {
-        if (args.size() < 3 || credis::util::to_upper(std::string(args[1])) != "GET") [[unlikely]] {
+        if (args.size() < 3 || credis::util::to_upper(args[1]) != "GET") [[unlikely]] {
             return ProcessResult::normal(
                 credis::protocol::encode_error("ERR wrong number of arguments for 'config' command"));
         }
