@@ -315,7 +315,7 @@ auto CommandHandler::process_with_fd(int fd,
 
     while (total_consumed < input.size()) {
         auto parsed = credis::protocol::parse_one(input.substr(total_consumed));
-        if (!parsed) [[unlikely]] {
+        if (!parsed) {
             break;
         }
 
@@ -328,13 +328,13 @@ auto CommandHandler::process_with_fd(int fd,
             result.propagate_cmds.push_back(std::string(input.substr(cmd_start, parsed->consumed)));
         }
 
-        if (!std::holds_alternative<ProcessResult::Normal>(cmd_result.state)) [[unlikely]] {
+        if (!std::holds_alternative<ProcessResult::Normal>(cmd_result.state)) {
             cmd_result.propagate_cmds = std::move(result.propagate_cmds);
             cmd_result.consumed = total_consumed;
             return cmd_result;
         }
 
-        if (send_to_client) [[likely]] {
+        if (send_to_client) {
             send_to_client(fd, std::get<ProcessResult::Normal>(cmd_result.state).response);
         }
         result.state = std::move(cmd_result.state);
