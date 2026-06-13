@@ -25,11 +25,16 @@ namespace credis::pubsub {
 class PubSubManager;
 } // namespace credis::pubsub
 
+namespace credis::aof {
+class AofManager;
+} // namespace credis::aof
+
 namespace credis::handler {
 
 struct CommandContext {
     credis::store::Store& store;
     credis::server::ServerConfig config;
+    credis::aof::AofManager* aof_manager = nullptr;
     std::optional<std::reference_wrapper<credis::blocking::BlockingManager>> blocking_manager;
     std::optional<std::reference_wrapper<credis::pubsub::PubSubManager>> pubsub_manager;
     credis::server::AclManager acl_manager;
@@ -56,6 +61,9 @@ class CommandHandler {
     }
     void set_offset_fn(std::function<int64_t()> fn) {
         ctx_.offset_fn = std::move(fn);
+    }
+    void set_aof_manager(credis::aof::AofManager& mgr) {
+        ctx_.aof_manager = &mgr;
     }
     [[nodiscard]] auto config() const noexcept -> const credis::server::ServerConfig& {
         return ctx_.config;

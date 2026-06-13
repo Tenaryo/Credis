@@ -4,12 +4,12 @@
 #include <string>
 #include <vector>
 
+#include "aof/aof_manager.hpp"
 #include "cli/cli_parser.hpp"
-#include "server/server_config.hpp"
 
 using namespace credis::cli;
+using namespace credis::aof;
 using credis::server::ReplicaConfig;
-using credis::server::ServerConfig;
 
 namespace {
 
@@ -77,10 +77,10 @@ TEST(ApplyAofOverridesTest, AllFlagsOverrideDefaults) {
                            "myfile.aof",
                            "--appendfsync",
                            "always"});
-    ServerConfig config;
-    apply_aof_overrides(config, static_cast<int>(argv.size()), argv.data());
-    EXPECT_EQ(config.appendonly, "yes");
-    EXPECT_EQ(config.appenddirname, "mydir");
-    EXPECT_EQ(config.appendfilename, "myfile.aof");
-    EXPECT_EQ(config.appendfsync, "always");
+    AofManager aof;
+    apply_aof_overrides(aof, static_cast<int>(argv.size()), argv.data());
+    EXPECT_EQ(aof.appendonly(), "yes");
+    EXPECT_EQ(aof.appenddirname(), "mydir");
+    EXPECT_EQ(aof.appendfilename(), "myfile.aof");
+    EXPECT_EQ(aof.appendfsync(), "always");
 }

@@ -2,6 +2,7 @@
 #include <iostream>
 #include <optional>
 
+#include "aof/aof_manager.hpp"
 #include "blocking_manager/blocking_manager.hpp"
 #include "cli/cli_parser.hpp"
 #include "connection/connection_pool.hpp"
@@ -32,7 +33,9 @@ auto main(int argc, char* argv[]) -> int {
         server_config.dir = std::filesystem::current_path().string();
     }
     server_config.dbfilename = credis::cli::parse_dbfilename(argc, argv);
-    credis::cli::apply_aof_overrides(server_config, argc, argv);
+    auto aof = credis::aof::AofManager{};
+    credis::cli::apply_aof_overrides(aof, argc, argv);
+    aof.ensure_directory(server_config.dir);
 
     // 2. Create TCP listener
     auto listener = credis::server::TcpListener::create(port);
@@ -64,6 +67,7 @@ auto main(int argc, char* argv[]) -> int {
     // 6. Wire dependencies
     handler.set_blocking_manager(blocking);
     handler.set_pubsub_manager(pubsub);
+    handler.set_aof_manager(aof);
     handler.set_replica_count_fn([&replica_mgr] { return replica_mgr.count(); });
     handler.set_offset_fn([&replica_mgr] { return replica_mgr.offset(); });
 

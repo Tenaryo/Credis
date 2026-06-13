@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "aof/aof_manager.hpp"
 #include "handler/command_handler.hpp"
 #include "server/server_config.hpp"
 #include "store/store.hpp"
@@ -29,11 +30,13 @@ TEST_F(HandlerServerTest, InfoReplication) {
 TEST(ConfigGetAofOverrides, ReturnsFlagValues) {
     credis::store::Store store;
     credis::server::ServerConfig config;
-    config.appendonly = "yes";
-    config.appenddirname = "mydir";
-    config.appendfilename = "myfile.aof";
-    config.appendfsync = "always";
+    credis::aof::AofManager aof;
+    aof.set_appendonly("yes");
+    aof.set_appenddirname("mydir");
+    aof.set_appendfilename("myfile.aof");
+    aof.set_appendfsync("always");
     CommandHandler handler(store, config);
+    handler.set_aof_manager(aof);
 
     auto r1 = handler.process("*3\r\n$6\r\nCONFIG\r\n$3\r\nGET\r\n$10\r\nappendonly\r\n");
     EXPECT_EQ(r1, "*2\r\n$10\r\nappendonly\r\n$3\r\nyes\r\n");

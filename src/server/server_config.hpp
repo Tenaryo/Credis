@@ -15,10 +15,6 @@ struct ServerConfig {
     std::string master_replid;
     std::string dir;
     std::string dbfilename;
-    std::string appendonly = "no";
-    std::string appenddirname = "appendonlydir";
-    std::string appendfilename = "appendonly.aof";
-    std::string appendfsync = "everysec";
     [[nodiscard]] auto is_replica() const -> bool {
         return replica.has_value();
     }

@@ -2,6 +2,7 @@
 
 #include <string>
 
+#include "aof/aof_manager.hpp"
 #include "protocol/resp_codec.hpp"
 #include "pubsub/pubsub_manager.hpp"
 #include "rdb/rdb_constants.hpp"
@@ -11,6 +12,10 @@
 #include "util/string_utils.hpp"
 
 namespace credis::handler {
+
+namespace {
+const std::string kEmpty;
+} // namespace
 
 auto handle_ping(CommandContext& ctx, int fd) -> std::string {
     if (ctx.pubsub_manager && fd >= 0 && ctx.pubsub_manager->get().is_subscribed(fd)) {
@@ -41,16 +46,20 @@ auto handle_config_get(CommandContext& ctx, std::string_view param) -> std::stri
         return "*2\r\n$10\r\ndbfilename\r\n" + value;
     }
     if (upper == "APPENDONLY") {
-        return "*2\r\n$10\r\nappendonly\r\n" + credis::protocol::encode_bulk_string(ctx.config.appendonly);
+        const auto& val = ctx.aof_manager != nullptr ? ctx.aof_manager->appendonly() : kEmpty;
+        return "*2\r\n$10\r\nappendonly\r\n" + credis::protocol::encode_bulk_string(val);
     }
     if (upper == "APPENDDIRNAME") {
-        return "*2\r\n$13\r\nappenddirname\r\n" + credis::protocol::encode_bulk_string(ctx.config.appenddirname);
+        const auto& val = ctx.aof_manager != nullptr ? ctx.aof_manager->appenddirname() : kEmpty;
+        return "*2\r\n$13\r\nappenddirname\r\n" + credis::protocol::encode_bulk_string(val);
     }
     if (upper == "APPENDFILENAME") {
-        return "*2\r\n$14\r\nappendfilename\r\n" + credis::protocol::encode_bulk_string(ctx.config.appendfilename);
+        const auto& val = ctx.aof_manager != nullptr ? ctx.aof_manager->appendfilename() : kEmpty;
+        return "*2\r\n$14\r\nappendfilename\r\n" + credis::protocol::encode_bulk_string(val);
     }
     if (upper == "APPENDFSYNC") {
-        return "*2\r\n$11\r\nappendfsync\r\n" + credis::protocol::encode_bulk_string(ctx.config.appendfsync);
+        const auto& val = ctx.aof_manager != nullptr ? ctx.aof_manager->appendfsync() : kEmpty;
+        return "*2\r\n$11\r\nappendfsync\r\n" + credis::protocol::encode_bulk_string(val);
     }
     return credis::protocol::encode_array({});
 }

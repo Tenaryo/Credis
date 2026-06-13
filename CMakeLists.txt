@@ -21,6 +21,9 @@ find_package(Threads REQUIRED)
 add_library(credis_util STATIC src/util/sha256.cpp)
 target_include_directories(credis_util PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
+add_library(credis_aof STATIC src/aof/aof_manager.cpp)
+target_include_directories(credis_aof PUBLIC ${CMAKE_SOURCE_DIR}/src)
+
 add_library(credis_event_loop STATIC src/event_loop/event_loop.cpp)
 target_include_directories(credis_event_loop PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
@@ -85,7 +88,7 @@ add_library(
 target_include_directories(credis_handler PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(
     credis_handler
-    PUBLIC credis_store credis_server credis_blocking_manager credis_pubsub
+    PUBLIC credis_store credis_server credis_blocking_manager credis_pubsub credis_aof
     PRIVATE credis_protocol credis_util credis_geo credis_rdb
 )
 
@@ -114,6 +117,7 @@ add_library(credis_core INTERFACE)
 target_link_libraries(
     credis_core
     INTERFACE credis_util
+              credis_aof
               credis_geo
               credis_event_loop
               credis_connection
@@ -168,6 +172,7 @@ target_precompile_headers(
 )
 
 target_precompile_headers(credis_event_loop REUSE_FROM credis_util)
+target_precompile_headers(credis_aof REUSE_FROM credis_util)
 target_precompile_headers(credis_connection REUSE_FROM credis_util)
 target_precompile_headers(credis_server REUSE_FROM credis_util)
 target_precompile_headers(credis_store REUSE_FROM credis_util)
