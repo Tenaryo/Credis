@@ -110,3 +110,32 @@ TEST_F(AofManagerTest, EnsureFileTruncatesExistingFile) {
     EXPECT_TRUE(std::filesystem::exists(expected));
     EXPECT_EQ(std::filesystem::file_size(expected), 0);
 }
+
+TEST_F(AofManagerTest, EnsureManifestCreatesFileWithCorrectContent) {
+    AofManager aof;
+    aof.set_appendonly("yes");
+    aof.set_appenddirname("subdir");
+    aof.set_appendfilename("myapp.aof");
+
+    aof.ensure_directory(tmp_dir_path_);
+    auto expected = tmp_dir_path_ + "/subdir/myapp.aof.manifest";
+    EXPECT_FALSE(std::filesystem::exists(expected));
+
+    aof.ensure_manifest(tmp_dir_path_);
+
+    EXPECT_TRUE(std::filesystem::exists(expected));
+    EXPECT_TRUE(std::filesystem::is_regular_file(expected));
+
+    std::ifstream in(expected);
+    std::string content;
+    std::getline(in, content);
+    EXPECT_EQ(content, "file myapp.aof.1.incr.aof seq 1 type i");
+}
+
+TEST_F(AofManagerTest, EnsureManifestDoesNothingWhenAppendonlyNo) {
+    AofManager aof;
+    aof.ensure_manifest(tmp_dir_path_);
+
+    auto expected = tmp_dir_path_ + "/" + aof.appenddirname() + "/" + aof.appendfilename() + ".manifest";
+    EXPECT_FALSE(std::filesystem::exists(expected));
+}

@@ -36,6 +36,7 @@ class AofManager {
 
     void ensure_directory(const std::string& base_dir) const;
     void ensure_file(const std::string& base_dir) const;
+    void ensure_manifest(const std::string& base_dir) const;
 
   private:
     std::string appendonly_ = "no";

@@ -18,4 +18,12 @@ void AofManager::ensure_file(const std::string& base_dir) const {
     }
 }
 
+void AofManager::ensure_manifest(const std::string& base_dir) const {
+    if (appendonly_ == "yes") {
+        auto path = base_dir + "/" + appenddirname_ + "/" + appendfilename_ + ".manifest";
+        std::ofstream file(path);
+        file << "file " << appendfilename_ << ".1.incr.aof seq 1 type i\n";
+    }
+}
+
 } // namespace credis::aof
