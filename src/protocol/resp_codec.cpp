@@ -21,6 +21,26 @@ constexpr auto digit_count(size_t n) -> size_t {
     return c;
 }
 
+auto parse_int_until_crlf(const char*& p, const char* end) -> std::optional<int> {
+    if (p >= end) [[unlikely]] {
+        return std::nullopt;
+    }
+    bool neg = false;
+    if (*p == '-') {
+        neg = true;
+        ++p;
+    }
+    int val = 0;
+    while (p < end && *p >= '0' && *p <= '9') {
+        val = val * 10 + (*p++ - '0');
+    }
+    if (p + 1 >= end || *p != '\r' || *(p + 1) != '\n') [[unlikely]] {
+        return std::nullopt;
+    }
+    p += 2;
+    return neg ? -val : val;
+}
+
 } // namespace
 
 auto parse_one(std::string_view input) -> std::expected<ParsedCommand, Error> {
@@ -28,52 +48,38 @@ auto parse_one(std::string_view input) -> std::expected<ParsedCommand, Error> {
         return std::unexpected(Error(ErrorCode::kProtocolError, "Invalid RESP: expected array"));
     }
 
-    size_t pos = 1;
-    auto crlf = input.find("\r\n", pos);
-    if (crlf == std::string_view::npos) {
-        return std::unexpected(Error(ErrorCode::kProtocolError, "Incomplete RESP: missing CRLF after array count"));
-    }
+    const char* p = input.data() + 1;
+    const char* end = input.data() + input.size();
 
-    int count = 0;
-    auto [ptr, ec] = std::from_chars(input.data() + pos, input.data() + crlf, count);
-    if (ec != std::errc{} || count < 0) [[unlikely]] {
+    auto count_opt = parse_int_until_crlf(p, end);
+    if (!count_opt || *count_opt < 0) [[unlikely]] {
         return std::unexpected(Error(ErrorCode::kProtocolError, "Invalid RESP: invalid array count"));
     }
+    int count = *count_opt;
 
-    pos = crlf + 2;
-
-    // TODO: hand-roll single-pass without string_view::find for \r\n scanning;
-    // pre-compute count to reserve args vector and avoid reallocations
     std::vector<std::string_view> args;
     args.reserve(static_cast<size_t>(count));
     for (int i = 0; i < count; ++i) {
-        if (pos >= input.size() || input[pos] != '$') {
+        if (p >= end || *p != '$') [[unlikely]] {
             return std::unexpected(Error(ErrorCode::kProtocolError, "Invalid RESP: expected bulk string"));
         }
+        ++p;
 
-        crlf = input.find("\r\n", pos + 1);
-        if (crlf == std::string_view::npos) {
-            return std::unexpected(
-                Error(ErrorCode::kProtocolError, "Incomplete RESP: missing CRLF after bulk string length"));
-        }
-
-        int len = 0;
-        auto [ptr2, ec2] = std::from_chars(input.data() + pos + 1, input.data() + crlf, len);
-        if (ec2 != std::errc{} || len < 0) [[unlikely]] {
+        auto len_opt = parse_int_until_crlf(p, end);
+        if (!len_opt || *len_opt < 0) [[unlikely]] {
             return std::unexpected(Error(ErrorCode::kProtocolError, "Invalid RESP: invalid bulk string length"));
         }
+        int len = *len_opt;
 
-        pos = crlf + 2;
-
-        if (pos + static_cast<size_t>(len) > input.size()) {
+        if (p + len > end) [[unlikely]] {
             return std::unexpected(Error(ErrorCode::kProtocolError, "Incomplete RESP: bulk string truncated"));
         }
-
-        args.emplace_back(input.substr(pos, static_cast<size_t>(len)));
-        pos += static_cast<size_t>(len) + 2;
+        args.emplace_back(p, static_cast<size_t>(len));
+        p += static_cast<size_t>(len) + 2;
     }
 
-    return ParsedCommand{std::move(args), pos};
+    size_t consumed = static_cast<size_t>(p - input.data());
+    return ParsedCommand{std::move(args), consumed};
 }
 
 auto encode_simple_string(std::string_view s) -> std::string {
