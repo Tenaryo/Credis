@@ -64,3 +64,49 @@ TEST_F(AofManagerTest, EnsureDirectoryHandlesExistingDirectory) {
     EXPECT_NO_THROW(aof.ensure_directory(tmp_dir_path_));
     EXPECT_TRUE(std::filesystem::exists(expected_path));
 }
+
+TEST_F(AofManagerTest, EnsureFileCreatesEmptyFileWhenAppendonlyYes) {
+    AofManager aof;
+    aof.set_appendonly("yes");
+    aof.set_appenddirname("subdir");
+    aof.set_appendfilename("myapp.aof");
+
+    aof.ensure_directory(tmp_dir_path_);
+    auto expected = tmp_dir_path_ + "/subdir/myapp.aof.1.incr.aof";
+    EXPECT_FALSE(std::filesystem::exists(expected));
+
+    aof.ensure_file(tmp_dir_path_);
+
+    EXPECT_TRUE(std::filesystem::exists(expected));
+    EXPECT_TRUE(std::filesystem::is_regular_file(expected));
+    EXPECT_EQ(std::filesystem::file_size(expected), 0);
+}
+
+TEST_F(AofManagerTest, EnsureFileDoesNothingWhenAppendonlyNo) {
+    AofManager aof;
+    aof.ensure_file(tmp_dir_path_);
+
+    auto expected = tmp_dir_path_ + "/" + aof.appenddirname() + "/" + aof.appendfilename() + ".1.incr.aof";
+    EXPECT_FALSE(std::filesystem::exists(expected));
+}
+
+TEST_F(AofManagerTest, EnsureFileTruncatesExistingFile) {
+    AofManager aof;
+    aof.set_appendonly("yes");
+    aof.set_appenddirname("subdir");
+    aof.set_appendfilename("myapp.aof");
+
+    auto dir_path = tmp_dir_path_ + "/subdir";
+    std::filesystem::create_directories(dir_path);
+    auto expected = dir_path + "/myapp.aof.1.incr.aof";
+    {
+        std::ofstream f(expected);
+        f << "old data";
+    }
+    ASSERT_GT(std::filesystem::file_size(expected), 0);
+
+    aof.ensure_file(tmp_dir_path_);
+
+    EXPECT_TRUE(std::filesystem::exists(expected));
+    EXPECT_EQ(std::filesystem::file_size(expected), 0);
+}
