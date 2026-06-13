@@ -37,3 +37,4 @@ Thumbs.db
 # Project
 *.log
 docs/
+__pycache__/
