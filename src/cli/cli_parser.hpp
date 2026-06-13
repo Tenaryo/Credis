@@ -53,4 +53,21 @@ inline auto parse_dbfilename(int argc, char* argv[]) -> std::string {
     return "";
 }
 
+inline void apply_aof_overrides(credis::server::ServerConfig& config, int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i) {
+        auto arg = std::string_view(argv[i]);
+        if (i + 1 < argc) [[likely]] {
+            if (arg == "--appendonly") {
+                config.appendonly = argv[i + 1];
+            } else if (arg == "--appenddirname") {
+                config.appenddirname = argv[i + 1];
+            } else if (arg == "--appendfilename") {
+                config.appendfilename = argv[i + 1];
+            } else if (arg == "--appendfsync") {
+                config.appendfsync = argv[i + 1];
+            }
+        }
+    }
+}
+
 } // namespace credis::cli

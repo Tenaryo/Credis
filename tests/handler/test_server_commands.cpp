@@ -25,3 +25,25 @@ TEST_F(HandlerServerTest, InfoReplication) {
     EXPECT_NE(response.find("# Replication"), std::string::npos);
     EXPECT_NE(response.find("role:master"), std::string::npos);
 }
+
+TEST(ConfigGetAofOverrides, ReturnsFlagValues) {
+    credis::store::Store store;
+    credis::server::ServerConfig config;
+    config.appendonly = "yes";
+    config.appenddirname = "mydir";
+    config.appendfilename = "myfile.aof";
+    config.appendfsync = "always";
+    CommandHandler handler(store, config);
+
+    auto r1 = handler.process("*3\r\n$6\r\nCONFIG\r\n$3\r\nGET\r\n$10\r\nappendonly\r\n");
+    EXPECT_EQ(r1, "*2\r\n$10\r\nappendonly\r\n$3\r\nyes\r\n");
+
+    auto r2 = handler.process("*3\r\n$6\r\nCONFIG\r\n$3\r\nGET\r\n$13\r\nappenddirname\r\n");
+    EXPECT_EQ(r2, "*2\r\n$13\r\nappenddirname\r\n$5\r\nmydir\r\n");
+
+    auto r3 = handler.process("*3\r\n$6\r\nCONFIG\r\n$3\r\nGET\r\n$14\r\nappendfilename\r\n");
+    EXPECT_EQ(r3, "*2\r\n$14\r\nappendfilename\r\n$10\r\nmyfile.aof\r\n");
+
+    auto r4 = handler.process("*3\r\n$6\r\nCONFIG\r\n$3\r\nGET\r\n$11\r\nappendfsync\r\n");
+    EXPECT_EQ(r4, "*2\r\n$11\r\nappendfsync\r\n$6\r\nalways\r\n");
+}

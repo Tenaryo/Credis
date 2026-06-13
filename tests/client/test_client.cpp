@@ -5,14 +5,17 @@
 #include <vector>
 
 #include "cli/cli_parser.hpp"
+#include "server/server_config.hpp"
 
 using namespace credis::cli;
 using credis::server::ReplicaConfig;
+using credis::server::ServerConfig;
 
 namespace {
 
 std::vector<char*> make_argv(const std::vector<std::string>& args) {
-    static std::vector<std::string> storage = args;
+    static std::vector<std::string> storage;
+    storage = args;
     std::vector<char*> argv;
     for (auto& s : storage)
         argv.push_back(s.data());
@@ -62,4 +65,22 @@ TEST(ParseDbfilenameTest, ReturnsEmptyStringWhenNoDbfilenameArg) {
 TEST(ParseDbfilenameTest, ReturnsCustomNameForDbfilenameArg) {
     auto argv = make_argv({"program", "--dbfilename", "dump.rdb"});
     EXPECT_EQ(parse_dbfilename(static_cast<int>(argv.size()), argv.data()), "dump.rdb");
+}
+
+TEST(ApplyAofOverridesTest, AllFlagsOverrideDefaults) {
+    auto argv = make_argv({"program",
+                           "--appendonly",
+                           "yes",
+                           "--appenddirname",
+                           "mydir",
+                           "--appendfilename",
+                           "myfile.aof",
+                           "--appendfsync",
+                           "always"});
+    ServerConfig config;
+    apply_aof_overrides(config, static_cast<int>(argv.size()), argv.data());
+    EXPECT_EQ(config.appendonly, "yes");
+    EXPECT_EQ(config.appenddirname, "mydir");
+    EXPECT_EQ(config.appendfilename, "myfile.aof");
+    EXPECT_EQ(config.appendfsync, "always");
 }

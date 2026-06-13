@@ -32,6 +32,7 @@ auto main(int argc, char* argv[]) -> int {
         server_config.dir = std::filesystem::current_path().string();
     }
     server_config.dbfilename = credis::cli::parse_dbfilename(argc, argv);
+    credis::cli::apply_aof_overrides(server_config, argc, argv);
 
     // 2. Create TCP listener
     auto listener = credis::server::TcpListener::create(port);
