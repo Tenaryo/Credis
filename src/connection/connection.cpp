@@ -69,15 +69,25 @@ void Connection::consume(size_t n) {
     read_pos_ += n;
 }
 
-void Connection::send_data(const char* data, size_t len) const {
+void Connection::send_data(const char* data, size_t len) {
+    pending_write_.append(data, len);
+}
+
+void Connection::flush() {
+    if (pending_write_.empty() || fd_ < 0) [[unlikely]] {
+        return;
+    }
     size_t sent = 0;
-    while (sent < len) {
-        auto n = ::send(fd_, data + sent, len - sent, MSG_NOSIGNAL);
+    const char* ptr = pending_write_.data();
+    size_t remaining = pending_write_.size();
+    while (sent < remaining) {
+        auto n = ::send(fd_, ptr + sent, remaining - sent, MSG_NOSIGNAL);
         if (n <= 0) {
             break;
         }
         sent += static_cast<size_t>(n);
     }
+    pending_write_.clear();
 }
 
 } // namespace credis::connection

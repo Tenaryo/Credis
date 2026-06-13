@@ -102,6 +102,8 @@ void dispatch_event(int fd, EventContext& ctx) {
 }
 
 auto compute_timeout(EventContext& ctx) -> std::chrono::milliseconds {
+    ctx.conn_pool.flush_all();
+
     for (int fd : ctx.blocking.get_expired_clients()) {
         ctx.conn_pool.send_to(fd, credis::protocol::encode_null_array());
     }
@@ -109,6 +111,8 @@ auto compute_timeout(EventContext& ctx) -> std::chrono::milliseconds {
     if (auto wait_result = ctx.replica_mgr.check_wait_timeout()) {
         ctx.conn_pool.send_to(wait_result->client_fd, credis::protocol::encode_integer(wait_result->count));
     }
+
+    ctx.conn_pool.flush_all();
 
     auto now = std::chrono::steady_clock::now();
     std::optional<std::chrono::steady_clock::time_point> earliest;

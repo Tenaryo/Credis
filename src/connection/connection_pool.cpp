@@ -38,4 +38,10 @@ auto ConnectionPool::contains(int fd) const -> bool {
     return connections_.contains(fd);
 }
 
+void ConnectionPool::flush_all() {
+    for (auto& [fd, conn] : connections_) {
+        conn->flush();
+    }
+}
+
 } // namespace credis::connection

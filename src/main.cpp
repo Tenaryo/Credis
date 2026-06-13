@@ -88,6 +88,7 @@ auto main(int argc, char* argv[]) -> int {
 
     // 10. Run event loop
     loop.run([&ctx](int fd) { credis::server::dispatch_event(fd, ctx); },
-             [&ctx]() -> std::chrono::milliseconds { return credis::server::compute_timeout(ctx); });
+             [&ctx]() -> std::chrono::milliseconds { return credis::server::compute_timeout(ctx); },
+             [&ctx]() { ctx.conn_pool.flush_all(); });
     return 0;
 }

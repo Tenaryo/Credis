@@ -32,6 +32,9 @@ class EventLoop {
     void remove_fd(int fd) const;
     void run(const std::function<void(int)>& on_event,
              const std::function<std::chrono::milliseconds()>& get_timeout) const;
+    void run(const std::function<void(int)>& on_event,
+             const std::function<std::chrono::milliseconds()>& get_timeout,
+             const std::function<void()>& on_flush) const;
     void stop() {
         running_ = false;
     }

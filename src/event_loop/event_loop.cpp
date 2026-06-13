@@ -53,6 +53,12 @@ void EventLoop::remove_fd(int fd) const {
 
 void EventLoop::run(const std::function<void(int)>& on_event,
                     const std::function<std::chrono::milliseconds()>& get_timeout) const {
+    run(on_event, get_timeout, nullptr);
+}
+
+void EventLoop::run(const std::function<void(int)>& on_event,
+                    const std::function<std::chrono::milliseconds()>& get_timeout,
+                    const std::function<void()>& on_flush) const {
     std::vector<struct epoll_event> events(static_cast<size_t>(max_events_));
 
     while (running_) {
@@ -71,6 +77,10 @@ void EventLoop::run(const std::function<void(int)>& on_event,
         for (int i = 0; i < n; ++i) {
             int fd = events[i].data.fd;
             on_event(fd);
+        }
+
+        if (on_flush) {
+            on_flush();
         }
     }
 }
