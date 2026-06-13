@@ -19,7 +19,7 @@ cd "$BUILD_DIR"
 
 if [ ! -f "CMakeCache.txt" ]; then
     echo -e "${YELLOW}Configuring CMake...${NC}"
-    cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=g++ -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+    cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=g++ -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DBUILD_TESTS=ON
 fi
 
 echo -e "${YELLOW}Building tests...${NC}"
