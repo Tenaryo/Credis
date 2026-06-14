@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![C++23](https://img.shields.io/badge/C%2B%2B-23-blue.svg)](https://en.cppreference.com/w/cpp/23)
 
-A Redis 7.0-compatible server written from scratch in C++23 — ~3,700 lines, zero dependencies, 793 KB stripped binary. Pipeline throughput (P=64) reaches 170% of Redis at 37% lower tail latency; high-concurrency throughput leads by 5–15%.
+A Redis 7.0-compatible server written from scratch in C++23 — ~3,700 lines, zero dependencies, 394 KB stripped binary. Pipeline throughput (P=64) reaches 170% of Redis at 37% lower tail latency; high-concurrency throughput leads by 5–15%.
 
 ## Dependencies
 
@@ -25,7 +25,6 @@ No Boost, no libevent, no hiredis.
 - **Credis**: `-O3 -march=native` + LTO (Release build)
 - **Redis**: 7.2.8 (auto-built by `run_benchmarks.sh`)
 - **Statistics**: 3 repeats per data point, reported as median
-- Persistence disabled on both servers
 
 ### Non-Pipeline Throughput (c=50, n=100K)
 
@@ -111,19 +110,19 @@ Credis scales from 253K to 307K rps across 10–500 concurrent clients (variance
 
 ### Memory Footprint
 
+Measured on x86-64 via `/proc/[pid]/smaps Pss`. Per-entry overhead ~350 bytes (Credis) vs ~110 bytes (Redis).
+
 | State | Credis | Redis | Ratio |
 |-------|--------|-------|-------|
 | Idle (PSS) | 2,118 KB | 4,839 KB | 44% |
 | ~63K keys (PSS) | 24,458 KB | 11,474 KB | 213% |
 | ~632K keys (PSS) | 220,975 KB | 77,634 KB | 285% |
 
-Measured via `/proc/[pid]/smaps Pss`. Per-entry overhead ~350 bytes (Credis) vs ~110 bytes (Redis).
-
 ### Binary Size
 
 | | Credis | Redis |
 |--|-----------|-------|
-| Stripped binary | **793 KB** | 1.5 MB |
+| Stripped binary | **394 KB** (ARM64) | 1.5 MB |
 | Lines of code | ~3,700 C++ | ~80,000 C |
 
 ## Quick Start
@@ -190,7 +189,7 @@ OK
 
 ### Data Structures (Redis 7.0 Compatible)
 
-All 7 core Redis data types with full CRUD operations:
+5 core Redis data types with extra Geo spatial support:
 
 | Type | Commands | Underlying Implementation |
 |------|----------|--------------------------|
@@ -199,10 +198,8 @@ All 7 core Redis data types with full CRUD operations:
 | **Stream** | XADD (auto-ID), XRANGE, XREAD | binary search over `std::vector`, O(log N) |
 | **Sorted Set** | ZADD, ZRANK, ZRANGE, ZCARD, ZSCORE, ZREM | `std::set<pair<double,string>>` + index map |
 | **Geo** | GEOADD, GEOPOS, GEODIST, GEOSEARCH | Z-order curve (GeoHash 26-bit) + Haversine |
-| **Bitmap** | SETBIT, GETBIT, BITCOUNT | bit-level operations on `std::string` |
-| **Hash** | (planned) | — |
 
-Lazy-expire: expired keys are evicted on access without a background expiration thread.
+5 core Redis data types with extra Geo spatial support.
 
 ### Blocking Operations
 
@@ -316,7 +313,7 @@ Complete Redis Serialization Protocol (RESP3):
 ### Replication & Auth
 - `REPLCONF`, `PSYNC`, `WAIT`, `AUTH`, `ACL WHOAMI`, `ACL GETUSER`, `ACL SETUSER`
 
-**41 commands** total.
+**45 commands** total.
 
 ## API Documentation
 
