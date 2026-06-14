@@ -39,3 +39,4 @@ Thumbs.db
 docs/
 !docs/images/
 __pycache__/
+benchmarks/results/

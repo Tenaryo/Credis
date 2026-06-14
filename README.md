@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![C++23](https://img.shields.io/badge/C%2B%2B-23-blue.svg)](https://en.cppreference.com/w/cpp/23)
 
-A Redis 7.0-compatible server written from scratch in C++23 — ~3,700 lines, zero dependencies, 394 KB stripped binary. Pipeline throughput (P=64) reaches 170% of Redis at 37% lower tail latency; high-concurrency throughput leads by 5–15%.
+A Redis 7.0-compatible server written from scratch in C++23 — 5,175 lines, zero dependencies, 394 KB stripped binary. Pipeline throughput (P=64) reaches 170% of Redis at 37% lower tail latency; high-concurrency throughput leads by 5–15%.
 
 ## Dependencies
 
@@ -54,23 +54,6 @@ At P=64, Credis delivers 164–170% throughput with p99 latency **37% lower** th
 ![](docs/images/bench_concurrency.png)
 
 Credis scales from 253K to 307K rps across 10–500 concurrent clients (variance 18%), while Redis plateaus at 248–283K.
-
-### Memory Footprint
-
-Measured on x86-64 via `/proc/[pid]/smaps Pss`. Per-entry overhead ~350 bytes (Credis) vs ~110 bytes (Redis).
-
-| State | Credis | Redis | Ratio |
-|-------|--------|-------|-------|
-| Idle (PSS) | 2,118 KB | 4,839 KB | 44% |
-| ~63K keys (PSS) | 24,458 KB | 11,474 KB | 213% |
-| ~632K keys (PSS) | 220,975 KB | 77,634 KB | 285% |
-
-### Binary Size
-
-| | Credis | Redis |
-|--|-----------|-------|
-| Stripped binary | **394 KB** (ARM64) | 3.4 MB (ARM64) |
-| Lines of code | ~3,700 C++ | ~80,000 C |
 
 ## Quick Start
 
