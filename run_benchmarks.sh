@@ -287,6 +287,7 @@ echo -e "${YELLOW}Running benchmarks...${NC}"
 echo
 export BENCH_REDIS_PORT=$REDIS_PORT
 export BENCH_CREDIS_PORT=$CREDIS_PORT
+export BENCH_REDIS_BENCHMARK="$REDIS_BENCH"
 
 # Pass Redis version info to the Python reporter
 export BENCH_REDIS_VERSION=$("$REDIS_SERVER" --version 2>&1 | head -1)

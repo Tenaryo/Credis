@@ -14,11 +14,13 @@ import json
 import time
 import os
 import argparse
+import random
+import statistics
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-BENCH = "/usr/bin/redis-benchmark"
+BENCH = os.environ.get("BENCH_REDIS_BENCHMARK", "/usr/bin/redis-benchmark")
 PERF = "perf"
 
 # Servers — overridden by run_benchmarks.sh via env
@@ -31,6 +33,8 @@ REQUESTS = int(os.environ.get("BENCH_REQUESTS", "100000"))
 PIPELINE_REQUESTS = int(os.environ.get("BENCH_PIPELINE_REQUESTS", "200000"))
 QUICK_REQUESTS = int(os.environ.get("BENCH_QUICK_REQUESTS", "30000"))
 QUICK_PIPELINE_REQUESTS = int(os.environ.get("BENCH_QUICK_PIPELINE_REQUESTS", "60000"))
+REPEATS = 3
+WARMUP_REQUESTS = 5000
 
 CONCURRENCIES = [1, 10, 50, 100, 500]
 PIPELINES = [1, 4, 8, 16, 32, 64]
@@ -70,27 +74,32 @@ class BenchmarkRunner:
         self.outfile.write_text(text + "\n")
         print(f"\nResults saved to {self.outfile}")
 
+    def _warmup(self, host: str, port: int, cmd: str) -> None:
+        args = [BENCH, "-h", host, "-p", str(port),
+                "-n", str(WARMUP_REQUESTS), "-c", "10", "-P", "1", "-t", cmd, "-q"]
+        subprocess.run(args, capture_output=True, timeout=30)
+
     def _run_bench(self, host: str, port: int, cmd: str, concurrency: int,
                    pipeline: int = 1, extra_args: Optional[list] = None,
                    latency: bool = False, requests: Optional[int] = None) -> dict:
         n = requests if requests is not None else self.n
         args = [BENCH, "-h", host, "-p", str(port),
                 "-n", str(n), "-c", str(concurrency),
-                "-P", str(pipeline), "-t", cmd]
+                 "-P", str(pipeline), "-t", cmd]
         if extra_args:
             args.extend(extra_args)
-        if latency:
-            args.extend(["--precision", "3"])
-        else:
+        if not latency:
             args.append("-q")
 
         try:
-            result = subprocess.run(args, capture_output=True, text=True, timeout=120)
+            result = subprocess.run(args, capture_output=True, timeout=120)
+            stdout_text = result.stdout.decode('utf-8', errors='replace')
+            stderr_text = result.stderr.decode('utf-8', errors='replace')
         except subprocess.TimeoutExpired:
             return {"error": "timeout"}
 
         rps = 0.0
-        for line in result.stdout.strip().split('\n'):
+        for line in stdout_text.strip().split('\n'):
             line = line.strip()
             if 'throughput summary:' in line:
                 # non-quiet format: "  throughput summary: 40766.26 requests per second"
@@ -108,7 +117,7 @@ class BenchmarkRunner:
                     rps = float(parts[0])
                 except ValueError:
                     pass
-        return {"rps": rps, "stdout": result.stdout.strip(), "stderr": result.stderr.strip()}
+        return {"rps": rps, "stdout": stdout_text.strip(), "stderr": stderr_text.strip()}
 
     def _run_bench_csv(self, host: str, port: int, cmd: str, concurrency: int,
                        pipeline: int = 1, extra_args: Optional[list] = None) -> float:
@@ -118,8 +127,9 @@ class BenchmarkRunner:
         if extra_args:
             args.extend(extra_args)
         try:
-            result = subprocess.run(args, capture_output=True, text=True, timeout=120)
-            for line in result.stdout.strip().split('\n'):
+            result = subprocess.run(args, capture_output=True, timeout=120)
+            stdout_text = result.stdout.decode('utf-8', errors='replace')
+            for line in stdout_text.strip().split('\n'):
                 line = line.strip()
                 if not line or line.startswith('"test'):
                     continue
@@ -132,6 +142,16 @@ class BenchmarkRunner:
         except subprocess.TimeoutExpired:
             pass
         return 0.0
+
+    def _bench_rps_with_warmup(self, host: str, port: int, cmd: str, concurrency: int,
+                                pipeline: int = 1, extra_args: Optional[list] = None) -> float:
+        self._warmup(host, port, cmd)
+        vals = []
+        for _ in range(REPEATS):
+            v = self._run_bench_csv(host, port, cmd, concurrency, pipeline, extra_args)
+            if v > 0:
+                vals.append(v)
+        return statistics.median(vals) if vals else 0.0
 
     def _prepopulate(self, host: str, port: int, cmd: str) -> None:
         n = 20000 if not self.quick else 10000
@@ -156,6 +176,15 @@ class BenchmarkRunner:
         self.write(f"**Credis**: port {CREDIS_PORT}")
         self.write()
 
+        governor = self._cpu_governor()
+        if governor:
+            self.write(f"**CPU governor**: {governor}")
+            if governor != "performance":
+                self.write()
+                self.write("> :warning: CPU governor is **not** `performance`. "
+                           "Results may have higher variance.")
+            self.write()
+
     def section_throughput(self) -> None:
         """Non-pipeline throughput: all commands × all concurrencies."""
         self.write("## 1. Non-Pipeline Throughput")
@@ -172,8 +201,14 @@ class BenchmarkRunner:
             self.write(sep)
 
             for c in CONCURRENCIES:
-                redis_rps = self._run_bench_csv(REDIS_HOST, REDIS_PORT, cmd_name, c, 1, extra_args)
-                credis_rps = self._run_bench_csv(CREDIS_HOST, CREDIS_PORT, cmd_name, c, 1, extra_args)
+                # Randomize order to avoid ordering bias
+                servers = [(REDIS_HOST, REDIS_PORT, "Redis"), (CREDIS_HOST, CREDIS_PORT, "Credis")]
+                random.shuffle(servers)
+                results = {}
+                for host, port, label in servers:
+                    results[label] = self._bench_rps_with_warmup(host, port, cmd_name, c, 1, extra_args)
+                redis_rps = results["Redis"]
+                credis_rps = results["Credis"]
                 if redis_rps > 0:
                     ratio = credis_rps / redis_rps * 100
                     winner = "**Credis**" if ratio >= 100 else "Redis"
@@ -200,8 +235,13 @@ class BenchmarkRunner:
             self.write(sep)
 
             for p in PIPELINES:
-                redis_rps = self._run_bench_csv(REDIS_HOST, REDIS_PORT, cmd, 50, p)
-                credis_rps = self._run_bench_csv(CREDIS_HOST, CREDIS_PORT, cmd, 50, p)
+                servers = [(REDIS_HOST, REDIS_PORT, "Redis"), (CREDIS_HOST, CREDIS_PORT, "Credis")]
+                random.shuffle(servers)
+                results_p = {}
+                for host, port, label_p in servers:
+                    results_p[label_p] = self._bench_rps_with_warmup(host, port, cmd, 50, p)
+                redis_rps = results_p["Redis"]
+                credis_rps = results_p["Credis"]
                 if redis_rps > 0:
                     ratio = credis_rps / redis_rps * 100
                     winner = "**Credis**" if ratio >= 100 else "Redis"
@@ -229,15 +269,13 @@ class BenchmarkRunner:
                                        ("Credis", CREDIS_HOST, CREDIS_PORT)]:
                 for p in (1, 64):
                     data = self._run_bench(host, port, "SET", c, p, latency=True, requests=100000)
-                    stdout = data.get("stdout", "")
+                    combined = (data.get("stdout", "") + "\n" + data.get("stderr", "")).replace('\r', '')
                     rps_str = data.get("rps", 0)
 
                     p50 = p95 = p99 = pmax = "-"
-                    # Parse table-format latency output:
-                    #           avg       min       p50       p95       p99       max
-                    #         0.025     0.015     0.023     0.031     0.047     0.271
-                    lines = stdout.split('\n')
+                    lines = combined.split('\n')
                     for i, line in enumerate(lines):
+                        line = line.strip()
                         if 'p50' in line and 'p95' in line and 'p99' in line:
                             if i + 1 < len(lines):
                                 vals = lines[i + 1].split()
@@ -261,6 +299,14 @@ class BenchmarkRunner:
     def section_perf_stat(self) -> None:
         """perf stat for key scenarios."""
         if not self.run_perf:
+            return
+
+        check = subprocess.run([PERF, "stat", "--version"], capture_output=True, timeout=10)
+        if check.returncode != 0:
+            self.write("## 4. Perf Stat (skipped)")
+            self.write()
+            self.write("`perf stat` is not available on this system.")
+            self.write()
             return
 
         self.write("## 4. Perf Stat (SET+GET, c=50)")
@@ -289,6 +335,17 @@ class BenchmarkRunner:
                 self.write("```")
                 self.write()
             sys.stdout.flush()
+
+    @staticmethod
+    def _cpu_governor() -> str:
+        try:
+            path = "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"
+            if os.path.isfile(path):
+                with open(path) as f:
+                    return f.read().strip()
+        except OSError:
+            pass
+        return ""
 
     def run_all(self) -> None:
         self.section_info()
