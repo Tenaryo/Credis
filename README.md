@@ -10,6 +10,7 @@ A Redis 7.0-compatible server written from scratch in C++23 — ~3,700 lines, ze
 
 - **C++23** compiler (GCC 13+ recommended)
 - **CMake** 3.21+
+- **Ninja** build system
 - **POSIX** (epoll, sockets)
 
 No Boost, no libevent, no hiredis.
@@ -18,7 +19,7 @@ No Boost, no libevent, no hiredis.
 
 ### Methodology
 
-- **Hardware**: Apple Silicon (aarch64, 10 cores), loopback TCP
+- **Hardware**: Apple M5 (aarch64, 10 cores), loopback TCP
 - **Throughput**: `redis-benchmark -n 100000 -c 50 -q` (non-pipeline), `-n 200000` (pipeline)
 - **Latency**: `redis-benchmark -n 100000` (non-quiet, p50/p95/p99/max parsed from summary)
 - Persistence disabled on both servers
@@ -122,7 +123,7 @@ Measured on x86-64 via `/proc/[pid]/smaps Pss`. Per-entry overhead ~350 bytes (C
 
 | | Credis | Redis |
 |--|-----------|-------|
-| Stripped binary | **394 KB** (ARM64) | 1.5 MB |
+| Stripped binary | **394 KB** (ARM64) | 3.4 MB (ARM64) |
 | Lines of code | ~3,700 C++ | ~80,000 C |
 
 ## Quick Start
