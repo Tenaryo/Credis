@@ -38,7 +38,6 @@ auto main(int argc, char* argv[]) -> int {
     aof.ensure_directory(server_config.dir);
     aof.ensure_file(server_config.dir);
     aof.ensure_manifest(server_config.dir);
-    aof.open(server_config.dir);
 
     // 2. Create TCP listener
     auto listener = credis::server::TcpListener::create(port);
@@ -50,6 +49,12 @@ auto main(int argc, char* argv[]) -> int {
     // 3. Create core components
     auto store = credis::store::Store{};
     auto handler = credis::handler::CommandHandler(store, server_config);
+
+    auto aof_content = aof.read_aof_content(server_config.dir);
+    if (!aof_content.empty()) {
+        handler.process(aof_content);
+    }
+
     auto blocking = credis::blocking::BlockingManager{};
     auto pubsub = credis::pubsub::PubSubManager{};
     auto conn_pool = credis::connection::ConnectionPool{};
@@ -70,6 +75,7 @@ auto main(int argc, char* argv[]) -> int {
     // 6. Wire dependencies
     handler.set_blocking_manager(blocking);
     handler.set_pubsub_manager(pubsub);
+    aof.open(server_config.dir);
     handler.set_aof_manager(aof);
     handler.set_replica_count_fn([&replica_mgr] { return replica_mgr.count(); });
     handler.set_offset_fn([&replica_mgr] { return replica_mgr.offset(); });

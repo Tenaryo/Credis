@@ -139,3 +139,42 @@ TEST(CommandHandlerAofIntegration, MultipleWriteCommandsAppendInOrder) {
 
     std::filesystem::remove_all(tmp_path);
 }
+
+TEST(AofReplayIntegration, ReplaysSetAndGetReturnsCorrectValue) {
+    auto tmpdir = std::filesystem::temp_directory_path() / "credis_test_aof_replay_XXXXXX";
+    auto dirname = tmpdir.string();
+    if (::mkdtemp(dirname.data()) == nullptr) {
+        FAIL() << "Failed to create temp directory";
+    }
+    std::string tmp_path = dirname;
+
+    auto aof_dir = tmp_path + "/subdir";
+    std::filesystem::create_directories(aof_dir);
+
+    {
+        std::ofstream mf(aof_dir + "/myapp.aof.manifest");
+        mf << "file random.aof.1.incr.aof seq 1 type i\n";
+    }
+    {
+        std::ofstream af(aof_dir + "/random.aof.1.incr.aof");
+        af << "*3\r\n$3\r\nSET\r\n$4\r\nkey1\r\n$4\r\nval1\r\n";
+    }
+
+    credis::store::Store store;
+    credis::server::ServerConfig config;
+    AofManager aof;
+    aof.set_appendonly("yes");
+    aof.set_appenddirname("subdir");
+    aof.set_appendfilename("myapp.aof");
+
+    CommandHandler handler(store, config);
+
+    auto content = aof.read_aof_content(tmp_path);
+    ASSERT_FALSE(content.empty());
+    handler.process(content);
+
+    auto result = handler.process("*2\r\n$3\r\nGET\r\n$4\r\nkey1\r\n");
+    EXPECT_EQ(result, "$4\r\nval1\r\n");
+
+    std::filesystem::remove_all(tmp_path);
+}

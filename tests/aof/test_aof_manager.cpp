@@ -220,3 +220,26 @@ TEST_F(AofManagerTest, AppendWithAlwaysFsyncDoesNotCrash) {
 
     EXPECT_TRUE(std::filesystem::file_size(dir_path + "/myapp.aof.1.incr.aof") > 0);
 }
+
+TEST_F(AofManagerTest, ReadAofContentFromManifestSpecifiedFile) {
+    AofManager aof;
+    aof.set_appendonly("yes");
+    aof.set_appenddirname("subdir");
+    aof.set_appendfilename("myapp.aof");
+
+    auto dir_path = tmp_dir_path_ + "/subdir";
+    std::filesystem::create_directories(dir_path);
+
+    const auto* resp = "*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n100\r\n";
+    {
+        std::ofstream mf(dir_path + "/myapp.aof.manifest");
+        mf << "file random.aof.1.incr.aof seq 1 type i\n";
+    }
+    {
+        std::ofstream af(dir_path + "/random.aof.1.incr.aof");
+        af << resp;
+    }
+
+    auto content = aof.read_aof_content(tmp_dir_path_);
+    EXPECT_EQ(content, resp);
+}

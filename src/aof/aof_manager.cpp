@@ -33,6 +33,26 @@ void AofManager::ensure_manifest(const std::string& base_dir) const {
     }
 }
 
+auto AofManager::read_aof_content(const std::string& base_dir) const -> std::string {
+    if (appendonly_ != "yes") {
+        return {};
+    }
+    auto manifest_path = base_dir + "/" + appenddirname_ + "/" + appendfilename_ + ".manifest";
+    std::ifstream mf(manifest_path);
+    if (!mf) [[unlikely]] {
+        return {};
+    }
+    std::string file_token;
+    std::string aof_name;
+    mf >> file_token >> aof_name;
+    auto aof_path = base_dir + "/" + appenddirname_ + "/" + aof_name;
+    std::ifstream af(aof_path);
+    if (!af) [[unlikely]] {
+        return {};
+    }
+    return {std::istreambuf_iterator<char>(af), std::istreambuf_iterator<char>()};
+}
+
 void AofManager::open(const std::string& base_dir) {
     if (appendonly_ != "yes") {
         return;

@@ -39,6 +39,8 @@ class AofManager {
     void ensure_file(const std::string& base_dir) const;
     void ensure_manifest(const std::string& base_dir) const;
 
+    [[nodiscard]] auto read_aof_content(const std::string& base_dir) const -> std::string;
+
     void open(const std::string& base_dir);
     void append(std::string_view data);
     void close();
