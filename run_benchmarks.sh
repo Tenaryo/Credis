@@ -40,8 +40,8 @@ Usage: $0 [OPTIONS]
 
 Options:
   --quick        Quick mode (30K reqs per test, faster)
-  --no-perf      Skip perf stat section
-  --section S    Run only one section: throughput|pipeline|latency|perf
+  --seed N       Random seed for reproducible benchmark order
+  --section S    Run only one section: throughput|pipeline|latency
   --help         Show this help
 
 Output: benchmarks/results/<timestamp>.md
@@ -53,7 +53,7 @@ EOF
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --quick)    QUICK=true; EXTRA_ARGS="--quick" ;;
-        --no-perf)  EXTRA_ARGS="$EXTRA_ARGS --no-perf" ;;
+        --seed)     EXTRA_ARGS="$EXTRA_ARGS --seed $2"; shift ;;
         --section)  EXTRA_ARGS="$EXTRA_ARGS --section $2"; shift ;;
         --help)     usage ;;
         *)          echo "Unknown option: $1"; usage ;;
@@ -146,19 +146,6 @@ setup_credis() {
 }
 
 # --------------------------------------------------
-# Check if perf is available (Linux only)
-# --------------------------------------------------
-check_perf() {
-    if [[ "$(detect_os)" != "linux" ]]; then
-        echo -e "${YELLOW}perf stat is Linux-only; skipping perf section${NC}"
-        EXTRA_ARGS="$EXTRA_ARGS --no-perf"
-    elif ! command -v perf &>/dev/null; then
-        echo -e "${YELLOW}perf not found; skipping perf section${NC}"
-        EXTRA_ARGS="$EXTRA_ARGS --no-perf"
-    fi
-}
-
-# --------------------------------------------------
 # Port helpers (cross-platform)
 # --------------------------------------------------
 check_port_free() {
@@ -206,7 +193,6 @@ echo
 
 setup_redis
 setup_credis
-check_perf
 
 # PIDs for cleanup
 REDIS_PID=""

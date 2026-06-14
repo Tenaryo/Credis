@@ -3,7 +3,7 @@
 Credis vs Redis comprehensive benchmark driver.
 
 Usage:
-    python3 benchmarks/run_benchmarks.py [--quick] [--no-perf]
+    python3 benchmarks/run_benchmarks.py [--quick] [--seed N]
 
 Output: benchmarks/results/<timestamp>.md
 """
@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Optional
 
 BENCH = os.environ.get("BENCH_REDIS_BENCHMARK", "/usr/bin/redis-benchmark")
-PERF = "perf"
 
 # Servers — overridden by run_benchmarks.sh via env
 REDIS_HOST = os.environ.get("BENCH_REDIS_HOST", "127.0.0.1")
@@ -39,7 +38,7 @@ WARMUP_REQUESTS = 5000
 CONCURRENCIES = [1, 10, 50, 100, 500]
 PIPELINES = [1, 4, 8, 16, 32, 64]
 
-# Commands: (name, needs_prepop_key)
+# Commands: (name, needs_prepop_key, extra_args)
 COMMANDS = [
     ("SET", None, None),
     ("GET", None, None),
@@ -53,9 +52,8 @@ COMMANDS = [
 
 
 class BenchmarkRunner:
-    def __init__(self, quick: bool = False, run_perf: bool = True):
+    def __init__(self, quick: bool = False):
         self.quick = quick
-        self.run_perf = run_perf
         self.n = QUICK_REQUESTS if quick else REQUESTS
         self.pipe_n = QUICK_PIPELINE_REQUESTS if quick else PIPELINE_REQUESTS
         self.results_dir = Path(__file__).parent / "results"
@@ -63,6 +61,8 @@ class BenchmarkRunner:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.outfile = self.results_dir / f"{'quick_' if quick else ''}{ts}.md"
         self.out = []
+        self._warmed_redis: set = set()
+        self._warmed_credis: set = set()
 
     def write(self, line: str = "") -> None:
         self.out.append(line)
@@ -74,10 +74,19 @@ class BenchmarkRunner:
         self.outfile.write_text(text + "\n")
         print(f"\nResults saved to {self.outfile}")
 
-    def _warmup(self, host: str, port: int, cmd: str) -> None:
+    def _warmup(self, host: str, port: int, cmd: str,
+                concurrency: int = 10, pipeline: int = 1) -> None:
         args = [BENCH, "-h", host, "-p", str(port),
-                "-n", str(WARMUP_REQUESTS), "-c", "10", "-P", "1", "-t", cmd, "-q"]
+                "-n", str(WARMUP_REQUESTS), "-c", str(concurrency),
+                "-P", str(pipeline), "-t", cmd, "-q"]
         subprocess.run(args, capture_output=True, timeout=30)
+
+    def _warmup_once(self, host: str, port: int, cmd: str) -> None:
+        """Warm up once per (server, command) — cache is per-server, not per-concurrency."""
+        cache = self._warmed_redis if port == REDIS_PORT else self._warmed_credis
+        if cmd not in cache:
+            self._warmup(host, port, cmd)
+            cache.add(cmd)
 
     def _run_bench(self, host: str, port: int, cmd: str, concurrency: int,
                    pipeline: int = 1, extra_args: Optional[list] = None,
@@ -85,7 +94,7 @@ class BenchmarkRunner:
         n = requests if requests is not None else self.n
         args = [BENCH, "-h", host, "-p", str(port),
                 "-n", str(n), "-c", str(concurrency),
-                 "-P", str(pipeline), "-t", cmd]
+                "-P", str(pipeline), "-t", cmd]
         if extra_args:
             args.extend(extra_args)
         if not latency:
@@ -102,7 +111,6 @@ class BenchmarkRunner:
         for line in stdout_text.strip().split('\n'):
             line = line.strip()
             if 'throughput summary:' in line:
-                # non-quiet format: "  throughput summary: 40766.26 requests per second"
                 parts = line.split()
                 for i, p in enumerate(parts):
                     if p == 'requests' and i > 0:
@@ -111,7 +119,6 @@ class BenchmarkRunner:
                         except ValueError:
                             pass
             elif 'requests per second' in line:
-                # quiet format: "SET: 40766.26 requests per second"
                 parts = line.split()
                 try:
                     rps = float(parts[0])
@@ -143,15 +150,72 @@ class BenchmarkRunner:
             pass
         return 0.0
 
-    def _bench_rps_with_warmup(self, host: str, port: int, cmd: str, concurrency: int,
-                                pipeline: int = 1, extra_args: Optional[list] = None) -> float:
-        self._warmup(host, port, cmd)
+    def _bench_rps_repeated(self, host: str, port: int, cmd: str, concurrency: int,
+                             pipeline: int = 1, extra_args: Optional[list] = None) -> float:
+        """Warmup once per (server, command), then run REPEATS times, return median."""
+        self._warmup_once(host, port, cmd)
         vals = []
         for _ in range(REPEATS):
             v = self._run_bench_csv(host, port, cmd, concurrency, pipeline, extra_args)
             if v > 0:
                 vals.append(v)
         return statistics.median(vals) if vals else 0.0
+
+    def _parse_latency_vals(self, combined: str) -> dict:
+        """Parse p50/p95/p99/max from benchmark output."""
+        result = {}
+        for line_str in combined.split('\n'):
+            line = line_str.strip()
+            if 'p50' in line and 'p95' in line and 'p99' in line:
+                hdrs = line.split()
+                break
+        else:
+            return result
+        return result
+
+    def _bench_latency_repeated(self, host: str, port: int, cmd: str,
+                                 concurrency: int, pipeline: int) -> dict:
+        """Run latency benchmark with warmup, repeats, return median p50/p95/p99/max."""
+        self._warmup(host, port, cmd, concurrency, pipeline)
+        all_p50, all_p95, all_p99, all_max, all_rps = [], [], [], [], []
+        for _ in range(REPEATS):
+            data = self._run_bench(host, port, cmd, concurrency, pipeline,
+                                   latency=True, requests=100000)
+            combined = (data.get("stdout", "") + "\n" + data.get("stderr", "")).replace('\r', '')
+            p50 = p95 = p99 = pmax = 0.0
+            lines = combined.split('\n')
+            found = False
+            for i, line in enumerate(lines):
+                line = line.strip()
+                if 'p50' in line and 'p95' in line and 'p99' in line:
+                    if i + 1 < len(lines):
+                        vals = lines[i + 1].split()
+                        hdrs = line.split()
+                        for j, hdr in enumerate(hdrs):
+                            if j < len(vals):
+                                try:
+                                    v = float(vals[j])
+                                    if hdr == 'p50': p50 = v
+                                    elif hdr == 'p95': p95 = v
+                                    elif hdr == 'p99': p99 = v
+                                    elif hdr == 'max': pmax = v
+                                except ValueError:
+                                    pass
+                    found = True
+                    break
+            if found:
+                all_p50.append(p50)
+                all_p95.append(p95)
+                all_p99.append(p99)
+                all_max.append(pmax)
+                all_rps.append(data.get("rps", 0))
+        if not all_p50:
+            return {"p50": "-", "p95": "-", "p99": "-", "max": "-", "rps": 0}
+        return {"p50": statistics.median(all_p50),
+                "p95": statistics.median(all_p95),
+                "p99": statistics.median(all_p99),
+                "max": statistics.median(all_max),
+                "rps": statistics.median(all_rps)}
 
     def _prepopulate(self, host: str, port: int, cmd: str) -> None:
         n = 20000 if not self.quick else 10000
@@ -174,6 +238,7 @@ class BenchmarkRunner:
         self.write(f"**Date**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         self.write(f"**Redis**: {redis_ver} (port {REDIS_PORT})")
         self.write(f"**Credis**: port {CREDIS_PORT}")
+        self.write(f"**Repeats**: {REPEATS} per data point (median)")
         self.write()
 
         governor = self._cpu_governor()
@@ -192,7 +257,7 @@ class BenchmarkRunner:
         self.write(f"n={self.n} per benchmark")
         self.write()
 
-        for cmd_name, prepop_key, extra_args in COMMANDS:
+        for cmd_name, _prepop_key, extra_args in COMMANDS:
             self.write(f"### {cmd_name}")
             self.write()
             header = "| Concurrency | Redis rps | Credis rps | Ratio | Winner |"
@@ -201,14 +266,14 @@ class BenchmarkRunner:
             self.write(sep)
 
             for c in CONCURRENCIES:
-                # Randomize order to avoid ordering bias
-                servers = [(REDIS_HOST, REDIS_PORT, "Redis"), (CREDIS_HOST, CREDIS_PORT, "Credis")]
+                servers = [(REDIS_HOST, REDIS_PORT, "Redis"),
+                           (CREDIS_HOST, CREDIS_PORT, "Credis")]
                 random.shuffle(servers)
-                results = {}
+                results_map = {}
                 for host, port, label in servers:
-                    results[label] = self._bench_rps_with_warmup(host, port, cmd_name, c, 1, extra_args)
-                redis_rps = results["Redis"]
-                credis_rps = results["Credis"]
+                    results_map[label] = self._bench_rps_repeated(host, port, cmd_name, c, 1, extra_args)
+                credis_rps = results_map["Credis"]
+                redis_rps = results_map["Redis"]
                 if redis_rps > 0:
                     ratio = credis_rps / redis_rps * 100
                     winner = "**Credis**" if ratio >= 100 else "Redis"
@@ -235,13 +300,14 @@ class BenchmarkRunner:
             self.write(sep)
 
             for p in PIPELINES:
-                servers = [(REDIS_HOST, REDIS_PORT, "Redis"), (CREDIS_HOST, CREDIS_PORT, "Credis")]
+                servers = [(REDIS_HOST, REDIS_PORT, "Redis"),
+                           (CREDIS_HOST, CREDIS_PORT, "Credis")]
                 random.shuffle(servers)
                 results_p = {}
                 for host, port, label_p in servers:
-                    results_p[label_p] = self._bench_rps_with_warmup(host, port, cmd, 50, p)
-                redis_rps = results_p["Redis"]
+                    results_p[label_p] = self._bench_rps_repeated(host, port, cmd, 50, p)
                 credis_rps = results_p["Credis"]
+                redis_rps = results_p["Redis"]
                 if redis_rps > 0:
                     ratio = credis_rps / redis_rps * 100
                     winner = "**Credis**" if ratio >= 100 else "Redis"
@@ -265,75 +331,18 @@ class BenchmarkRunner:
             self.write(header)
             self.write(sep)
 
-            for label, host, port in [("Redis", REDIS_HOST, REDIS_PORT),
-                                       ("Credis", CREDIS_HOST, CREDIS_PORT)]:
-                for p in (1, 64):
-                    data = self._run_bench(host, port, "SET", c, p, latency=True, requests=100000)
-                    combined = (data.get("stdout", "") + "\n" + data.get("stderr", "")).replace('\r', '')
-                    rps_str = data.get("rps", 0)
-
-                    p50 = p95 = p99 = pmax = "-"
-                    lines = combined.split('\n')
-                    for i, line in enumerate(lines):
-                        line = line.strip()
-                        if 'p50' in line and 'p95' in line and 'p99' in line:
-                            if i + 1 < len(lines):
-                                vals = lines[i + 1].split()
-                                hdrs = line.split()
-                                for j, hdr in enumerate(hdrs):
-                                    if j < len(vals):
-                                        try:
-                                            v = f"{float(vals[j]):.3f}"
-                                            if hdr == 'p50': p50 = v
-                                            elif hdr == 'p95': p95 = v
-                                            elif hdr == 'p99': p99 = v
-                                            elif hdr == 'max': pmax = v
-                                        except (ValueError, IndexError):
-                                            pass
-                            break
-
-                    self.write(f"| {label} | {p} | {p50} | {p95} | {p99} | {pmax} | {rps_str:,.0f} |")
+            for p in (1, 64):
+                servers = [(REDIS_HOST, REDIS_PORT, "Redis"),
+                           (CREDIS_HOST, CREDIS_PORT, "Credis")]
+                random.shuffle(servers)
+                results_lat = {}
+                for host, port, label in servers:
+                    results_lat[label] = self._bench_latency_repeated(host, port, "SET", c, p)
+                for label in ("Redis", "Credis"):
+                    v = results_lat[label]
+                    self.write(f"| {label} | {p} | {v['p50']:.3f} | {v['p95']:.3f} | "
+                               f"{v['p99']:.3f} | {v['max']:.3f} | {v['rps']:,.0f} |")
             self.write()
-            sys.stdout.flush()
-
-    def section_perf_stat(self) -> None:
-        """perf stat for key scenarios."""
-        if not self.run_perf:
-            return
-
-        check = subprocess.run([PERF, "stat", "--version"], capture_output=True, timeout=10)
-        if check.returncode != 0:
-            self.write("## 4. Perf Stat (skipped)")
-            self.write()
-            self.write("`perf stat` is not available on this system.")
-            self.write()
-            return
-
-        self.write("## 4. Perf Stat (SET+GET, c=50)")
-        self.write()
-
-        for label, host, port in [("Credis", CREDIS_HOST, CREDIS_PORT),
-                                   ("Redis", REDIS_HOST, REDIS_PORT)]:
-            self.write(f"### {label}")
-            self.write()
-
-            for p in (1, 8, 64):
-                self.write(f"**P={p}**")
-                self.write("```")
-                n = self.n if p == 1 else self.pipe_n
-                result = subprocess.run(
-                    [PERF, "stat", "-e",
-                     "task-clock,cycles,instructions,branches,branch-misses,L1-dcache-loads,L1-dcache-load-misses",
-                     BENCH, "-h", host, "-p", str(port),
-                     "-n", str(n), "-c", "50", "-P", str(p), "-t", "set,get", "-q"],
-                    capture_output=True, text=True, timeout=120
-                )
-                for line in result.stderr.split('\n'):
-                    line = line.strip()
-                    if line and 'WARNING' not in line and 'Performance counter' not in line:
-                        self.write(line)
-                self.write("```")
-                self.write()
             sys.stdout.flush()
 
     @staticmethod
@@ -352,19 +361,21 @@ class BenchmarkRunner:
         self.section_throughput()
         self.section_pipeline_throughput()
         self.section_latency()
-        self.section_perf_stat()
         self.flush()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Credis vs Redis benchmark suite")
     parser.add_argument("--quick", action="store_true", help="Quick mode (fewer requests)")
-    parser.add_argument("--no-perf", action="store_true", help="Skip perf stat")
-    parser.add_argument("--section", choices=["throughput", "pipeline", "latency", "perf"],
+    parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
+    parser.add_argument("--section", choices=["throughput", "pipeline", "latency"],
                         help="Run only one section")
     args = parser.parse_args()
 
-    runner = BenchmarkRunner(quick=args.quick, run_perf=not args.no_perf)
+    if args.seed is not None:
+        random.seed(args.seed)
+
+    runner = BenchmarkRunner(quick=args.quick)
 
     if args.section == "throughput":
         runner.section_throughput()
@@ -374,9 +385,6 @@ if __name__ == "__main__":
         runner.flush()
     elif args.section == "latency":
         runner.section_latency()
-        runner.flush()
-    elif args.section == "perf":
-        runner.section_perf_stat()
         runner.flush()
     else:
         runner.run_all()
