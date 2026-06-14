@@ -161,21 +161,10 @@ class BenchmarkRunner:
                 vals.append(v)
         return statistics.median(vals) if vals else 0.0
 
-    def _parse_latency_vals(self, combined: str) -> dict:
-        """Parse p50/p95/p99/max from benchmark output."""
-        result = {}
-        for line_str in combined.split('\n'):
-            line = line_str.strip()
-            if 'p50' in line and 'p95' in line and 'p99' in line:
-                hdrs = line.split()
-                break
-        else:
-            return result
-        return result
-
     def _bench_latency_repeated(self, host: str, port: int, cmd: str,
                                  concurrency: int, pipeline: int) -> dict:
         """Run latency benchmark with warmup, repeats, return median p50/p95/p99/max."""
+        self._warmup_once(host, port, cmd)
         self._warmup(host, port, cmd, concurrency, pipeline)
         all_p50, all_p95, all_p99, all_max, all_rps = [], [], [], [], []
         for _ in range(REPEATS):
@@ -340,8 +329,13 @@ class BenchmarkRunner:
                     results_lat[label] = self._bench_latency_repeated(host, port, "SET", c, p)
                 for label in ("Redis", "Credis"):
                     v = results_lat[label]
-                    self.write(f"| {label} | {p} | {v['p50']:.3f} | {v['p95']:.3f} | "
-                               f"{v['p99']:.3f} | {v['max']:.3f} | {v['rps']:,.0f} |")
+                    def fmt(val, precision: int = 3) -> str:
+                        if isinstance(val, str):
+                            return val
+                        return f"{val:.{precision}f}"
+                    rps_str = f"{v['rps']:,.0f}" if isinstance(v['rps'], (int, float)) else str(v['rps'])
+                    self.write(f"| {label} | {p} | {fmt(v['p50'])} | {fmt(v['p95'])} | "
+                               f"{fmt(v['p99'])} | {fmt(v['max'])} | {rps_str} |")
             self.write()
             sys.stdout.flush()
 
