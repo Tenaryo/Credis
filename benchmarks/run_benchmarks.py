@@ -9,9 +9,6 @@ Output: benchmarks/results/<timestamp>.md
 """
 
 import subprocess
-import sys
-import json
-import time
 import os
 import argparse
 import random
@@ -79,7 +76,10 @@ class BenchmarkRunner:
         args = [BENCH, "-h", host, "-p", str(port),
                 "-n", str(WARMUP_REQUESTS), "-c", str(concurrency),
                 "-P", str(pipeline), "-t", cmd, "-q"]
-        subprocess.run(args, capture_output=True, timeout=30)
+        try:
+            subprocess.run(args, capture_output=True, timeout=30)
+        except subprocess.TimeoutExpired:
+            pass
 
     def _warmup_once(self, host: str, port: int, cmd: str) -> None:
         """Warm up once per (server, command) — cache is per-server, not per-concurrency."""
@@ -329,15 +329,17 @@ class BenchmarkRunner:
                     results_lat[label] = self._bench_latency_repeated(host, port, "SET", c, p)
                 for label in ("Redis", "Credis"):
                     v = results_lat[label]
-                    def fmt(val, precision: int = 3) -> str:
-                        if isinstance(val, str):
-                            return val
-                        return f"{val:.{precision}f}"
                     rps_str = f"{v['rps']:,.0f}" if isinstance(v['rps'], (int, float)) else str(v['rps'])
-                    self.write(f"| {label} | {p} | {fmt(v['p50'])} | {fmt(v['p95'])} | "
-                               f"{fmt(v['p99'])} | {fmt(v['max'])} | {rps_str} |")
+                    self.write(f"| {label} | {p} | {self._fmt_lat(v['p50'])} | {self._fmt_lat(v['p95'])} | "
+                               f"{self._fmt_lat(v['p99'])} | {self._fmt_lat(v['max'])} | {rps_str} |")
             self.write()
             sys.stdout.flush()
+
+    @staticmethod
+    def _fmt_lat(val, precision: int = 3) -> str:
+        if isinstance(val, str):
+            return val
+        return f"{val:.{precision}f}"
 
     @staticmethod
     def _cpu_governor() -> str:
