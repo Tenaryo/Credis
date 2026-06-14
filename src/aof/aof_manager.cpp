@@ -6,6 +6,8 @@
 #include <filesystem>
 #include <fstream>
 
+#include "util/logger.hpp"
+
 namespace credis::aof {
 
 void AofManager::ensure_directory(const std::string& base_dir) const {
@@ -73,9 +75,14 @@ void AofManager::append(std::string_view data) {
     if (aof_fd_ < 0) [[unlikely]] {
         return;
     }
-    ::write(aof_fd_, data.data(), data.size());
+    auto written = ::write(aof_fd_, data.data(), data.size());
+    if (written != static_cast<ssize_t>(data.size())) [[unlikely]] {
+        LOG_ERROR("AOF write failed: " + std::to_string(written));
+    }
     if (appendfsync_ == "always") {
-        ::fsync(aof_fd_);
+        if (::fsync(aof_fd_) < 0) [[unlikely]] {
+            LOG_ERROR("AOF fsync failed");
+        }
     }
 }
 
