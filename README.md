@@ -22,8 +22,8 @@ No Boost, no libevent, no hiredis.
 - **Throughput**: `redis-benchmark -n 100000 -c 50 -q` (non-pipeline), `-n 200000` (pipeline)
 - **Latency**: `redis-benchmark -n 100000 --precision 3`
 - Persistence disabled on both servers
-- **Credis**: `-O3 -march=native -fprofile-use` + PGO (GCC 15.2)
-- **Redis**: 8.0
+- **Credis**: `-O3 -march=native` + LTO (Release build)
+- **Redis**: 7.2.8 (auto-built by `run_benchmarks.sh`)
 
 ### Non-Pipeline Throughput (c=50, n=100K)
 
@@ -137,8 +137,17 @@ Measured via `/proc/[pid]/smaps Pss`. Per-entry overhead ~350 bytes (Credis) vs 
 ### Run Tests
 
 ```bash
-./run_tests.sh      # 144 tests across all modules
+./run_tests.sh      # 161 tests across all modules
 ```
+
+### Run Benchmarks
+
+```bash
+./run_benchmarks.sh            # Full Credis vs Redis benchmark
+./run_benchmarks.sh --quick    # Quick mode (30K reqs)
+```
+
+Self-contained — auto-builds Redis 7.2.8 from source, no pre-installed Redis required.
 
 ### Start the Server
 
@@ -155,8 +164,12 @@ Measured via `/proc/[pid]/smaps Pss`. Per-entry overhead ~350 bytes (Credis) vs 
 |--------|-------------|---------|
 | `--port <port>` | Server listening port | `6379` |
 | `--replicaof "<host> <port>"` | Run as replica of the given master | (master mode) |
-| `--dir <path>` | Directory containing the RDB file | (none) |
-| `--dbfilename <name>` | RDB file name to load | (none) |
+| `--dir <path>` | Data directory for RDB/AOF | current dir |
+| `--dbfilename <name>` | RDB file name | (none) |
+| `--appendonly <yes\|no>` | Enable AOF persistence | `no` |
+| `--appenddirname <name>` | AOF subdirectory name | `appendonlydir` |
+| `--appendfilename <name>` | AOF file base name | `appendonly.aof` |
+| `--appendfsync <strategy>` | fsync policy: `always` / `everysec` | `everysec` |
 
 ### Connect
 
@@ -171,6 +184,107 @@ OK
 > XADD mystream * name alice
 "1745000000000-0"
 ```
+
+## Features
+
+### Data Structures (Redis 7.0 Compatible)
+
+All 7 core Redis data types with full CRUD operations:
+
+| Type | Commands | Underlying Implementation |
+|------|----------|--------------------------|
+| **String** | SET (EX/PX), GET, INCR, MSET | `std::string` with optional TTL |
+| **List** | LPUSH, RPUSH, LPOP, RPOP, LRANGE, LLEN | `std::deque<std::string>` |
+| **Stream** | XADD (auto-ID), XRANGE, XREAD | binary search over `std::vector`, O(log N) |
+| **Sorted Set** | ZADD, ZRANK, ZRANGE, ZCARD, ZSCORE, ZREM | `std::set<pair<double,string>>` + index map |
+| **Geo** | GEOADD, GEOPOS, GEODIST, GEOSEARCH | Z-order curve (GeoHash 26-bit) + Haversine |
+| **Bitmap** | SETBIT, GETBIT, BITCOUNT | bit-level operations on `std::string` |
+| **Hash** | (planned) | — |
+
+Lazy-expire: expired keys are evicted on access without a background expiration thread.
+
+### Blocking Operations
+
+Blocking commands suspend the client until data is available or timeout:
+
+- **BLPOP** `key timeout` — blocks until a list element is available; awakened by RPUSH/LPUSH
+- **XREAD BLOCK** `timeout STREAMS key id` — blocks until a new stream entry arrives; awakened by XADD
+
+Blocked clients are managed by `BlockingManager` with per-key wait queues and per-fd deadline tracking. Timeout `0` means wait indefinitely.
+
+### Optimistic Transactions (MULTI/EXEC/WATCH)
+
+Full Redis-compatible transaction pipeline with optimistic locking:
+
+- **MULTI** — begin transaction (commands are queued, not executed)
+- **EXEC** — execute all queued commands atomically, or return `nil` if watched keys were modified
+- **DISCARD** — abort and clear the queue
+- **WATCH** / **UNWATCH** — CAS-based optimistic locking via per-key version counters
+
+Watched keys track their version at WATCH time. EXEC checks all versions — if any changed, the entire transaction is aborted (`*-1` null array).
+
+### Replication & Consistency (Master-Replica)
+
+Master-replica replication with eventual consistency and synchronous WAIT:
+
+- **PSYNC** — full resynchronization: master sends `FULLRESYNC <replid> <offset>` + empty RDB
+- **REPLCONF** — replica handshake (`listening-port`, `capa psync2`) and ACK propagation
+- **Command propagation** — write commands are broadcast in raw RESP format to all connected replicas
+- **WAIT** `numreplicas timeout_ms` — block until `numreplicas` replicas have acknowledged up to the current offset (synchronous replication barrier)
+
+`ReplicaManager` tracks per-replica offsets and computes acknowledged count for WAIT satisfaction. `ReplicaConnector` handles the handshake lifecycle (PING → REPLCONF×2 → PSYNC → RDB load → command stream).
+
+### Persistence (RDB + AOF)
+
+**RDB** (snapshot loading):
+- Parses binary RDB format: `REDIS` magic, metadata headers (0xFA), database selectors (0xFE/0xFB), expiry timestamps (0xFD/0xFC), string values (0x00)
+- Expired keys are skipped during load
+- Loaded via `--dir`/`--dbfilename` flags at startup
+
+**AOF** (append-only file, Redis 7+ manifest style):
+- Manifest-driven: `appendonly.aof.manifest` → `file <name>.1.incr.aof seq 1 type i`
+- Write commands appended in raw RESP format to the incremental file
+- `appendfsync always` — `fsync()` after every write command (zero data loss)
+- `appendfsync everysec` — (planned: background fsync thread)
+- **Replay on startup**: reads manifest, finds the type `i` entry, parses RESP commands, and executes them to rebuild state — all before accepting client connections
+
+### ACL & Authentication
+
+- **AUTH** `username password` — authenticate a connection
+- **ACL WHOAMI** — returns current user (`"default"`)
+- **ACL SETUSER** `username >password` — set/update user password
+- **ACL GETUSER** `username` — inspect user flags and password hashes
+- Default `nopass` user: connections authenticate automatically on first command
+- SHA-256 password hashing; `authenticated_fds` per-connection tracking
+
+### Publish / Subscribe
+
+- **SUBSCRIBE** `channel` — subscribe to a channel
+- **UNSUBSCRIBE** `channel` — unsubscribe
+- **PUBLISH** `channel message` — broadcast to all subscribers
+- Subscribed connections are restricted to SUB/UNSUB/PING/QUIT commands only
+- PING in subscribed mode returns `["pong", ""]`
+
+### RESP Protocol
+
+Complete Redis Serialization Protocol (RESP3):
+
+- **Parsing**: single-pass, zero-copy `parse_one()` — parses one complete command from a byte buffer (`*<n>\r\n$<len>\r\n...`)
+- **Encoding**: simple strings (`+`), bulk strings (`$`), integers (`:`), arrays (`*`), nulls, errors (`-`)
+- **Pipelining**: multiple commands in one TCP packet are parsed and executed sequentially, with batch response assembly
+
+### Event-Driven I/O (epoll)
+
+- `EventLoop` wraps Linux `epoll` with sigfd-based signal handling (SIGINT/SIGTERM)
+- `ConnectionPool` manages per-fd read/write buffers with dynamic expansion (4 KB → 512 MB)
+- `TcpListener` with `SO_REUSEADDR` and backlog 511
+- Batch output flush reduces `write()` syscalls
+- Single-threaded, event-driven architecture — no thread pools, no context switches
+
+### Config Management
+
+- **CONFIG GET** `param` — query `dir`, `dbfilename`, `appendonly`, `appenddirname`, `appendfilename`, `appendfsync`
+- All AOF config values overridable via command-line flags (see CLI Options)
 
 ## Supported Commands
 

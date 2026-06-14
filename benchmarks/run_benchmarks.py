@@ -148,12 +148,11 @@ class BenchmarkRunner:
     # ----- Sections -----
 
     def section_info(self) -> None:
+        redis_ver = os.environ.get("BENCH_REDIS_VERSION", "unknown")
         self.write("# Credis vs Redis Benchmark Report")
         self.write()
         self.write(f"**Date**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        self.write(f"**Mode**: {'Quick' if self.quick else 'Full'} ({self.n} reqs/bench)")
-        self.write(f"**Pipeline reqs**: {self.pipe_n}")
-        self.write(f"**Redis**: port {REDIS_PORT}")
+        self.write(f"**Redis**: {redis_ver} (port {REDIS_PORT})")
         self.write(f"**Credis**: port {CREDIS_PORT}")
         self.write()
 
