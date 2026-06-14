@@ -6,6 +6,7 @@
 #include <string_view>
 #include <utility>
 
+#include "aof/aof_manager.hpp"
 #include "handler/geo_commands.hpp"
 #include "handler/list_commands.hpp"
 #include "handler/pubsub_commands.hpp"
@@ -326,8 +327,13 @@ auto CommandHandler::process_with_fd(int fd,
         std::string cmd_name = credis::util::to_upper(parsed->args[0]);
         auto cmd_result = process_single_command(fd, std::move(parsed->args), cmd_name, send_to_client);
 
-        if (is_write_command(cmd_name) && ctx_.replica_count_fn && ctx_.replica_count_fn() > 0) {
-            result.propagate_cmds.push_back(std::string(input.substr(cmd_start, parsed->consumed)));
+        if (is_write_command(cmd_name)) {
+            if (ctx_.replica_count_fn && ctx_.replica_count_fn() > 0) {
+                result.propagate_cmds.push_back(std::string(input.substr(cmd_start, parsed->consumed)));
+            }
+            if (ctx_.aof_manager != nullptr) {
+                ctx_.aof_manager->append(input.substr(cmd_start, parsed->consumed));
+            }
         }
 
         if (!std::holds_alternative<ProcessResult::Normal>(cmd_result.state)) {

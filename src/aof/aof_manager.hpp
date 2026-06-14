@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 
 namespace credis::aof {
 
@@ -38,11 +39,18 @@ class AofManager {
     void ensure_file(const std::string& base_dir) const;
     void ensure_manifest(const std::string& base_dir) const;
 
+    void open(const std::string& base_dir);
+    void append(std::string_view data);
+    void close();
+
+    ~AofManager();
+
   private:
     std::string appendonly_ = "no";
     std::string appenddirname_ = "appendonlydir";
     std::string appendfilename_ = "appendonly.aof";
     std::string appendfsync_ = "everysec";
+    int aof_fd_ = -1;
 };
 
 } // namespace credis::aof

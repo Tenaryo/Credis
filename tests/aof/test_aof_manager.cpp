@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <string>
 
 #include "aof/aof_manager.hpp"
 
@@ -90,7 +91,7 @@ TEST_F(AofManagerTest, EnsureFileDoesNothingWhenAppendonlyNo) {
     EXPECT_FALSE(std::filesystem::exists(expected));
 }
 
-TEST_F(AofManagerTest, EnsureFileTruncatesExistingFile) {
+TEST_F(AofManagerTest, EnsureFileDoesNotOverwriteExistingFile) {
     AofManager aof;
     aof.set_appendonly("yes");
     aof.set_appenddirname("subdir");
@@ -98,17 +99,17 @@ TEST_F(AofManagerTest, EnsureFileTruncatesExistingFile) {
 
     auto dir_path = tmp_dir_path_ + "/subdir";
     std::filesystem::create_directories(dir_path);
-    auto expected = dir_path + "/myapp.aof.1.incr.aof";
+    auto file_path = dir_path + "/myapp.aof.1.incr.aof";
     {
-        std::ofstream f(expected);
+        std::ofstream f(file_path);
         f << "old data";
     }
-    ASSERT_GT(std::filesystem::file_size(expected), 0);
+    ASSERT_GT(std::filesystem::file_size(file_path), 0);
 
     aof.ensure_file(tmp_dir_path_);
 
-    EXPECT_TRUE(std::filesystem::exists(expected));
-    EXPECT_EQ(std::filesystem::file_size(expected), 0);
+    EXPECT_TRUE(std::filesystem::exists(file_path));
+    EXPECT_GT(std::filesystem::file_size(file_path), 0);
 }
 
 TEST_F(AofManagerTest, EnsureManifestCreatesFileWithCorrectContent) {
@@ -138,4 +139,84 @@ TEST_F(AofManagerTest, EnsureManifestDoesNothingWhenAppendonlyNo) {
 
     auto expected = tmp_dir_path_ + "/" + aof.appenddirname() + "/" + aof.appendfilename() + ".manifest";
     EXPECT_FALSE(std::filesystem::exists(expected));
+}
+
+TEST_F(AofManagerTest, OpenReadsManifestAndAppendsToCorrectFile) {
+    AofManager aof;
+    aof.set_appendonly("yes");
+    aof.set_appenddirname("subdir");
+    aof.set_appendfilename("myapp.aof");
+
+    auto dir_path = tmp_dir_path_ + "/subdir";
+    std::filesystem::create_directories(dir_path);
+
+    auto custom_aof = "custom.aof.1.incr.aof";
+    {
+        std::ofstream mf(dir_path + "/myapp.aof.manifest");
+        mf << "file " << custom_aof << " seq 1 type i\n";
+    }
+    {
+        std::ofstream af(dir_path + "/" + custom_aof);
+    }
+
+    aof.open(tmp_dir_path_);
+    aof.append("test_data");
+    aof.close();
+
+    std::ifstream in(dir_path + "/" + custom_aof);
+    std::string content;
+    std::getline(in, content);
+    EXPECT_EQ(content, "test_data");
+}
+
+TEST_F(AofManagerTest, AppendWritesRespCommand) {
+    AofManager aof;
+    aof.set_appendonly("yes");
+    aof.set_appenddirname("subdir");
+    aof.set_appendfilename("myapp.aof");
+
+    auto dir_path = tmp_dir_path_ + "/subdir";
+    std::filesystem::create_directories(dir_path);
+
+    {
+        std::ofstream mf(dir_path + "/myapp.aof.manifest");
+        mf << "file myapp.aof.1.incr.aof seq 1 type i\n";
+    }
+    {
+        std::ofstream af(dir_path + "/myapp.aof.1.incr.aof");
+    }
+
+    aof.open(tmp_dir_path_);
+
+    const auto* resp = "*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n100\r\n";
+    aof.append(resp);
+    aof.close();
+
+    std::ifstream in(dir_path + "/myapp.aof.1.incr.aof");
+    std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    EXPECT_EQ(content, resp);
+}
+
+TEST_F(AofManagerTest, AppendWithAlwaysFsyncDoesNotCrash) {
+    AofManager aof;
+    aof.set_appendonly("yes");
+    aof.set_appendfsync("always");
+    aof.set_appenddirname("subdir");
+    aof.set_appendfilename("myapp.aof");
+
+    auto dir_path = tmp_dir_path_ + "/subdir";
+    std::filesystem::create_directories(dir_path);
+    {
+        std::ofstream mf(dir_path + "/myapp.aof.manifest");
+        mf << "file myapp.aof.1.incr.aof seq 1 type i\n";
+    }
+    {
+        std::ofstream af(dir_path + "/myapp.aof.1.incr.aof");
+    }
+
+    aof.open(tmp_dir_path_);
+    aof.append("*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n100\r\n");
+    aof.close();
+
+    EXPECT_TRUE(std::filesystem::file_size(dir_path + "/myapp.aof.1.incr.aof") > 0);
 }

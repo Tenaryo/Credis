@@ -38,6 +38,7 @@ auto main(int argc, char* argv[]) -> int {
     aof.ensure_directory(server_config.dir);
     aof.ensure_file(server_config.dir);
     aof.ensure_manifest(server_config.dir);
+    aof.open(server_config.dir);
 
     // 2. Create TCP listener
     auto listener = credis::server::TcpListener::create(port);
