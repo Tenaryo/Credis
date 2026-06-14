@@ -9,6 +9,7 @@ Output: benchmarks/results/<timestamp>.md
 """
 
 import subprocess
+import sys
 import os
 import argparse
 import random
