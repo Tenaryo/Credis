@@ -17,10 +17,8 @@ echo
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 
-if [ ! -f "CMakeCache.txt" ]; then
-    echo -e "${YELLOW}Configuring CMake...${NC}"
-    cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=g++ -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DBUILD_TESTS=ON
-fi
+# Always configure with tests enabled; CMake re-runs only if cache is stale
+cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=g++ -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DBUILD_TESTS=ON
 
 echo -e "${YELLOW}Building tests...${NC}"
 cmake --build . -j$(nproc)

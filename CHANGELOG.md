@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-06-15
+
+### Added
+- **AOF persistence**: `--appendonly`, `--appenddirname`, `--appendfilename`, `--appendfsync` CLI flags
+  — write commands appended in raw RESP format to incremental AOF file
+  — `appendfsync always` — `fsync()` after every write command (zero data loss)
+  — `appendfsync everysec` — background fsync thread (planned)
+  — manifest-driven (Redis 7+ style): `appendonly.aof.manifest` → `file <name>.1.incr.aof seq 1 type i`
+  — startup replay: reads manifest, parses RESP commands from AOF, executes to rebuild state
+- AOF multi-command append integration test
+- Reset benchmark scripts (Credis vs Redis 7.2.8, auto-buildable)
+
+### Changed
+- **RESP parser**: replaced `find("\r\n")` + `from_chars` with hand-written single-pass `parse_int_until_crlf`
+- **Connection**: batch output flush via `pending_write_` buffer + `flush_all()` — reduces `write()` syscalls
+- Benchmark suite refactored: warmup support, median-of-N reporting, random-order execution, seed reproducibility
+- Removed codecrafters files
+- Removed Memory Footprint and Binary Size sections from README
+
+### Fixed
+- Check `write()`/`fsync()` return values in `AofManager::append`
+- Benchmark latency parsing crash on malformed output
+- Restore missing `sys` import in benchmark runner
+
 ## [1.1.0] - 2026-05-30
 
 ### Added

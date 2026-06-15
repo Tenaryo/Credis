@@ -129,8 +129,6 @@ OK
 | **Sorted Set** | ZADD, ZRANK, ZRANGE, ZCARD, ZSCORE, ZREM | `std::set<pair<double,string>>` + index map |
 | **Geo** | GEOADD, GEOPOS, GEODIST, GEOSEARCH | Z-order curve (GeoHash 26-bit) + Haversine |
 
-5 core Redis data types with extra Geo spatial support.
-
 ### Blocking Operations
 
 Blocking commands suspend the client until data is available or timeout:
