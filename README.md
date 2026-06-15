@@ -29,83 +29,29 @@ No Boost, no libevent, no hiredis.
 
 ### Non-Pipeline Throughput (c=50, n=100K)
 
-| Command | Credis rps | Redis rps | Ratio |
-|---------|-----------|-----------|-------|
-| SET | 297,619 | 294,118 | 101.2% |
-| GET | 255,102 | 222,717 | 114.5% |
-| INCR | 289,017 | 278,552 | 103.8% |
-| MSET | 250,627 | 251,889 | 99.5% |
-| LPUSH | 233,100 | 195,313 | 119.3% |
-| LPOP | 261,780 | 255,102 | 102.6% |
-| ZADD | 225,734 | 226,757 | 99.5% |
-| LRANGE | 233,645 | 199,203 | 117.3% |
+![](docs/images/bench_non_pipeline.png)
 
 ### Pipeline Throughput (c=50, n=200K)
 
 #### SET
 
-| P | Credis rps | Redis rps | Ratio |
-|---|-----------|-----------|-------|
-| 1 | 296,736 | 270,270 | 109.8% |
-| 4 | 1,063,830 | 1,063,830 | 100.0% |
-| 8 | 2,000,000 | 2,083,333 | 96.0% |
-| 16 | 3,703,704 | 3,225,807 | 114.8% |
-| 32 | 5,263,158 | 4,000,000 | 131.6% |
-| 64 | 7,145,143 | 4,349,218 | 164.3% |
+![](docs/images/bench_pipeline_set.png)
 
 #### GET
 
-| P | Credis rps | Redis rps | Ratio |
-|---|-----------|-----------|-------|
-| 1 | 294,118 | 233,100 | 126.2% |
-| 4 | 1,020,408 | 1,052,632 | 96.9% |
-| 8 | 2,083,333 | 2,173,913 | 95.8% |
-| 16 | 3,846,154 | 3,571,429 | 107.7% |
-| 32 | 7,142,857 | 5,000,000 | 142.9% |
-| 64 | 10,003,200 | 5,884,235 | 170.0% |
+![](docs/images/bench_pipeline_get.png)
 
 Credis pipeline throughput reaches **164%** (SET) and **170%** (GET) of Redis at P=64.
 
 ### Latency Distribution (SET, n=100K)
 
-#### Single Connection (c=1, P=1)
-
-| Metric | Credis | Redis |
-|--------|--------|-------|
-| p50 | 0.031 ms | 0.031 ms |
-| p95 | 0.031 ms | 0.031 ms |
-| p99 | 0.047 ms | 0.055 ms |
-| max | 0.215 ms | 0.335 ms |
-
-#### Under Load (c=50, P=1)
-
-| Metric | Credis | Redis |
-|--------|--------|-------|
-| p50 | 0.095 ms | 0.103 ms |
-| p95 | 0.111 ms | 0.119 ms |
-| p99 | 0.135 ms | 0.159 ms |
-| max | 0.327 ms | 0.623 ms |
-
-#### Deep Pipeline (c=50, P=64)
-
-| Metric | Credis | Redis |
-|--------|--------|-------|
-| p50 | 0.415 ms | 0.695 ms |
-| p95 | 0.543 ms | 0.887 ms |
-| p99 | 0.647 ms | 1.031 ms |
-| max | 0.711 ms | 1.143 ms |
+![](docs/images/bench_latency.png)
 
 At P=64, Credis delivers 164–170% throughput with p99 latency **37% lower** than Redis (0.647 ms vs 1.031 ms).
 
 ### Concurrency Scalability (SET, n=100K)
 
-| Clients | Credis rps | Redis rps | Ratio |
-|---------|-----------|-----------|-------|
-| 1 | 33,356 | 33,423 | 99.8% |
-| 10 | 253,807 | 248,139 | 102.3% |
-| 50 | 297,619 | 294,118 | 101.2% |
-| 100 | 309,598 | 293,255 | 105.6% |
-| 500 | 306,749 | 283,286 | 108.3% |
+![](docs/images/bench_concurrency.png)
 
 Credis scales from 253K to 307K rps across 10–500 concurrent clients (variance 18%), while Redis plateaus at 248–283K.
 
