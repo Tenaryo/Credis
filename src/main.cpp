@@ -19,9 +19,6 @@
 #include "util/logger.hpp"
 
 auto main(int argc, char* argv[]) -> int {
-    std::cout << std::unitbuf;
-    std::cerr << std::unitbuf;
-
     // 1. Parse configuration
     credis::server::ServerConfig server_config;
     server_config.replica = credis::cli::parse_replicaof(argc, argv);
