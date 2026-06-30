@@ -1,7 +1,9 @@
 #pragma once
 
+#include <atomic>
 #include <string>
 #include <string_view>
+#include <thread>
 
 namespace credis::aof {
 
@@ -31,9 +33,7 @@ class AofManager {
     void set_appendfilename(std::string val) {
         appendfilename_ = std::move(val);
     }
-    void set_appendfsync(std::string val) {
-        appendfsync_ = std::move(val);
-    }
+    void set_appendfsync(std::string val);
 
     void ensure_directory(const std::string& base_dir) const;
     void ensure_file(const std::string& base_dir) const;
@@ -48,11 +48,17 @@ class AofManager {
     ~AofManager();
 
   private:
+    void start_fsync_thread();
+    void stop_fsync_thread();
+
     std::string appendonly_ = "no";
     std::string appenddirname_ = "appendonlydir";
     std::string appendfilename_ = "appendonly.aof";
     std::string appendfsync_ = "everysec";
     int aof_fd_ = -1;
+
+    std::jthread fsync_thread_;
+    std::atomic<bool> fsync_running_{false};
 };
 
 } // namespace credis::aof

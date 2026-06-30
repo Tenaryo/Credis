@@ -209,3 +209,103 @@ TEST_F(HandlerServerTest, ConfigGetAppendonlyWithoutAof) {
     auto response = handler_.process("*3\r\n$6\r\nCONFIG\r\n$3\r\nGET\r\n$10\r\nappendonly\r\n");
     EXPECT_EQ(response, "*2\r\n$10\r\nappendonly\r\n$0\r\n\r\n");
 }
+
+TEST_F(HandlerServerTest, ConfigSetAppendfsyncWithoutAof) {
+    auto response = handler_.process("*4\r\n$6\r\nCONFIG\r\n$3\r\nSET\r\n$11\r\nappendfsync\r\n$6\r\nalways\r\n");
+    EXPECT_TRUE(response.starts_with("-ERR"));
+}
+
+TEST(ConfigSetAof, SetAppendfsyncAlways) {
+    credis::store::Store store;
+    credis::server::ServerConfig config;
+    credis::aof::AofManager aof;
+    aof.set_appendonly("yes");
+    CommandHandler handler(store, config);
+    handler.set_aof_manager(aof);
+
+    auto response = handler.process("*4\r\n$6\r\nCONFIG\r\n$3\r\nSET\r\n$11\r\nappendfsync\r\n$6\r\nalways\r\n");
+    EXPECT_EQ(response, "+OK\r\n");
+    EXPECT_EQ(aof.appendfsync(), "always");
+}
+
+TEST(ConfigSetAof, SetAppendfsyncEverysec) {
+    credis::store::Store store;
+    credis::server::ServerConfig config;
+    credis::aof::AofManager aof;
+    aof.set_appendonly("yes");
+    CommandHandler handler(store, config);
+    handler.set_aof_manager(aof);
+
+    auto response = handler.process("*4\r\n$6\r\nCONFIG\r\n$3\r\nSET\r\n$11\r\nappendfsync\r\n$8\r\neverysec\r\n");
+    EXPECT_EQ(response, "+OK\r\n");
+    EXPECT_EQ(aof.appendfsync(), "everysec");
+}
+
+TEST(ConfigSetAof, SetAppendfsyncNo) {
+    credis::store::Store store;
+    credis::server::ServerConfig config;
+    credis::aof::AofManager aof;
+    aof.set_appendonly("yes");
+    CommandHandler handler(store, config);
+    handler.set_aof_manager(aof);
+
+    auto response = handler.process("*4\r\n$6\r\nCONFIG\r\n$3\r\nSET\r\n$11\r\nappendfsync\r\n$2\r\nno\r\n");
+    EXPECT_EQ(response, "+OK\r\n");
+    EXPECT_EQ(aof.appendfsync(), "no");
+}
+
+TEST(ConfigSetAof, SetAppendfsyncInvalid) {
+    credis::store::Store store;
+    credis::server::ServerConfig config;
+    credis::aof::AofManager aof;
+    aof.set_appendonly("yes");
+    CommandHandler handler(store, config);
+    handler.set_aof_manager(aof);
+
+    auto response = handler.process("*4\r\n$6\r\nCONFIG\r\n$3\r\nSET\r\n$11\r\nappendfsync\r\n$3\r\nxyz\r\n");
+    EXPECT_TRUE(response.starts_with("-ERR"));
+}
+
+TEST(ConfigSetAof, SetAppendonlyNoToYesWithFile) {
+    auto tmpdir = std::filesystem::temp_directory_path() / "credis_test_cfgset_XXXXXX";
+    auto dirname = tmpdir.string();
+    if (::mkdtemp(dirname.data()) == nullptr) {
+        FAIL() << "Failed to create temp directory";
+    }
+    std::string tmp_path = dirname;
+    auto aof_dir = tmp_path + "/appendonlydir";
+    std::filesystem::create_directories(aof_dir);
+    {
+        std::ofstream mf(aof_dir + "/appendonly.aof.manifest");
+        mf << "file appendonly.aof.1.incr.aof seq 1 type i\n";
+    }
+    {
+        std::ofstream af(aof_dir + "/appendonly.aof.1.incr.aof");
+    }
+
+    credis::store::Store store;
+    credis::server::ServerConfig config;
+    config.dir = tmp_path;
+    credis::aof::AofManager aof;
+    CommandHandler handler(store, config);
+    handler.set_aof_manager(aof);
+
+    auto response = handler.process("*4\r\n$6\r\nCONFIG\r\n$3\r\nSET\r\n$10\r\nappendonly\r\n$3\r\nyes\r\n");
+    EXPECT_EQ(response, "+OK\r\n");
+    EXPECT_EQ(aof.appendonly(), "yes");
+
+    aof.close();
+    std::filesystem::remove_all(tmp_path);
+}
+
+TEST(ConfigSetAof, SetUnsupportedParameter) {
+    credis::store::Store store;
+    credis::server::ServerConfig config;
+    credis::aof::AofManager aof;
+    aof.set_appendonly("yes");
+    CommandHandler handler(store, config);
+    handler.set_aof_manager(aof);
+
+    auto response = handler.process("*4\r\n$6\r\nCONFIG\r\n$3\r\nSET\r\n$3\r\ndir\r\n$5\r\n/tmp\r\n");
+    EXPECT_TRUE(response.starts_with("-ERR"));
+}

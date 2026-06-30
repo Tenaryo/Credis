@@ -3,12 +3,48 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 
 #include "util/logger.hpp"
 
 namespace credis::aof {
+
+using namespace std::chrono_literals;
+
+void AofManager::set_appendfsync(std::string val) {
+    appendfsync_ = std::move(val);
+    if (aof_fd_ >= 0) {
+        stop_fsync_thread();
+        start_fsync_thread();
+    }
+}
+
+void AofManager::start_fsync_thread() {
+    if (appendfsync_ != "everysec") {
+        return;
+    }
+    fsync_running_ = true;
+    fsync_thread_ = std::jthread([this](const std::stop_token& st) {
+        while (!st.stop_requested()) {
+            std::this_thread::sleep_for(1s);
+            if (fsync_running_.load(std::memory_order_acquire) && aof_fd_ >= 0) {
+                if (::fsync(aof_fd_) < 0) [[unlikely]] {
+                    LOG_ERROR("AOF background fsync failed");
+                }
+            }
+        }
+    });
+}
+
+void AofManager::stop_fsync_thread() {
+    fsync_running_.store(false, std::memory_order_release);
+    if (fsync_thread_.joinable()) {
+        fsync_thread_.request_stop();
+        fsync_thread_.join();
+    }
+}
 
 void AofManager::ensure_directory(const std::string& base_dir) const {
     if (appendonly_ == "yes") {
@@ -69,6 +105,9 @@ void AofManager::open(const std::string& base_dir) {
     mf >> file_token >> aof_name;
     auto aof_path = base_dir + "/" + appenddirname_ + "/" + aof_name;
     aof_fd_ = ::open(aof_path.c_str(), O_WRONLY | O_APPEND | O_CREAT, 0644);
+    if (aof_fd_ >= 0) {
+        start_fsync_thread();
+    }
 }
 
 void AofManager::append(std::string_view data) {
@@ -87,6 +126,7 @@ void AofManager::append(std::string_view data) {
 }
 
 void AofManager::close() {
+    stop_fsync_thread();
     if (aof_fd_ >= 0) {
         ::close(aof_fd_);
         aof_fd_ = -1;

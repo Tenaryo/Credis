@@ -478,11 +478,26 @@ auto CommandHandler::execute_command(std::vector<std::string_view> args,
                                      int fd,
                                      SendFn&& send_to_client) -> ProcessResult {
     if (cmd == "CONFIG") {
-        if (args.size() < 3 || credis::util::to_upper(args[1]) != "GET") {
+        if (args.size() < 3) {
             return ProcessResult::normal(
                 credis::protocol::encode_error("ERR wrong number of arguments for 'config' command"));
         }
-        return ProcessResult::normal(handle_config_get(ctx_, args[2]));
+        auto subcmd = credis::util::to_upper(args[1]);
+        if (subcmd == "GET") {
+            if (args.size() < 3) {
+                return ProcessResult::normal(
+                    credis::protocol::encode_error("ERR wrong number of arguments for 'config|get' command"));
+            }
+            return ProcessResult::normal(handle_config_get(ctx_, args[2]));
+        }
+        if (subcmd == "SET") {
+            if (args.size() < 4) {
+                return ProcessResult::normal(
+                    credis::protocol::encode_error("ERR wrong number of arguments for 'config|set' command"));
+            }
+            return ProcessResult::normal(handle_config_set(ctx_, args[2], args[3]));
+        }
+        return ProcessResult::normal(credis::protocol::encode_error("ERR unsupported CONFIG subcommand"));
     }
     if (cmd == "ACL") {
         return ProcessResult::normal(handle_acl(ctx_, args));

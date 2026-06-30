@@ -64,6 +64,42 @@ auto handle_config_get(CommandContext& ctx, std::string_view param) -> std::stri
     return credis::protocol::encode_array({});
 }
 
+auto handle_config_set(CommandContext& ctx, std::string_view param, std::string_view value) -> std::string {
+    auto upper = credis::util::to_upper(param);
+    if (upper == "APPENDONLY") {
+        if (ctx.aof_manager == nullptr) {
+            return credis::protocol::encode_error("ERR AOF is not configured");
+        }
+        auto val = credis::util::to_lower(value);
+        if (val != "yes" && val != "no") {
+            return credis::protocol::encode_error("ERR invalid value for appendonly");
+        }
+        auto was = ctx.aof_manager->appendonly();
+        ctx.aof_manager->set_appendonly(val);
+        if (val == "yes" && was != "yes") {
+            ctx.aof_manager->ensure_directory(ctx.config.dir);
+            ctx.aof_manager->ensure_file(ctx.config.dir);
+            ctx.aof_manager->ensure_manifest(ctx.config.dir);
+            ctx.aof_manager->open(ctx.config.dir);
+        } else if (val == "no" && was != "no") {
+            ctx.aof_manager->close();
+        }
+        return credis::protocol::kRespOk;
+    }
+    if (upper == "APPENDFSYNC") {
+        if (ctx.aof_manager == nullptr) {
+            return credis::protocol::encode_error("ERR AOF is not configured");
+        }
+        auto val = credis::util::to_lower(value);
+        if (val != "always" && val != "everysec" && val != "no") {
+            return credis::protocol::encode_error("ERR invalid value for appendfsync");
+        }
+        ctx.aof_manager->set_appendfsync(val);
+        return credis::protocol::kRespOk;
+    }
+    return credis::protocol::encode_error("ERR unsupported CONFIG parameter");
+}
+
 auto handle_acl_whoami() -> std::string {
     return credis::protocol::encode_bulk_string("default");
 }
