@@ -187,16 +187,17 @@ auto handle_xadd_with_blocking(CommandContext& ctx,
         fields.emplace_back(std::string(args[i]), std::string(args[i + 1]));
     }
 
-    std::string new_id = ctx.store.xadd(key, id, fields);
+    std::string key_copy(key);
+    std::string new_id = ctx.store.xadd(std::move(key), id, fields);
 
     if (new_id.starts_with("ERR")) {
         return ProcessResult::normal(credis::protocol::encode_error(new_id));
     }
 
     if (ctx.blocking_manager) {
-        while (auto blocked = ctx.blocking_manager->get().wake_client_for_stream(key, new_id)) {
-            auto entries = ctx.store.xread(key, blocked->last_id.to_string());
-            auto response = credis::protocol::encode_stream_entries({{key, entries}});
+        while (auto blocked = ctx.blocking_manager->get().wake_client_for_stream(key_copy, new_id)) {
+            auto entries = ctx.store.xread(key_copy, blocked->last_id.to_string());
+            auto response = credis::protocol::encode_stream_entries({{key_copy, entries}});
             send_to_client(blocked->fd, response);
         }
     }
