@@ -14,6 +14,9 @@ namespace credis::aof {
 using namespace std::chrono_literals;
 
 void AofManager::set_appendfsync(std::string val) {
+    if (val == appendfsync_) {
+        return;
+    }
     appendfsync_ = std::move(val);
     if (aof_fd_ >= 0) {
         stop_fsync_thread();
@@ -25,11 +28,11 @@ void AofManager::start_fsync_thread() {
     if (appendfsync_ != "everysec") {
         return;
     }
-    fsync_running_ = true;
+    fsync_enabled_ = true;
     fsync_thread_ = std::jthread([this](const std::stop_token& st) {
         while (!st.stop_requested()) {
             std::this_thread::sleep_for(1s);
-            if (fsync_running_.load(std::memory_order_acquire) && aof_fd_ >= 0) {
+            if (fsync_enabled_.load(std::memory_order_acquire) && aof_fd_ >= 0) {
                 if (::fsync(aof_fd_) < 0) [[unlikely]] {
                     LOG_ERROR("AOF background fsync failed");
                 }
@@ -39,7 +42,7 @@ void AofManager::start_fsync_thread() {
 }
 
 void AofManager::stop_fsync_thread() {
-    fsync_running_.store(false, std::memory_order_release);
+    fsync_enabled_.store(false, std::memory_order_release);
     if (fsync_thread_.joinable()) {
         fsync_thread_.request_stop();
         fsync_thread_.join();

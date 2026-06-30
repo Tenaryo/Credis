@@ -47,6 +47,10 @@ class AofManager {
 
     ~AofManager();
 
+    [[nodiscard]] auto is_fsync_thread_running() const noexcept -> bool {
+        return fsync_thread_.joinable();
+    }
+
   private:
     void start_fsync_thread();
     void stop_fsync_thread();
@@ -58,7 +62,7 @@ class AofManager {
     int aof_fd_ = -1;
 
     std::jthread fsync_thread_;
-    std::atomic<bool> fsync_running_{false};
+    std::atomic<bool> fsync_enabled_{false};
 };
 
 } // namespace credis::aof

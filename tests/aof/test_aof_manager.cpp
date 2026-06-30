@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -245,7 +246,7 @@ TEST_F(AofManagerTest, ReadAofContentFromManifestSpecifiedFile) {
     EXPECT_EQ(content, resp);
 }
 
-TEST_F(AofManagerTest, EverysecFsyncThreadStartsAndStops) {
+TEST_F(AofManagerTest, EverysecThreadStartsOnOpen) {
     auto dir_path = tmp_dir_path_ + "/subdir";
     std::filesystem::create_directories(dir_path);
     {
@@ -258,15 +259,41 @@ TEST_F(AofManagerTest, EverysecFsyncThreadStartsAndStops) {
 
     AofManager aof;
     aof.set_appendonly("yes");
+    aof.set_appenddirname("subdir");
+    aof.set_appendfilename("myapp.aof");
     aof.set_appendfsync("everysec");
     aof.open(tmp_dir_path_);
 
-    EXPECT_EQ(aof.appendfsync(), "everysec");
+    EXPECT_TRUE(aof.is_fsync_thread_running());
+
+    aof.close();
+    EXPECT_FALSE(aof.is_fsync_thread_running());
+}
+
+TEST_F(AofManagerTest, NoThreadWhenFsyncNotEverysec) {
+    auto dir_path = tmp_dir_path_ + "/subdir";
+    std::filesystem::create_directories(dir_path);
+    {
+        std::ofstream mf(dir_path + "/myapp.aof.manifest");
+        mf << "file myapp.aof.1.incr.aof seq 1 type i\n";
+    }
+    {
+        std::ofstream af(dir_path + "/myapp.aof.1.incr.aof");
+    }
+
+    AofManager aof;
+    aof.set_appendonly("yes");
+    aof.set_appenddirname("subdir");
+    aof.set_appendfilename("myapp.aof");
+    aof.set_appendfsync("always");
+    aof.open(tmp_dir_path_);
+
+    EXPECT_FALSE(aof.is_fsync_thread_running());
 
     aof.close();
 }
 
-TEST_F(AofManagerTest, EverysecFsyncAppendDoesNotCrash) {
+TEST_F(AofManagerTest, EverysecAppendSurvivesThreadFsync) {
     auto dir_path = tmp_dir_path_ + "/subdir";
     std::filesystem::create_directories(dir_path);
     {
@@ -279,16 +306,19 @@ TEST_F(AofManagerTest, EverysecFsyncAppendDoesNotCrash) {
 
     AofManager aof;
     aof.set_appendonly("yes");
+    aof.set_appenddirname("subdir");
+    aof.set_appendfilename("myapp.aof");
     aof.set_appendfsync("everysec");
     aof.open(tmp_dir_path_);
 
     aof.append("*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n100\r\n");
+    aof.append("*3\r\n$3\r\nSET\r\n$3\r\nbar\r\n$3\r\n200\r\n");
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     aof.close();
 }
 
-TEST_F(AofManagerTest, AppendfsyncSwitchFromEverysecToAlways) {
+TEST_F(AofManagerTest, SwitchEverysecToAlwaysStopsThread) {
     auto dir_path = tmp_dir_path_ + "/subdir";
     std::filesystem::create_directories(dir_path);
     {
@@ -301,16 +331,20 @@ TEST_F(AofManagerTest, AppendfsyncSwitchFromEverysecToAlways) {
 
     AofManager aof;
     aof.set_appendonly("yes");
+    aof.set_appenddirname("subdir");
+    aof.set_appendfilename("myapp.aof");
     aof.set_appendfsync("everysec");
     aof.open(tmp_dir_path_);
+    EXPECT_TRUE(aof.is_fsync_thread_running());
 
     aof.set_appendfsync("always");
     EXPECT_EQ(aof.appendfsync(), "always");
+    EXPECT_FALSE(aof.is_fsync_thread_running());
 
     aof.close();
 }
 
-TEST_F(AofManagerTest, AppendfsyncSwitchFromAlwaysToNo) {
+TEST_F(AofManagerTest, SwitchNoToEverysecStartsThread) {
     auto dir_path = tmp_dir_path_ + "/subdir";
     std::filesystem::create_directories(dir_path);
     {
@@ -323,33 +357,40 @@ TEST_F(AofManagerTest, AppendfsyncSwitchFromAlwaysToNo) {
 
     AofManager aof;
     aof.set_appendonly("yes");
-    aof.set_appendfsync("always");
-    aof.open(tmp_dir_path_);
-
-    aof.set_appendfsync("no");
-    EXPECT_EQ(aof.appendfsync(), "no");
-
-    aof.close();
-}
-
-TEST_F(AofManagerTest, AppendfsyncSwitchToEverysecStartsThread) {
-    auto dir_path = tmp_dir_path_ + "/subdir";
-    std::filesystem::create_directories(dir_path);
-    {
-        std::ofstream mf(dir_path + "/myapp.aof.manifest");
-        mf << "file myapp.aof.1.incr.aof seq 1 type i\n";
-    }
-    {
-        std::ofstream af(dir_path + "/myapp.aof.1.incr.aof");
-    }
-
-    AofManager aof;
-    aof.set_appendonly("yes");
+    aof.set_appenddirname("subdir");
+    aof.set_appendfilename("myapp.aof");
     aof.set_appendfsync("no");
     aof.open(tmp_dir_path_);
+    EXPECT_FALSE(aof.is_fsync_thread_running());
 
     aof.set_appendfsync("everysec");
     EXPECT_EQ(aof.appendfsync(), "everysec");
+    EXPECT_TRUE(aof.is_fsync_thread_running());
+
+    aof.close();
+}
+
+TEST_F(AofManagerTest, SetAppendfsyncSameValueNoOp) {
+    auto dir_path = tmp_dir_path_ + "/subdir";
+    std::filesystem::create_directories(dir_path);
+    {
+        std::ofstream mf(dir_path + "/myapp.aof.manifest");
+        mf << "file myapp.aof.1.incr.aof seq 1 type i\n";
+    }
+    {
+        std::ofstream af(dir_path + "/myapp.aof.1.incr.aof");
+    }
+
+    AofManager aof;
+    aof.set_appendonly("yes");
+    aof.set_appenddirname("subdir");
+    aof.set_appendfilename("myapp.aof");
+    aof.set_appendfsync("everysec");
+    aof.open(tmp_dir_path_);
+    EXPECT_TRUE(aof.is_fsync_thread_running());
+
+    aof.set_appendfsync("everysec");
+    EXPECT_TRUE(aof.is_fsync_thread_running());
 
     aof.close();
 }
