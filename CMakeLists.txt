@@ -195,6 +195,7 @@ target_link_libraries(redis PRIVATE credis_core)
 # ============================================================
 
 option(ENABLE_SANITIZERS "Enable Address and Undefined Behavior Sanitizers" OFF)
+option(ENABLE_COVERAGE "Enable code coverage instrumentation" OFF)
 
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
 
@@ -207,6 +208,11 @@ endif ()
 if (ENABLE_SANITIZERS)
     target_compile_options(credis_core INTERFACE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(credis_core INTERFACE -fsanitize=address,undefined)
+endif ()
+
+if (ENABLE_COVERAGE)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage -O0 -g")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
 endif ()
 
 option(BUILD_TESTS "Build tests" OFF)
