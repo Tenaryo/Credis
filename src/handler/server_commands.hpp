@@ -21,5 +21,6 @@ auto handle_auth(CommandContext& ctx, int fd, const std::vector<std::string_view
 auto handle_replconf(const std::vector<std::string_view>& args) -> std::string;
 auto handle_psync(CommandContext& ctx) -> ProcessResult;
 auto handle_wait(const std::vector<std::string_view>& args) -> ProcessResult;
+auto handle_bgrewriteaof(CommandContext& ctx) -> std::string;
 
 } // namespace credis::handler

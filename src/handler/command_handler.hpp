@@ -65,6 +65,9 @@ class CommandHandler {
     void set_aof_manager(credis::aof::AofManager& mgr) {
         ctx_.aof_manager = &mgr;
     }
+    [[nodiscard]] auto get_aof_manager() const noexcept -> credis::aof::AofManager* {
+        return ctx_.aof_manager;
+    }
     [[nodiscard]] auto config() const noexcept -> const credis::server::ServerConfig& {
         return ctx_.config;
     }

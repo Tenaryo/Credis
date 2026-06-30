@@ -7,6 +7,7 @@
 #include <thread>
 
 #include "aof/aof_manager.hpp"
+#include "store/store.hpp"
 
 using namespace credis::aof;
 
@@ -283,7 +284,6 @@ TEST_F(AofManagerTest, NoThreadWhenFsyncNotEverysec) {
 
     AofManager aof;
     aof.set_appendonly("yes");
-    aof.set_appenddirname("subdir");
     aof.set_appendfilename("myapp.aof");
     aof.set_appendfsync("always");
     aof.open(tmp_dir_path_);
@@ -306,7 +306,6 @@ TEST_F(AofManagerTest, EverysecAppendSurvivesThreadFsync) {
 
     AofManager aof;
     aof.set_appendonly("yes");
-    aof.set_appenddirname("subdir");
     aof.set_appendfilename("myapp.aof");
     aof.set_appendfsync("everysec");
     aof.open(tmp_dir_path_);
@@ -393,4 +392,206 @@ TEST_F(AofManagerTest, SetAppendfsyncSameValueNoOp) {
     EXPECT_TRUE(aof.is_fsync_thread_running());
 
     aof.close();
+}
+
+TEST_F(AofManagerTest, StartRewriteWhenAppendonlyOffReturnsFalse) {
+    credis::store::Store store;
+    AofManager aof;
+    EXPECT_FALSE(aof.start_rewrite(store, tmp_dir_path_));
+}
+
+TEST_F(AofManagerTest, RewriteEmptyStoreCreatesFile) {
+    auto dir_path = tmp_dir_path_ + "/subdir";
+    std::filesystem::create_directories(dir_path);
+    {
+        std::ofstream mf(dir_path + "/myapp.aof.manifest");
+        mf << "file myapp.aof.1.incr.aof seq 1 type i\n";
+    }
+    {
+        std::ofstream af(dir_path + "/myapp.aof.1.incr.aof");
+    }
+
+    credis::store::Store store;
+    AofManager aof;
+    aof.set_appendonly("yes");
+    aof.set_appenddirname("subdir");
+    aof.set_appendfilename("myapp.aof");
+    aof.open(tmp_dir_path_);
+
+    ASSERT_TRUE(aof.start_rewrite(store, tmp_dir_path_));
+    EXPECT_TRUE(aof.is_rewriting());
+
+    while (!aof.check_rewrite_complete()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    EXPECT_FALSE(aof.is_rewriting());
+
+    aof.close();
+}
+
+TEST_F(AofManagerTest, RewriteStringKeysAndReplay) {
+    auto dir_path = tmp_dir_path_ + "/subdir";
+    std::filesystem::create_directories(dir_path);
+    {
+        std::ofstream mf(dir_path + "/myapp.aof.manifest");
+        mf << "file myapp.aof.1.incr.aof seq 1 type i\n";
+    }
+    {
+        std::ofstream af(dir_path + "/myapp.aof.1.incr.aof");
+    }
+
+    credis::store::Store store;
+    store.set("key1", "val1");
+    store.set("key2", "val2");
+
+    AofManager aof;
+    aof.set_appendonly("yes");
+    aof.set_appenddirname("subdir");
+    aof.set_appendfilename("myapp.aof");
+    aof.open(tmp_dir_path_);
+
+    ASSERT_TRUE(aof.start_rewrite(store, tmp_dir_path_));
+
+    while (!aof.check_rewrite_complete()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    aof.close();
+
+    auto content = aof.read_aof_content(tmp_dir_path_);
+    EXPECT_NE(content.find("SET"), std::string::npos);
+    EXPECT_NE(content.find("key1"), std::string::npos);
+    EXPECT_NE(content.find("key2"), std::string::npos);
+}
+
+TEST_F(AofManagerTest, RewriteListKeysAndReplay) {
+    auto dir_path = tmp_dir_path_ + "/subdir";
+    std::filesystem::create_directories(dir_path);
+    {
+        std::ofstream mf(dir_path + "/myapp.aof.manifest");
+        mf << "file myapp.aof.1.incr.aof seq 1 type i\n";
+    }
+    {
+        std::ofstream af(dir_path + "/myapp.aof.1.incr.aof");
+    }
+
+    credis::store::Store store;
+    store.rpush("mylist", "a");
+    store.rpush("mylist", "b");
+
+    AofManager aof;
+    aof.set_appendonly("yes");
+    aof.set_appenddirname("subdir");
+    aof.set_appendfilename("myapp.aof");
+    aof.open(tmp_dir_path_);
+
+    ASSERT_TRUE(aof.start_rewrite(store, tmp_dir_path_));
+
+    while (!aof.check_rewrite_complete()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    aof.close();
+
+    auto content = aof.read_aof_content(tmp_dir_path_);
+    EXPECT_NE(content.find("RPUSH"), std::string::npos);
+    EXPECT_NE(content.find("mylist"), std::string::npos);
+    EXPECT_NE(content.find('a'), std::string::npos);
+    EXPECT_NE(content.find('b'), std::string::npos);
+}
+
+TEST_F(AofManagerTest, RewriteZsetKeysAndReplay) {
+    auto dir_path = tmp_dir_path_ + "/subdir";
+    std::filesystem::create_directories(dir_path);
+    {
+        std::ofstream mf(dir_path + "/myapp.aof.manifest");
+        mf << "file myapp.aof.1.incr.aof seq 1 type i\n";
+    }
+    {
+        std::ofstream af(dir_path + "/myapp.aof.1.incr.aof");
+    }
+
+    credis::store::Store store;
+    store.zadd("z", 1.0, "a");
+    store.zadd("z", 2.0, "b");
+
+    AofManager aof;
+    aof.set_appendonly("yes");
+    aof.set_appenddirname("subdir");
+    aof.set_appendfilename("myapp.aof");
+    aof.open(tmp_dir_path_);
+
+    ASSERT_TRUE(aof.start_rewrite(store, tmp_dir_path_));
+
+    while (!aof.check_rewrite_complete()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    aof.close();
+
+    auto content = aof.read_aof_content(tmp_dir_path_);
+    EXPECT_NE(content.find("ZADD"), std::string::npos);
+    EXPECT_NE(content.find('z'), std::string::npos);
+}
+
+TEST_F(AofManagerTest, RewriteAlreadyInProgressReturnsFalse) {
+    auto dir_path = tmp_dir_path_ + "/subdir";
+    std::filesystem::create_directories(dir_path);
+    {
+        std::ofstream mf(dir_path + "/myapp.aof.manifest");
+        mf << "file myapp.aof.1.incr.aof seq 1 type i\n";
+    }
+    {
+        std::ofstream af(dir_path + "/myapp.aof.1.incr.aof");
+    }
+
+    credis::store::Store store;
+    AofManager aof;
+    aof.set_appendonly("yes");
+    aof.set_appenddirname("subdir");
+    aof.set_appendfilename("myapp.aof");
+    aof.open(tmp_dir_path_);
+
+    ASSERT_TRUE(aof.start_rewrite(store, tmp_dir_path_));
+    EXPECT_FALSE(aof.start_rewrite(store, tmp_dir_path_));
+
+    while (!aof.check_rewrite_complete()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    aof.close();
+}
+
+TEST_F(AofManagerTest, RewriteWithConcurrentWriteIncludesBuffer) {
+    auto dir_path = tmp_dir_path_ + "/subdir";
+    std::filesystem::create_directories(dir_path);
+    {
+        std::ofstream mf(dir_path + "/myapp.aof.manifest");
+        mf << "file myapp.aof.1.incr.aof seq 1 type i\n";
+    }
+    {
+        std::ofstream af(dir_path + "/myapp.aof.1.incr.aof");
+    }
+
+    credis::store::Store store;
+    store.set("k1", "before");
+
+    AofManager aof;
+    aof.set_appendonly("yes");
+    aof.set_appenddirname("subdir");
+    aof.set_appendfilename("myapp.aof");
+    aof.open(tmp_dir_path_);
+
+    ASSERT_TRUE(aof.start_rewrite(store, tmp_dir_path_));
+    aof.append_to_rewrite_buffer("*3\r\n$3\r\nSET\r\n$2\r\nk2\r\n$1\r\n2\r\n");
+
+    while (!aof.check_rewrite_complete()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    aof.close();
+
+    auto content = aof.read_aof_content(tmp_dir_path_);
+    EXPECT_NE(content.find("k2"), std::string::npos);
 }

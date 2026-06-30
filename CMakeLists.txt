@@ -23,6 +23,7 @@ target_include_directories(credis_util PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
 add_library(credis_aof STATIC src/aof/aof_manager.cpp)
 target_include_directories(credis_aof PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(credis_aof PUBLIC credis_store)
 
 add_library(credis_event_loop STATIC src/event_loop/event_loop.cpp)
 target_include_directories(credis_event_loop PUBLIC ${CMAKE_SOURCE_DIR}/src)

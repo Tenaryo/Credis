@@ -2,6 +2,7 @@
 
 #include <variant>
 
+#include "aof/aof_manager.hpp"
 #include "blocking_manager/blocking_manager.hpp"
 #include "connection/connection_pool.hpp"
 #include "event_loop/event_loop.hpp"
@@ -75,9 +76,9 @@ void dispatch_event(int fd, EventContext& ctx) {
 
     if (std::holds_alternative<ProcessResult::Wait>(result.state)) {
         auto& w = std::get<ProcessResult::Wait>(result.state);
-        if (ctx.replica_mgr.offset() == 0 || ctx.replica_mgr.count_acked_for(ctx.replica_mgr.offset()) >= w.numreplicas) {
-            ctx.conn_pool.send_to(
-                fd, credis::protocol::encode_integer(static_cast<int64_t>(ctx.replica_mgr.count())));
+        if (ctx.replica_mgr.offset() == 0
+            || ctx.replica_mgr.count_acked_for(ctx.replica_mgr.offset()) >= w.numreplicas) {
+            ctx.conn_pool.send_to(fd, credis::protocol::encode_integer(static_cast<int64_t>(ctx.replica_mgr.count())));
         } else {
             ctx.replica_mgr.start_wait(fd, w.numreplicas, w.timeout_ms);
             auto getack = credis::protocol::encode_array({"REPLCONF", "GETACK", "*"});
@@ -110,6 +111,10 @@ auto compute_timeout(EventContext& ctx) -> std::chrono::milliseconds {
 
     if (auto wait_result = ctx.replica_mgr.check_wait_timeout()) {
         ctx.conn_pool.send_to(wait_result->client_fd, credis::protocol::encode_integer(wait_result->count));
+    }
+
+    if (auto* aof = ctx.handler.get_aof_manager()) {
+        aof->check_rewrite_complete();
     }
 
     ctx.conn_pool.flush_all();

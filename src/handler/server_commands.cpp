@@ -192,4 +192,17 @@ auto handle_wait(const std::vector<std::string_view>& args) -> ProcessResult {
     return ProcessResult::wait(*numreplicas, *timeout);
 }
 
+auto handle_bgrewriteaof(CommandContext& ctx) -> std::string {
+    if (ctx.aof_manager == nullptr) {
+        return credis::protocol::encode_error("ERR AOF is not enabled");
+    }
+    if (ctx.aof_manager->is_rewriting()) {
+        return credis::protocol::encode_error("ERR AOF rewrite already in progress");
+    }
+    if (!ctx.aof_manager->start_rewrite(ctx.store, ctx.config.dir)) {
+        return credis::protocol::encode_error("ERR AOF rewrite failed");
+    }
+    return credis::protocol::encode_simple_string("Background append only file rewriting started");
+}
+
 } // namespace credis::handler

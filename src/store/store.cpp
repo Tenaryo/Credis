@@ -503,4 +503,12 @@ auto Store::keys() -> std::vector<std::string> {
     return result;
 }
 
+void Store::for_each_valid_entry(const std::function<void(std::string_view, const Entry&)>& fn) const {
+    for (const auto& [key, entry] : data_) {
+        if (!entry.expiry || get_current_time() < *entry.expiry) {
+            fn(key, entry);
+        }
+    }
+}
+
 } // namespace credis::store

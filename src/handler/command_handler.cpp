@@ -296,6 +296,14 @@ void CommandHandler::register_commands() {
               return ProcessResult::normal(handle_info(ctx, args));
           },
           1}},
+        {"BGREWRITEAOF",
+         {[](CommandContext& ctx,
+             const std::vector<std::string_view>&,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              return ProcessResult::normal(handle_bgrewriteaof(ctx));
+          },
+          1}},
     };
 }
 
@@ -333,6 +341,7 @@ auto CommandHandler::process_with_fd(int fd,
             }
             if (ctx_.aof_manager != nullptr) {
                 ctx_.aof_manager->append(input.substr(cmd_start, parsed->consumed));
+                ctx_.aof_manager->append_to_rewrite_buffer(input.substr(cmd_start, parsed->consumed));
             }
         }
 

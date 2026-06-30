@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <optional>
 #include <set>
 #include <span>
@@ -58,11 +59,13 @@ struct SortedSet {
 using Value = std::variant<String, List, Stream, SortedSet>;
 
 class Store {
+  public:
     struct Entry {
         Value value;
         std::optional<std::chrono::steady_clock::time_point> expiry;
     };
 
+  private:
     std::unordered_map<std::string, Entry, credis::util::StringHash, std::equal_to<>> data_;
 
     uint64_t version_counter_{0};
@@ -177,6 +180,8 @@ class Store {
         auto it = key_versions_.find(key);
         return it != key_versions_.end() ? it->second : 0;
     }
+
+    void for_each_valid_entry(const std::function<void(std::string_view, const Entry&)>& fn) const;
 };
 
 } // namespace credis::store
