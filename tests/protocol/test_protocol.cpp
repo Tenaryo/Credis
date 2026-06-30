@@ -82,3 +82,48 @@ TEST(ParseOneTest, ParsesSingleCompleteCommand) {
     EXPECT_EQ(result->args[0], "PING");
     EXPECT_EQ(result->consumed, 14);
 }
+
+TEST(EncodeTest, NullArray) {
+    EXPECT_EQ(encode_null_array(), "*-1\r\n");
+}
+
+TEST(EncodeTest, RawArray) {
+    auto result = encode_raw_array({"+OK\r\n", ":1\r\n"});
+    EXPECT_EQ(result, "*2\r\n+OK\r\n:1\r\n");
+}
+
+TEST(EncodeTest, Entries) {
+    using namespace credis::store;
+    StreamEntry e1;
+    e1.id = "1-0";
+    e1.fields = {{"f1", "v1"}};
+    std::vector<StreamEntry> vec{e1};
+    auto result = encode_entries(vec);
+    EXPECT_TRUE(result.starts_with("*1\r\n"));
+    EXPECT_NE(result.find("1-0"), std::string::npos);
+    EXPECT_NE(result.find("f1"), std::string::npos);
+}
+
+TEST(EncodeTest, StreamEntries) {
+    using namespace credis::store;
+    StreamEntry e1;
+    e1.id = "1-0";
+    e1.fields = {{"f1", "v1"}};
+    std::vector<StreamEntry> vec{e1};
+    std::vector<std::pair<std::string, std::span<const StreamEntry>>> streams;
+    streams.emplace_back("key", vec);
+    auto result = encode_stream_entries(streams);
+    EXPECT_TRUE(result.starts_with("*1\r\n"));
+    EXPECT_NE(result.find("key"), std::string::npos);
+    EXPECT_NE(result.find("1-0"), std::string::npos);
+}
+
+TEST(ParseRespTest, IncompleteArrayReturnsError) {
+    auto result = parse_one("*3\r\n$3\r\nGET\r\n");
+    EXPECT_FALSE(result.has_value());
+}
+
+TEST(ParseRespTest, NegativeCountArrayReturnsError) {
+    auto result = parse_one("*-1\r\n");
+    EXPECT_FALSE(result.has_value());
+}

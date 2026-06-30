@@ -301,3 +301,128 @@ TEST(StoreTest, SetIncrementsKeyVersion) {
     auto v2 = store.get_key_version("key");
     EXPECT_GT(v2, v1);
 }
+
+TEST(StoreTest, MsetStoresMultipleKeys) {
+    Store store;
+    store.mset({{"k1", "v1"}, {"k2", "v2"}, {"k3", "v3"}});
+    EXPECT_EQ(store.get("k1").value_or(""), "v1");
+    EXPECT_EQ(store.get("k2").value_or(""), "v2");
+    EXPECT_EQ(store.get("k3").value_or(""), "v3");
+}
+
+TEST(StoreTest, MsetWithoutTtlHitsExisting) {
+    Store store;
+    store.set("k1", "old");
+    store.mset({{"k1", "new"}});
+    EXPECT_EQ(store.get("k1").value_or(""), "old");
+}
+
+TEST(StoreTest, DelNonExistentReturnsFalse) {
+    Store store;
+    EXPECT_FALSE(store.del("nonexistent"));
+}
+
+TEST(StoreTest, IncrOnWrongTypeReturnsNullopt) {
+    Store store;
+    store.rpush("list", "item");
+    auto result = store.incr("list");
+    EXPECT_FALSE(result.has_value());
+}
+
+TEST(StoreTest, LrangeWithNegativeIndices) {
+    Store store;
+    store.rpush("list", "a");
+    store.rpush("list", "b");
+    store.rpush("list", "c");
+    auto result = store.lrange("list", -2, -1);
+    ASSERT_EQ(result.size(), 2uz);
+    EXPECT_EQ(result[0], "b");
+    EXPECT_EQ(result[1], "c");
+}
+
+TEST(StoreTest, LrangeEmptyList) {
+    Store store;
+    auto result = store.lrange("empty", 0, -1);
+    EXPECT_TRUE(result.empty());
+}
+
+TEST(StoreTest, LpopCountedReturnsMultiple) {
+    Store store;
+    store.rpush("list", "a");
+    store.rpush("list", "b");
+    store.rpush("list", "c");
+    auto result = store.lpop("list", 2);
+    ASSERT_EQ(result.size(), 2uz);
+    EXPECT_EQ(result[0], "a");
+    EXPECT_EQ(result[1], "b");
+    EXPECT_EQ(store.llen("list"), 1);
+}
+
+TEST(StoreTest, RpopCountedReturnsMultipleReverse) {
+    Store store;
+    store.rpush("list", "a");
+    store.rpush("list", "b");
+    store.rpush("list", "c");
+    auto result = store.rpop("list", 2);
+    ASSERT_EQ(result.size(), 2uz);
+    EXPECT_EQ(result[0], "c");
+    EXPECT_EQ(result[1], "b");
+}
+
+TEST(StoreTest, ZrankNonExistent) {
+    Store store;
+    auto result = store.zrank("zset", "missing");
+    EXPECT_FALSE(result.has_value());
+}
+
+TEST(StoreTest, ZscoreNonExistent) {
+    Store store;
+    auto result = store.zscore("zset", "missing");
+    EXPECT_FALSE(result.has_value());
+}
+
+TEST(StoreTest, ZcardEmpty) {
+    Store store;
+    EXPECT_EQ(store.zcard("empty"), 0);
+}
+
+TEST(StoreTest, ZrangePartialRange) {
+    Store store;
+    store.zadd("zset", 1.0, "a");
+    store.zadd("zset", 2.0, "b");
+    store.zadd("zset", 3.0, "c");
+    store.zadd("zset", 4.0, "d");
+    auto result = store.zrange("zset", 1, 2);
+    ASSERT_EQ(result.size(), 2uz);
+    EXPECT_EQ(result[0], "b");
+    EXPECT_EQ(result[1], "c");
+}
+
+TEST(StoreTest, ZgetallReturnsAllMembers) {
+    Store store;
+    store.zadd("zset", 1.0, "a");
+    store.zadd("zset", 2.0, "b");
+    auto result = store.zgetall("zset");
+    ASSERT_EQ(result.size(), 2uz);
+}
+
+TEST(StoreTest, GetStreamMaxIdEmpty) {
+    Store store;
+    auto result = store.get_stream_max_id("nonexistent");
+    EXPECT_FALSE(result.has_value());
+}
+
+TEST(StoreTest, XaddAutoSeqWithTimestampZero) {
+    Store store;
+    auto id = store.xadd("stream", "0-*", {{"f1", "v1"}});
+    EXPECT_FALSE(id.starts_with("ERR"));
+    EXPECT_NE(id.find("-"), std::string::npos);
+}
+
+TEST(StoreTest, KeyIsAbsentOrHoldsTypeCheck) {
+    Store store;
+    EXPECT_TRUE(store.key_is_absent_or_holds<String>("nonexistent"));
+    store.set("str", "val");
+    EXPECT_TRUE(store.key_is_absent_or_holds<String>("str"));
+    EXPECT_FALSE(store.key_is_absent_or_holds<List>("str"));
+}
