@@ -178,3 +178,34 @@ TEST(AofReplayIntegration, ReplaysSetAndGetReturnsCorrectValue) {
 
     std::filesystem::remove_all(tmp_path);
 }
+
+TEST_F(HandlerServerTest, ConfigGetDir) {
+    config_.dir = "/tmp/mydir";
+    CommandHandler handler(store_, config_);
+
+    auto response = handler.process("*3\r\n$6\r\nCONFIG\r\n$3\r\nGET\r\n$3\r\ndir\r\n");
+    EXPECT_EQ(response, "*2\r\n$3\r\ndir\r\n$10\r\n/tmp/mydir\r\n");
+}
+
+TEST_F(HandlerServerTest, ConfigGetDbfilename) {
+    config_.dbfilename = "dump.rdb";
+    CommandHandler handler(store_, config_);
+
+    auto response = handler.process("*3\r\n$6\r\nCONFIG\r\n$3\r\nGET\r\n$10\r\ndbfilename\r\n");
+    EXPECT_EQ(response, "*2\r\n$10\r\ndbfilename\r\n$8\r\ndump.rdb\r\n");
+}
+
+TEST_F(HandlerServerTest, ConfigGetDbfilenameEmpty) {
+    auto response = handler_.process("*3\r\n$6\r\nCONFIG\r\n$3\r\nGET\r\n$10\r\ndbfilename\r\n");
+    EXPECT_EQ(response, "*2\r\n$10\r\ndbfilename\r\n$-1\r\n");
+}
+
+TEST_F(HandlerServerTest, ConfigGetUnknownParam) {
+    auto response = handler_.process("*3\r\n$6\r\nCONFIG\r\n$3\r\nGET\r\n$7\r\nunknown\r\n");
+    EXPECT_EQ(response, "*0\r\n");
+}
+
+TEST_F(HandlerServerTest, ConfigGetAppendonlyWithoutAof) {
+    auto response = handler_.process("*3\r\n$6\r\nCONFIG\r\n$3\r\nGET\r\n$10\r\nappendonly\r\n");
+    EXPECT_EQ(response, "*2\r\n$10\r\nappendonly\r\n$0\r\n\r\n");
+}

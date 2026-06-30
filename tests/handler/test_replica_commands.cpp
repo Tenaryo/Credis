@@ -26,6 +26,22 @@ TEST_F(HandlerReplicaTest, ReplconfCapaPsync2) {
 TEST_F(HandlerReplicaTest, Psync) {
     auto response = handler_.process("*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n");
     EXPECT_TRUE(response.starts_with("+FULLRESYNC"));
-    // response contains: +FULLRESYNC <replid> <offset>\r\n followed by $88\r\n + 88 bytes RDB
     EXPECT_TRUE(response.find("$88\r\n") != std::string::npos);
+}
+
+TEST_F(HandlerReplicaTest, ReplconfGetack) {
+    auto response = handler_.process("*2\r\n$8\r\nREPLCONF\r\n$6\r\nGETACK\r\n");
+    EXPECT_TRUE(response.starts_with("*3\r\n"));
+    EXPECT_NE(response.find("REPLCONF"), std::string::npos);
+    EXPECT_NE(response.find("ACK"), std::string::npos);
+}
+
+TEST_F(HandlerReplicaTest, WaitWrongArgCount) {
+    auto response = handler_.process("*2\r\n$4\r\nWAIT\r\n$1\r\n1\r\n");
+    EXPECT_TRUE(response.starts_with("-ERR"));
+}
+
+TEST_F(HandlerReplicaTest, WaitInvalidArgs) {
+    auto response = handler_.process("*3\r\n$4\r\nWAIT\r\n$3\r\nabc\r\n$1\r\n0\r\n");
+    EXPECT_TRUE(response.starts_with("-ERR"));
 }
