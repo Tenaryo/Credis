@@ -8,26 +8,51 @@ on:
 
 jobs:
   build-and-test:
-    name: Build & Test (GCC 13)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: GCC 14 (Debug)
+            compiler: g++-14
+            packages: g++-14 ninja-build cmake
+            sanitizers: OFF
+            cxx_flags: ""
+
+          - name: GCC 14 (ASan+UBSan)
+            compiler: g++-14
+            packages: g++-14 ninja-build cmake
+            sanitizers: ON
+            cxx_flags: ""
+
+          - name: Clang 18 (Debug)
+            compiler: clang++-18
+            packages: clang-18 ninja-build cmake
+            sanitizers: OFF
+            cxx_flags: "-D__cpp_lib_expected=202211L"
+
+    name: ${{ matrix.name }}
     runs-on: ubuntu-24.04
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++-13 ninja-build cmake
+          sudo apt-get install -y ${{ matrix.packages }}
 
       - name: Configure CMake
         run: |
           cmake -B build -S . -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_CXX_COMPILER=g++-13 \
+            -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} \
+            -DCMAKE_CXX_FLAGS="${{ matrix.cxx_flags }}" \
             -DBUILD_TESTS=ON \
+            -DENABLE_SANITIZERS=${{ matrix.sanitizers }} \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: Build
         run: cmake --build build -j $(nproc)
 
       - name: Run tests
-        run: ./run_tests.sh
+        run: ctest --test-dir build --output-on-failure -j $(nproc)
