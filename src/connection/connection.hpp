@@ -28,11 +28,20 @@ class Connection {
     }
     auto handle_read() -> std::optional<std::string_view>;
     void consume(size_t n);
+    [[nodiscard]] auto pending_write() noexcept -> std::string& {
+        return pending_write_;
+    }
     void send_data(const char* data, size_t len);
     void flush();
-    [[nodiscard]] auto pending_data() const -> std::string_view { return pending_write_; }
-    void clear_pending() { pending_write_.clear(); }
-    void trim_pending(size_t n) { pending_write_.erase(0, n); }
+    [[nodiscard]] auto pending_data() const -> std::string_view {
+        return pending_write_;
+    }
+    void clear_pending() {
+        pending_write_.clear();
+    }
+    void trim_pending(size_t n) {
+        pending_write_.erase(0, n);
+    }
 
   private:
     void close();

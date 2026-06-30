@@ -130,7 +130,7 @@ class Store {
   public:
     void set(std::string key, std::string value, std::optional<uint64_t> ttl_ms = std::nullopt);
     void mset(const std::vector<std::pair<std::string, std::string>>& pairs);
-    auto get(std::string_view key) -> std::optional<std::string>;
+    auto get(std::string_view key) -> std::optional<std::string_view>;
     auto incr(std::string_view key) -> std::optional<int64_t>;
     auto exists(std::string_view key) -> bool;
     auto del(std::string_view key) -> bool;
@@ -142,7 +142,7 @@ class Store {
     auto lpop(std::string_view key, int64_t count) -> std::vector<std::string>;
     auto rpop(std::string_view key) -> std::optional<std::string>;
     auto rpop(std::string_view key, int64_t count) -> std::vector<std::string>;
-    auto lrange(std::string_view key, int64_t start, int64_t stop) -> std::vector<std::string>;
+    auto lrange(std::string_view key, int64_t start, int64_t stop) -> std::vector<std::string_view>;
 
     auto xadd(std::string key, const std::string& id, const std::vector<std::pair<std::string, std::string>>& fields)
         -> std::string;
@@ -151,18 +151,18 @@ class Store {
 
     auto xread(std::string_view key, std::string_view id) -> std::span<const StreamEntry>;
 
-    auto get_stream_max_id(std::string_view key) -> std::optional<std::string>;
+    auto get_stream_max_id(std::string_view key) -> std::optional<std::string_view>;
 
     auto zadd(std::string key, double score, std::string member) -> int64_t;
     auto zrank(std::string_view key, std::string_view member) -> std::optional<int64_t>;
-    auto zrange(std::string_view key, int64_t start, int64_t stop) -> std::vector<std::string>;
+    auto zrange(std::string_view key, int64_t start, int64_t stop) -> std::vector<std::string_view>;
     auto zcard(std::string_view key) -> int64_t;
     auto zscore(std::string_view key, std::string_view member) -> std::optional<double>;
     auto zrem(std::string_view key, std::string_view member) -> int64_t;
     auto zgetall(std::string_view key) -> std::vector<std::pair<std::string, double>>;
 
-    auto get_type(std::string_view key) -> std::string;
-    auto keys() -> std::vector<std::string>;
+    auto get_type(std::string_view key) -> std::string_view;
+    auto keys() -> std::vector<std::string_view>;
 
     template <typename T>
     [[nodiscard]] auto key_is_absent_or_holds(std::string_view key) const -> bool {

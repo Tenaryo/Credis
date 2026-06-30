@@ -14,16 +14,19 @@
 
 namespace credis::handler {
 
-auto handle_xadd(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
+void handle_xadd(CommandContext& ctx, const std::vector<std::string_view>& args) {
     std::string key(args[1]);
     std::string id(args[2]);
 
     if (!ctx.store.key_is_absent_or_holds<credis::store::Stream>(key)) {
-        return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
+        credis::protocol::encode_error_into(*ctx.out,
+                                            "WRONGTYPE Operation against a key holding the wrong kind of value");
+        return;
     }
 
     if ((args.size() - 3) % 2 != 0) {
-        return credis::protocol::encode_error("ERR wrong number of arguments for 'xadd' command");
+        credis::protocol::encode_error_into(*ctx.out, "ERR wrong number of arguments for 'xadd' command");
+        return;
     }
 
     std::vector<std::pair<std::string, std::string>> fields;
@@ -34,22 +37,23 @@ auto handle_xadd(CommandContext& ctx, const std::vector<std::string_view>& args)
     std::string result = ctx.store.xadd(key, id, fields);
 
     if (result.starts_with("ERR")) {
-        return credis::protocol::encode_error(result);
+        credis::protocol::encode_error_into(*ctx.out, result);
+        return;
     }
 
-    return credis::protocol::encode_bulk_string(result);
+    credis::protocol::encode_bulk_string_into(*ctx.out, result);
 }
 
-auto handle_xrange(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
+void handle_xrange(CommandContext& ctx, const std::vector<std::string_view>& args) {
     std::string_view key = args[1];
     std::string_view start = args[2];
     std::string_view end = args[3];
 
     auto entries = ctx.store.xrange(key, start, end);
-    return credis::protocol::encode_entries(entries);
+    credis::protocol::encode_entries_into(*ctx.out, entries);
 }
 
-auto handle_xread(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
+void handle_xread(CommandContext& ctx, const std::vector<std::string_view>& args) {
     size_t streams_idx = 0;
     for (size_t i = 1; i < args.size(); ++i) {
         if (credis::util::to_upper(args[i]) == "STREAMS") {
@@ -59,12 +63,14 @@ auto handle_xread(CommandContext& ctx, const std::vector<std::string_view>& args
     }
 
     if (streams_idx == 0) {
-        return credis::protocol::encode_error("ERR syntax error");
+        credis::protocol::encode_error_into(*ctx.out, "ERR syntax error");
+        return;
     }
 
     size_t num_pairs = args.size() - streams_idx - 1;
     if (num_pairs == 0 || num_pairs % 2 != 0) {
-        return credis::protocol::encode_error("ERR wrong number of arguments for 'xread' command");
+        credis::protocol::encode_error_into(*ctx.out, "ERR wrong number of arguments for 'xread' command");
+        return;
     }
 
     size_t num_streams = num_pairs / 2;
@@ -78,7 +84,7 @@ auto handle_xread(CommandContext& ctx, const std::vector<std::string_view>& args
         results.emplace_back(std::string(key), entries);
     }
 
-    return credis::protocol::encode_stream_entries(results);
+    credis::protocol::encode_stream_entries_into(*ctx.out, results);
 }
 
 auto handle_xread_with_blocking(CommandContext& ctx, int fd, const std::vector<std::string_view>& args)
@@ -91,12 +97,13 @@ auto handle_xread_with_blocking(CommandContext& ctx, int fd, const std::vector<s
         if (credis::util::to_upper(args[start_idx]) == "BLOCK") {
             has_block = true;
             if (start_idx + 1 >= args.size()) {
-                return ProcessResult::normal(credis::protocol::encode_error("ERR syntax error"));
+                credis::protocol::encode_error_into(*ctx.out, "ERR syntax error");
+                return ProcessResult::normal();
             }
             auto parsed = credis::util::parse_int<int64_t>(args[start_idx + 1]);
             if (!parsed) {
-                return ProcessResult::normal(
-                    credis::protocol::encode_error("ERR value is not an integer or out of range"));
+                credis::protocol::encode_error_into(*ctx.out, "ERR value is not an integer or out of range");
+                return ProcessResult::normal();
             }
             timeout_ms = *parsed;
             start_idx += 2;
@@ -112,18 +119,20 @@ auto handle_xread_with_blocking(CommandContext& ctx, int fd, const std::vector<s
     }
 
     if (streams_idx == 0) {
-        return ProcessResult::normal(credis::protocol::encode_error("ERR syntax error"));
+        credis::protocol::encode_error_into(*ctx.out, "ERR syntax error");
+        return ProcessResult::normal();
     }
 
     size_t num_pairs = args.size() - streams_idx - 1;
     if (num_pairs == 0 || num_pairs % 2 != 0) {
-        return ProcessResult::normal(
-            credis::protocol::encode_error("ERR wrong number of arguments for 'xread' command"));
+        credis::protocol::encode_error_into(*ctx.out, "ERR wrong number of arguments for 'xread' command");
+        return ProcessResult::normal();
     }
 
     size_t num_streams = num_pairs / 2;
     if (has_block && num_streams != 1) {
-        return ProcessResult::normal(credis::protocol::encode_error("ERR BLOCK only supports single stream"));
+        credis::protocol::encode_error_into(*ctx.out, "ERR BLOCK only supports single stream");
+        return ProcessResult::normal();
     }
 
     std::vector<std::pair<std::string, std::span<const credis::store::StreamEntry>>> results;
@@ -145,7 +154,8 @@ auto handle_xread_with_blocking(CommandContext& ctx, int fd, const std::vector<s
     bool has_data = std::ranges::any_of(results, [](const auto& p) { return !p.second.empty(); });
 
     if (has_data || !has_block) {
-        return ProcessResult::normal(credis::protocol::encode_stream_entries(results));
+        credis::protocol::encode_stream_entries_into(*ctx.out, results);
+        return ProcessResult::normal();
     }
 
     if (ctx.blocking_manager) {
@@ -163,7 +173,8 @@ auto handle_xread_with_blocking(CommandContext& ctx, int fd, const std::vector<s
         return ProcessResult::block();
     }
 
-    return ProcessResult::normal(credis::protocol::encode_error("ERR blocking not available"));
+    credis::protocol::encode_error_into(*ctx.out, "ERR blocking not available");
+    return ProcessResult::normal();
 }
 
 auto handle_xadd_with_blocking(CommandContext& ctx,
@@ -173,13 +184,14 @@ auto handle_xadd_with_blocking(CommandContext& ctx,
     std::string id(args[2]);
 
     if (!ctx.store.key_is_absent_or_holds<credis::store::Stream>(key)) {
-        return ProcessResult::normal(
-            credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value"));
+        credis::protocol::encode_error_into(*ctx.out,
+                                            "WRONGTYPE Operation against a key holding the wrong kind of value");
+        return ProcessResult::normal();
     }
 
     if ((args.size() - 3) % 2 != 0) {
-        return ProcessResult::normal(
-            credis::protocol::encode_error("ERR wrong number of arguments for 'xadd' command"));
+        credis::protocol::encode_error_into(*ctx.out, "ERR wrong number of arguments for 'xadd' command");
+        return ProcessResult::normal();
     }
 
     std::vector<std::pair<std::string, std::string>> fields;
@@ -191,7 +203,8 @@ auto handle_xadd_with_blocking(CommandContext& ctx,
     std::string new_id = ctx.store.xadd(std::move(key), id, fields);
 
     if (new_id.starts_with("ERR")) {
-        return ProcessResult::normal(credis::protocol::encode_error(new_id));
+        credis::protocol::encode_error_into(*ctx.out, new_id);
+        return ProcessResult::normal();
     }
 
     if (ctx.blocking_manager) {
@@ -202,7 +215,8 @@ auto handle_xadd_with_blocking(CommandContext& ctx,
         }
     }
 
-    return ProcessResult::normal(credis::protocol::encode_bulk_string(new_id));
+    credis::protocol::encode_bulk_string_into(*ctx.out, new_id);
+    return ProcessResult::normal();
 }
 
 } // namespace credis::handler

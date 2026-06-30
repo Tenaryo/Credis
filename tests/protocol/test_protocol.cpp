@@ -127,3 +127,64 @@ TEST(ParseRespTest, NegativeCountArrayReturnsError) {
     auto result = parse_one("*-1\r\n");
     EXPECT_FALSE(result.has_value());
 }
+
+TEST(EncodeIntoTest, SimpleString) {
+    std::string out;
+    encode_simple_string_into(out, "OK");
+    EXPECT_EQ(out, "+OK\r\n");
+}
+
+TEST(EncodeIntoTest, BulkString) {
+    std::string out;
+    encode_bulk_string_into(out, "hello");
+    EXPECT_EQ(out, "$5\r\nhello\r\n");
+}
+
+TEST(EncodeIntoTest, Error) {
+    std::string out;
+    encode_error_into(out, "ERR msg");
+    EXPECT_EQ(out, "-ERR msg\r\n");
+}
+
+TEST(EncodeIntoTest, IntegerPositive) {
+    std::string out;
+    encode_integer_into(out, 42);
+    EXPECT_EQ(out, ":42\r\n");
+}
+
+TEST(EncodeIntoTest, IntegerNegative) {
+    std::string out;
+    encode_integer_into(out, -7);
+    EXPECT_EQ(out, ":-7\r\n");
+}
+
+TEST(EncodeIntoTest, IntegerZero) {
+    std::string out;
+    encode_integer_into(out, 0);
+    EXPECT_EQ(out, ":0\r\n");
+}
+
+TEST(EncodeIntoTest, NullBulkString) {
+    std::string out;
+    encode_null_bulk_string_into(out);
+    EXPECT_EQ(out, "$-1\r\n");
+}
+
+TEST(EncodeIntoTest, NullArray) {
+    std::string out;
+    encode_null_array_into(out);
+    EXPECT_EQ(out, "*-1\r\n");
+}
+
+TEST(EncodeIntoTest, ArrayStringView) {
+    std::string out;
+    std::vector<std::string_view> sv = {"GET", "key"};
+    encode_array_into(out, std::span<const std::string_view>(sv));
+    EXPECT_EQ(out, "*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n");
+}
+
+TEST(EncodeIntoTest, ArrayString) {
+    std::string out;
+    encode_array_into(out, std::vector<std::string>{"a", "b"});
+    EXPECT_EQ(out, "*2\r\n$1\r\na\r\n$1\r\nb\r\n");
+}

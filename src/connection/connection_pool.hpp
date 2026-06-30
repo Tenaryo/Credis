@@ -19,6 +19,7 @@ class ConnectionPool {
     auto read_from(int fd) -> std::optional<std::string_view>;
     void consume(int fd, size_t n);
     void send_to(int fd, std::string_view response);
+    [[nodiscard]] auto get_pending_write(int fd) -> std::string&;
     void flush_all();
     [[nodiscard]] auto contains(int fd) const -> bool;
 };

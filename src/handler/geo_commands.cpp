@@ -15,14 +15,17 @@
 
 namespace credis::handler {
 
-auto handle_geoadd(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
+void handle_geoadd(CommandContext& ctx, const std::vector<std::string_view>& args) {
     if (!ctx.store.key_is_absent_or_holds<credis::store::SortedSet>(args[1])) {
-        return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
+        credis::protocol::encode_error_into(*ctx.out,
+                                            "WRONGTYPE Operation against a key holding the wrong kind of value");
+        return;
     }
     auto lon = credis::util::parse_double(args[2]);
     auto lat = credis::util::parse_double(args[3]);
     if (!lon || !lat) {
-        return credis::protocol::encode_error("ERR value is not a valid float");
+        credis::protocol::encode_error_into(*ctx.out, "ERR value is not a valid float");
+        return;
     }
 
     bool lon_invalid = !std::isfinite(*lon) || *lon < credis::geo::kLonMin || *lon > credis::geo::kLonMax;
@@ -31,21 +34,20 @@ auto handle_geoadd(CommandContext& ctx, const std::vector<std::string_view>& arg
     if (lon_invalid || lat_invalid) {
         char buf[128];
         std::snprintf(buf, sizeof(buf), "ERR invalid longitude,latitude pair %.6f,%.6f", *lon, *lat);
-        return credis::protocol::encode_error(buf);
+        credis::protocol::encode_error_into(*ctx.out, buf);
+        return;
     }
 
     auto score = static_cast<double>(credis::geo::encode(*lat, *lon));
     auto added = ctx.store.zadd(std::string(args[1]), score, std::string(args[4]));
-    return credis::protocol::encode_integer(added);
+    credis::protocol::encode_integer_into(*ctx.out, added);
 }
 
-auto handle_geopos(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
+void handle_geopos(CommandContext& ctx, const std::vector<std::string_view>& args) {
     const auto& key = args[1];
     auto count = args.size() - 2;
 
-    std::string resp;
-    resp.reserve(count * 64);
-    resp += "*" + std::to_string(count) + "\r\n";
+    *ctx.out += "*" + std::to_string(count) + "\r\n";
 
     for (size_t i = 2; i < args.size(); ++i) {
         auto score = ctx.store.zscore(key, args[i]);
@@ -55,51 +57,54 @@ auto handle_geopos(CommandContext& ctx, const std::vector<std::string_view>& arg
             char lat_buf[32];
             std::snprintf(lon_buf, sizeof(lon_buf), "%.17g", coords.lon);
             std::snprintf(lat_buf, sizeof(lat_buf), "%.17g", coords.lat);
-            resp += "*2\r\n";
-            resp += credis::protocol::encode_bulk_string(lon_buf);
-            resp += credis::protocol::encode_bulk_string(lat_buf);
+            *ctx.out += "*2\r\n";
+            credis::protocol::encode_bulk_string_into(*ctx.out, lon_buf);
+            credis::protocol::encode_bulk_string_into(*ctx.out, lat_buf);
         } else {
-            resp += "*-1\r\n";
+            *ctx.out += "*-1\r\n";
         }
     }
-
-    return resp;
 }
 
-auto handle_geodist(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
+void handle_geodist(CommandContext& ctx, const std::vector<std::string_view>& args) {
     auto score1 = ctx.store.zscore(args[1], args[2]);
     auto score2 = ctx.store.zscore(args[1], args[3]);
     if (!score1 || !score2) {
-        return credis::protocol::encode_null_bulk_string();
+        credis::protocol::encode_null_bulk_string_into(*ctx.out);
+        return;
     }
     auto c1 = credis::geo::decode(static_cast<uint64_t>(*score1));
     auto c2 = credis::geo::decode(static_cast<uint64_t>(*score2));
     auto dist = credis::geo::distance(c1.lat, c1.lon, c2.lat, c2.lon);
     char buf[32];
     std::snprintf(buf, sizeof(buf), "%.4f", dist);
-    return credis::protocol::encode_bulk_string(buf);
+    credis::protocol::encode_bulk_string_into(*ctx.out, buf);
 }
 
-auto handle_geosearch(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
+void handle_geosearch(CommandContext& ctx, const std::vector<std::string_view>& args) {
     const auto& key = args[1];
 
     if (credis::util::to_upper(args[2]) != "FROMLONLAT") {
-        return credis::protocol::encode_error("ERR syntax error");
+        credis::protocol::encode_error_into(*ctx.out, "ERR syntax error");
+        return;
     }
 
     auto search_lon = credis::util::parse_double(args[3]);
     auto search_lat = credis::util::parse_double(args[4]);
     if (!search_lon || !search_lat) {
-        return credis::protocol::encode_error("ERR value is not a valid float");
+        credis::protocol::encode_error_into(*ctx.out, "ERR value is not a valid float");
+        return;
     }
 
     if (credis::util::to_upper(args[5]) != "BYRADIUS") {
-        return credis::protocol::encode_error("ERR syntax error");
+        credis::protocol::encode_error_into(*ctx.out, "ERR syntax error");
+        return;
     }
 
     auto radius = credis::util::parse_double(args[6]);
     if (!radius) {
-        return credis::protocol::encode_error("ERR value is not a valid float");
+        credis::protocol::encode_error_into(*ctx.out, "ERR value is not a valid float");
+        return;
     }
 
     auto unit = credis::util::to_upper(args[7]);
@@ -107,7 +112,8 @@ auto handle_geosearch(CommandContext& ctx, const std::vector<std::string_view>& 
         = {{"M", 1.0}, {"KM", 1000.0}, {"MI", 1609.34}, {"FT", 0.3048}};
     const auto* factor_it = std::ranges::find_if(kUnitFactors, [&](const auto& p) { return p.first == unit; });
     if (factor_it == std::end(kUnitFactors)) {
-        return credis::protocol::encode_error("ERR unsupported unit provided");
+        credis::protocol::encode_error_into(*ctx.out, "ERR unsupported unit provided");
+        return;
     }
 
     double radius_m = *radius * factor_it->second;
@@ -122,7 +128,7 @@ auto handle_geosearch(CommandContext& ctx, const std::vector<std::string_view>& 
         }
     }
 
-    return credis::protocol::encode_array(matched);
+    credis::protocol::encode_array_into(*ctx.out, matched);
 }
 
 } // namespace credis::handler

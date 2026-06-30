@@ -75,12 +75,12 @@ void Store::mset(const std::vector<std::pair<std::string, std::string>>& pairs) 
     }
 }
 
-auto Store::get(std::string_view key) -> std::optional<std::string> {
+auto Store::get(std::string_view key) -> std::optional<std::string_view> {
     Entry* entry = find_valid_entry(key);
     if ((entry == nullptr) || !std::holds_alternative<String>(entry->value)) {
         return std::nullopt;
     }
-    return std::get<String>(entry->value);
+    return std::string_view(std::get<String>(entry->value));
 }
 
 auto Store::incr(std::string_view key) -> std::optional<int64_t> {
@@ -208,8 +208,8 @@ auto Store::rpop(std::string_view key, int64_t count) -> std::vector<std::string
     return result;
 }
 
-auto Store::lrange(std::string_view key, int64_t start, int64_t stop) -> std::vector<std::string> {
-    std::vector<std::string> result;
+auto Store::lrange(std::string_view key, int64_t start, int64_t stop) -> std::vector<std::string_view> {
+    std::vector<std::string_view> result;
     auto* list = get_list(key);
     if (list == nullptr) {
         return result;
@@ -241,13 +241,13 @@ auto Store::lrange(std::string_view key, int64_t start, int64_t stop) -> std::ve
 
     result.reserve(static_cast<size_t>(stop - start + 1));
     for (int64_t i = start; i <= stop; ++i) {
-        result.push_back((*list)[static_cast<size_t>(i)]);
+        result.push_back(std::string_view((*list)[static_cast<size_t>(i)]));
     }
 
     return result;
 }
 
-auto Store::get_type(std::string_view key) -> std::string {
+auto Store::get_type(std::string_view key) -> std::string_view {
     auto* entry = find_valid_entry(key);
     if (entry == nullptr) {
         return "none";
@@ -380,13 +380,13 @@ auto Store::xread(std::string_view key, std::string_view id) -> std::span<const 
     return {stream->data() + lo, stream->size() - lo};
 }
 
-auto Store::get_stream_max_id(std::string_view key) -> std::optional<std::string> {
+auto Store::get_stream_max_id(std::string_view key) -> std::optional<std::string_view> {
     auto* stream = get_stream(key);
     if ((stream == nullptr) || stream->empty()) {
         return std::nullopt;
     }
 
-    return stream->back().id;
+    return std::string_view(stream->back().id);
 }
 
 auto Store::zadd(std::string key, double score, std::string member) -> int64_t {
@@ -409,7 +409,7 @@ auto Store::zrank(std::string_view key, std::string_view member) -> std::optiona
     return static_cast<int64_t>(std::distance(zset->entries.begin(), it->second));
 }
 
-auto Store::zrange(std::string_view key, int64_t start, int64_t stop) -> std::vector<std::string> {
+auto Store::zrange(std::string_view key, int64_t start, int64_t stop) -> std::vector<std::string_view> {
     auto* zset = get_zset(key);
     if (zset == nullptr) {
         return {};
@@ -440,10 +440,10 @@ auto Store::zrange(std::string_view key, int64_t start, int64_t stop) -> std::ve
     auto it = std::next(zset->entries.begin(), start);
     auto end_it = std::next(zset->entries.begin(), stop + 1);
 
-    std::vector<std::string> result;
+    std::vector<std::string_view> result;
     result.reserve(static_cast<size_t>(stop - start + 1));
     for (; it != end_it; ++it) {
-        result.push_back(it->second);
+        result.push_back(std::string_view(it->second));
     }
     return result;
 }
@@ -489,14 +489,14 @@ auto Store::zgetall(std::string_view key) -> std::vector<std::pair<std::string, 
     return result;
 }
 
-auto Store::keys() -> std::vector<std::string> {
-    std::vector<std::string> result;
+auto Store::keys() -> std::vector<std::string_view> {
+    std::vector<std::string_view> result;
     result.reserve(data_.size());
     for (auto it = data_.begin(); it != data_.end();) {
         if (is_expired(it->second)) {
             it = data_.erase(it);
         } else {
-            result.push_back(it->first);
+            result.push_back(std::string_view(it->first));
             ++it;
         }
     }

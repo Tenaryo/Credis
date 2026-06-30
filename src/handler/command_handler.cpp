@@ -63,15 +63,17 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>&,
              int fd,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_ping(ctx, fd));
+              handle_ping(ctx, fd);
+              return ProcessResult::normal();
           },
           1}},
         {"ECHO",
-         {[](CommandContext&,
+         {[](CommandContext& ctx,
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_echo(args[1]));
+              handle_echo(ctx, args[1]);
+              return ProcessResult::normal();
           },
           2}},
         {"SET",
@@ -79,7 +81,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_set(ctx, args));
+              handle_set(ctx, args);
+              return ProcessResult::normal();
           },
           3}},
         {"MSET",
@@ -87,7 +90,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_mset(ctx, args));
+              handle_mset(ctx, args);
+              return ProcessResult::normal();
           },
           3}},
         {"GET",
@@ -95,7 +99,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_get(ctx, args[1]));
+              handle_get(ctx, args[1]);
+              return ProcessResult::normal();
           },
           2}},
         {"INCR",
@@ -103,7 +108,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_incr(ctx, args[1]));
+              handle_incr(ctx, args[1]);
+              return ProcessResult::normal();
           },
           2}},
         {"RPUSH",
@@ -114,7 +120,8 @@ void CommandHandler::register_commands() {
               if (send) {
                   return handle_rpush_with_blocking(ctx, args, send);
               }
-              return ProcessResult::normal(handle_rpush(ctx, args));
+              handle_rpush(ctx, args);
+              return ProcessResult::normal();
           },
           3}},
         {"LPUSH",
@@ -125,7 +132,8 @@ void CommandHandler::register_commands() {
               if (send) {
                   return handle_lpush_with_blocking(ctx, args, send);
               }
-              return ProcessResult::normal(handle_lpush(ctx, args));
+              handle_lpush(ctx, args);
+              return ProcessResult::normal();
           },
           3}},
         {"LLEN",
@@ -133,7 +141,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(credis::protocol::encode_integer(ctx.store.llen(args[1])));
+              credis::protocol::encode_integer_into(*ctx.out, ctx.store.llen(args[1]));
+              return ProcessResult::normal();
           },
           2}},
         {"LPOP",
@@ -141,7 +150,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_lpop(ctx, args));
+              handle_lpop(ctx, args);
+              return ProcessResult::normal();
           },
           2}},
         {"RPOP",
@@ -149,7 +159,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_rpop(ctx, args));
+              handle_rpop(ctx, args);
+              return ProcessResult::normal();
           },
           2}},
         {"LRANGE",
@@ -157,7 +168,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_lrange(ctx, args));
+              handle_lrange(ctx, args);
+              return ProcessResult::normal();
           },
           4}},
         {"BLPOP",
@@ -173,7 +185,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(credis::protocol::encode_simple_string(ctx.store.get_type(args[1])));
+              credis::protocol::encode_simple_string_into(*ctx.out, ctx.store.get_type(args[1]));
+              return ProcessResult::normal();
           },
           2}},
         {"KEYS",
@@ -181,7 +194,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>&,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(credis::protocol::encode_array(ctx.store.keys()));
+              credis::protocol::encode_array_into(*ctx.out, ctx.store.keys());
+              return ProcessResult::normal();
           },
           2}},
         {"XADD",
@@ -197,7 +211,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_zadd(ctx, args));
+              handle_zadd(ctx, args);
+              return ProcessResult::normal();
           },
           4}},
         {"ZRANK",
@@ -205,7 +220,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_zrank(ctx, args));
+              handle_zrank(ctx, args);
+              return ProcessResult::normal();
           },
           3}},
         {"ZRANGE",
@@ -213,7 +229,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_zrange(ctx, args));
+              handle_zrange(ctx, args);
+              return ProcessResult::normal();
           },
           4}},
         {"ZCARD",
@@ -221,7 +238,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_zcard(ctx, args[1]));
+              handle_zcard(ctx, args[1]);
+              return ProcessResult::normal();
           },
           2}},
         {"ZSCORE",
@@ -229,7 +247,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_zscore(ctx, args));
+              handle_zscore(ctx, args);
+              return ProcessResult::normal();
           },
           3}},
         {"ZREM",
@@ -237,7 +256,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_zrem(ctx, args));
+              handle_zrem(ctx, args);
+              return ProcessResult::normal();
           },
           3}},
         {"GEOADD",
@@ -245,7 +265,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_geoadd(ctx, args));
+              handle_geoadd(ctx, args);
+              return ProcessResult::normal();
           },
           5}},
         {"GEOPOS",
@@ -253,7 +274,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_geopos(ctx, args));
+              handle_geopos(ctx, args);
+              return ProcessResult::normal();
           },
           3}},
         {"GEODIST",
@@ -261,7 +283,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_geodist(ctx, args));
+              handle_geodist(ctx, args);
+              return ProcessResult::normal();
           },
           4}},
         {"GEOSEARCH",
@@ -269,7 +292,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_geosearch(ctx, args));
+              handle_geosearch(ctx, args);
+              return ProcessResult::normal();
           },
           8}},
         {"XRANGE",
@@ -277,7 +301,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_xrange(ctx, args));
+              handle_xrange(ctx, args);
+              return ProcessResult::normal();
           },
           4}},
         {"XREAD",
@@ -293,7 +318,8 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>& args,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_info(ctx, args));
+              handle_info(ctx, args);
+              return ProcessResult::normal();
           },
           1}},
         {"BGREWRITEAOF",
@@ -301,18 +327,20 @@ void CommandHandler::register_commands() {
              const std::vector<std::string_view>&,
              int,
              const std::function<void(int, const std::string&)>&) -> ProcessResult {
-              return ProcessResult::normal(handle_bgrewriteaof(ctx));
+              handle_bgrewriteaof(ctx);
+              return ProcessResult::normal();
           },
           1}},
     };
 }
 
 auto CommandHandler::process(std::string_view input) -> std::string {
-    auto result = process_with_fd(-1, input, nullptr);
-    if (std::holds_alternative<ProcessResult::Normal>(result.state)) {
-        return std::get<ProcessResult::Normal>(result.state).response;
-    }
-    return std::get<ProcessResult::ReplicaHandshake>(result.state).response;
+    std::string response;
+    response.reserve(input.size());
+    ctx_.out = &response;
+    process_with_fd(-1, input, nullptr);
+    ctx_.out = nullptr;
+    return response;
 }
 
 auto CommandHandler::process_with_fd(int fd,
@@ -320,9 +348,11 @@ auto CommandHandler::process_with_fd(int fd,
                                      const std::function<void(int, const std::string&)>& send_to_client)
     -> ProcessResult {
     size_t total_consumed = 0;
-    ProcessResult result = ProcessResult::normal("");
+    ProcessResult result = ProcessResult::normal();
     std::string batch_resp;
     batch_resp.reserve(input.size());
+    std::string cmd_buf;
+    std::string* saved_out = ctx_.out;
 
     while (total_consumed < input.size()) {
         auto parsed = credis::protocol::parse_one(input.substr(total_consumed));
@@ -333,6 +363,10 @@ auto CommandHandler::process_with_fd(int fd,
         size_t cmd_start = total_consumed;
         total_consumed += parsed->consumed;
         std::string cmd_name = credis::util::to_upper(parsed->args[0]);
+
+        cmd_buf.clear();
+        ctx_.out = &cmd_buf;
+
         auto cmd_result = process_single_command(fd, std::move(parsed->args), cmd_name, send_to_client);
 
         if (is_write_command(cmd_name)) {
@@ -346,17 +380,23 @@ auto CommandHandler::process_with_fd(int fd,
         }
 
         if (!std::holds_alternative<ProcessResult::Normal>(cmd_result.state)) {
-            if (!batch_resp.empty() && send_to_client) {
-                send_to_client(fd, batch_resp);
+            ctx_.out = saved_out;
+            if (saved_out)
+                *saved_out += batch_resp + cmd_buf;
+            if (send_to_client) {
+                send_to_client(fd, batch_resp + cmd_buf);
             }
             cmd_result.propagate_cmds = std::move(result.propagate_cmds);
             cmd_result.consumed = total_consumed;
             return cmd_result;
         }
 
-        batch_resp += std::get<ProcessResult::Normal>(cmd_result.state).response;
-        result.state = std::move(cmd_result.state);
+        batch_resp += cmd_buf;
     }
+
+    ctx_.out = saved_out;
+    if (saved_out)
+        *saved_out += batch_resp;
 
     if (!batch_resp.empty() && send_to_client) {
         send_to_client(fd, batch_resp);
@@ -372,15 +412,17 @@ auto CommandHandler::process_single_command(int fd,
                                             const std::function<void(int, const std::string&)>& send_to_client)
     -> ProcessResult {
     if (args.empty()) {
-        return ProcessResult::normal(credis::protocol::encode_error("ERR empty command"));
+        credis::protocol::encode_error_into(*ctx_.out, "ERR empty command");
+        return ProcessResult::normal();
     }
 
     if (ctx_.pubsub_manager && ctx_.pubsub_manager->get().is_subscribed(fd)) {
         static constexpr auto kSubscribedAllowed = std::array{
             "SUBSCRIBE"sv, "UNSUBSCRIBE"sv, "PSUBSCRIBE"sv, "PUNSUBSCRIBE"sv, "PING"sv, "QUIT"sv, "RESET"sv};
         if (std::ranges::find(kSubscribedAllowed, cmd) == kSubscribedAllowed.end()) {
-            return ProcessResult::normal(
-                credis::protocol::encode_error("ERR Can't execute '" + std::string(cmd) + "' in subscribed mode"));
+            credis::protocol::encode_error_into(*ctx_.out,
+                                                "ERR Can't execute '" + std::string(cmd) + "' in subscribed mode");
+            return ProcessResult::normal();
         }
     }
 
@@ -389,22 +431,26 @@ auto CommandHandler::process_single_command(int fd,
         if ((user != nullptr) && user->nopass) {
             ctx_.authenticated_fds.insert(fd);
         } else {
-            return ProcessResult::normal(credis::protocol::encode_error("NOAUTH Authentication required."));
+            credis::protocol::encode_error_into(*ctx_.out, "NOAUTH Authentication required.");
+            return ProcessResult::normal();
         }
     }
 
     if (cmd == "MULTI") {
         if (ctx_.transactions[fd].in_multi) {
-            return ProcessResult::normal(credis::protocol::encode_error("ERR MULTI calls can not be nested"));
+            credis::protocol::encode_error_into(*ctx_.out, "ERR MULTI calls can not be nested");
+            return ProcessResult::normal();
         }
         ctx_.transactions[fd].in_multi = true;
-        return ProcessResult::normal(credis::protocol::kRespOk);
+        *ctx_.out += credis::protocol::kRespOk;
+        return ProcessResult::normal();
     }
 
     if (cmd == "EXEC") {
         auto it = ctx_.transactions.find(fd);
         if (it == ctx_.transactions.end() || !it->second.in_multi) {
-            return ProcessResult::normal(credis::protocol::encode_error("ERR EXEC without MULTI"));
+            credis::protocol::encode_error_into(*ctx_.out, "ERR EXEC without MULTI");
+            return ProcessResult::normal();
         }
 
         auto& tx = it->second;
@@ -419,49 +465,60 @@ auto CommandHandler::process_single_command(int fd,
 
         if (dirty) {
             ctx_.transactions.erase(it);
-            return ProcessResult::normal(credis::protocol::encode_null_array());
+            credis::protocol::encode_null_array_into(*ctx_.out);
+            return ProcessResult::normal();
         }
 
+        auto* saved_out = ctx_.out;
         std::vector<std::string> results;
         results.reserve(tx.queued_commands.size());
+        std::string queued_buf;
         for (auto& queued_args : tx.queued_commands) {
+            queued_buf.clear();
+            ctx_.out = &queued_buf;
             auto cmd_result = execute_command(std::vector<std::string_view>(queued_args.begin(), queued_args.end()),
                                               queued_args[0],
                                               fd,
                                               send_to_client);
-            if (auto* normal = std::get_if<ProcessResult::Normal>(&cmd_result.state)) {
-                results.push_back(std::move(normal->response));
+            if (std::holds_alternative<ProcessResult::Normal>(cmd_result.state)) {
+                results.push_back(std::move(queued_buf));
             } else {
                 results.push_back(credis::protocol::encode_error("ERR command in EXEC not allowed"));
             }
         }
+        ctx_.out = saved_out;
         ctx_.transactions.erase(it);
-        return ProcessResult::normal(credis::protocol::encode_raw_array(results));
+        credis::protocol::encode_raw_array_into(*ctx_.out, results);
+        return ProcessResult::normal();
     }
 
     if (cmd == "DISCARD") {
         auto dit = ctx_.transactions.find(fd);
         if (dit == ctx_.transactions.end() || !dit->second.in_multi) {
-            return ProcessResult::normal(credis::protocol::encode_error("ERR DISCARD without MULTI"));
+            credis::protocol::encode_error_into(*ctx_.out, "ERR DISCARD without MULTI");
+            return ProcessResult::normal();
         }
         ctx_.transactions.erase(dit);
-        return ProcessResult::normal(credis::protocol::kRespOk);
+        *ctx_.out += credis::protocol::kRespOk;
+        return ProcessResult::normal();
     }
 
     if (cmd == "WATCH") {
         if (args.size() < 2) {
-            return ProcessResult::normal(
-                credis::protocol::encode_error("ERR wrong number of arguments for 'watch' command"));
+            credis::protocol::encode_error_into(*ctx_.out, "ERR wrong number of arguments for 'watch' command");
+            return ProcessResult::normal();
         }
         auto it = ctx_.transactions.find(fd);
         if (it != ctx_.transactions.end() && it->second.in_multi) {
-            return ProcessResult::normal(credis::protocol::encode_error("ERR WATCH inside MULTI is not allowed"));
+            credis::protocol::encode_error_into(*ctx_.out, "ERR WATCH inside MULTI is not allowed");
+            return ProcessResult::normal();
         }
         auto& tx = ctx_.transactions[fd];
         for (size_t i = 1; i < args.size(); ++i) {
             tx.watched_keys[std::string(args[i])] = ctx_.store.get_key_version(args[i]);
         }
-        return ProcessResult::normal(credis::protocol::kRespOk);
+        *ctx_.out += credis::protocol::kRespOk;
+        return ProcessResult::normal();
     }
 
     if (cmd == "UNWATCH") {
@@ -469,13 +526,15 @@ auto CommandHandler::process_single_command(int fd,
         if (uit != ctx_.transactions.end()) {
             uit->second.watched_keys.clear();
         }
-        return ProcessResult::normal(credis::protocol::kRespOk);
+        *ctx_.out += credis::protocol::kRespOk;
+        return ProcessResult::normal();
     }
 
     auto tx_it = ctx_.transactions.find(fd);
     if (tx_it != ctx_.transactions.end() && tx_it->second.in_multi) {
         tx_it->second.queued_commands.emplace_back(args.begin(), args.end());
-        return ProcessResult::normal(credis::protocol::kRespQueued);
+        *ctx_.out += credis::protocol::kRespQueued;
+        return ProcessResult::normal();
     }
 
     return execute_command(std::move(args), cmd, fd, send_to_client);
@@ -488,70 +547,83 @@ auto CommandHandler::execute_command(std::vector<std::string_view> args,
                                      SendFn&& send_to_client) -> ProcessResult {
     if (cmd == "CONFIG") {
         if (args.size() < 3) {
-            return ProcessResult::normal(
-                credis::protocol::encode_error("ERR wrong number of arguments for 'config' command"));
+            credis::protocol::encode_error_into(*ctx_.out, "ERR wrong number of arguments for 'config' command");
+            return ProcessResult::normal();
         }
         auto subcmd = credis::util::to_upper(args[1]);
         if (subcmd == "GET") {
             if (args.size() < 3) {
-                return ProcessResult::normal(
-                    credis::protocol::encode_error("ERR wrong number of arguments for 'config|get' command"));
+                credis::protocol::encode_error_into(*ctx_.out,
+                                                    "ERR wrong number of arguments for 'config|get' command");
+                return ProcessResult::normal();
             }
-            return ProcessResult::normal(handle_config_get(ctx_, args[2]));
+            handle_config_get(ctx_, args[2]);
+            return ProcessResult::normal();
         }
         if (subcmd == "SET") {
             if (args.size() < 4) {
-                return ProcessResult::normal(
-                    credis::protocol::encode_error("ERR wrong number of arguments for 'config|set' command"));
+                credis::protocol::encode_error_into(*ctx_.out,
+                                                    "ERR wrong number of arguments for 'config|set' command");
+                return ProcessResult::normal();
             }
-            return ProcessResult::normal(handle_config_set(ctx_, args[2], args[3]));
+            handle_config_set(ctx_, args[2], args[3]);
+            return ProcessResult::normal();
         }
-        return ProcessResult::normal(credis::protocol::encode_error("ERR unsupported CONFIG subcommand"));
+        credis::protocol::encode_error_into(*ctx_.out, "ERR unsupported CONFIG subcommand");
+        return ProcessResult::normal();
     }
     if (cmd == "ACL") {
-        return ProcessResult::normal(handle_acl(ctx_, args));
+        handle_acl(ctx_, args);
+        return ProcessResult::normal();
     }
     if (cmd == "AUTH") {
-        return ProcessResult::normal(handle_auth(ctx_, fd, args));
+        handle_auth(ctx_, fd, args);
+        return ProcessResult::normal();
     }
     if (cmd == "REPLCONF") {
-        return ProcessResult::normal(handle_replconf(args));
+        handle_replconf(ctx_, args);
+        return ProcessResult::normal();
     }
     if (cmd == "WAIT") {
-        return handle_wait(args);
+        return handle_wait(ctx_, args);
     }
     if (cmd == "PSYNC") {
         return handle_psync(ctx_);
     }
     if (cmd == "SUBSCRIBE") {
         if (args.size() < 2) {
-            return ProcessResult::normal(
-                credis::protocol::encode_error("ERR wrong number of arguments for 'subscribe' command"));
+            credis::protocol::encode_error_into(*ctx_.out, "ERR wrong number of arguments for 'subscribe' command");
+            return ProcessResult::normal();
         }
-        return ProcessResult::normal(handle_subscribe(ctx_, fd, args[1]));
+        handle_subscribe(ctx_, fd, args[1]);
+        return ProcessResult::normal();
     }
     if (cmd == "UNSUBSCRIBE") {
         if (args.size() < 2) {
-            return ProcessResult::normal(
-                credis::protocol::encode_error("ERR wrong number of arguments for 'unsubscribe' command"));
+            credis::protocol::encode_error_into(*ctx_.out, "ERR wrong number of arguments for 'unsubscribe' command");
+            return ProcessResult::normal();
         }
-        return ProcessResult::normal(handle_unsubscribe(ctx_, fd, args[1]));
+        handle_unsubscribe(ctx_, fd, args[1]);
+        return ProcessResult::normal();
     }
     if (cmd == "PUBLISH") {
         if (args.size() < 3) {
-            return ProcessResult::normal(
-                credis::protocol::encode_error("ERR wrong number of arguments for 'publish' command"));
+            credis::protocol::encode_error_into(*ctx_.out, "ERR wrong number of arguments for 'publish' command");
+            return ProcessResult::normal();
         }
-        return ProcessResult::normal(handle_publish(ctx_, args[1], args[2], send_to_client));
+        handle_publish(ctx_, args[1], args[2], send_to_client);
+        return ProcessResult::normal();
     }
 
     auto it = command_table_.find(cmd);
     if (it == command_table_.end()) {
-        return ProcessResult::normal(credis::protocol::encode_error("ERR unknown command '" + std::string(cmd) + "'"));
+        credis::protocol::encode_error_into(*ctx_.out, "ERR unknown command '" + std::string(cmd) + "'");
+        return ProcessResult::normal();
     }
     if (args.size() < it->second.min_args) {
-        return ProcessResult::normal(
-            credis::protocol::encode_error("ERR wrong number of arguments for '" + std::string(cmd) + "' command"));
+        credis::protocol::encode_error_into(*ctx_.out,
+                                            "ERR wrong number of arguments for '" + std::string(cmd) + "' command");
+        return ProcessResult::normal();
     }
     return it->second.handler(ctx_, args, fd, send_to_client);
 }

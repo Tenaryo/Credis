@@ -595,3 +595,39 @@ TEST_F(AofManagerTest, RewriteWithConcurrentWriteIncludesBuffer) {
     auto content = aof.read_aof_content(tmp_dir_path_);
     EXPECT_NE(content.find("k2"), std::string::npos);
 }
+
+TEST_F(AofManagerTest, RewriteStreamKeysAndReplay) {
+    auto dir_path = tmp_dir_path_ + "/subdir";
+    std::filesystem::create_directories(dir_path);
+    {
+        std::ofstream mf(dir_path + "/myapp.aof.manifest");
+        mf << "file myapp.aof.1.incr.aof seq 1 type i\n";
+    }
+    {
+        std::ofstream af(dir_path + "/myapp.aof.1.incr.aof");
+    }
+
+    credis::store::Store store;
+    store.xadd("s", "1-0", {{"f1", "v1"}});
+    store.xadd("s", "2-0", {{"f2", "v2"}});
+
+    AofManager aof;
+    aof.set_appendonly("yes");
+    aof.set_appenddirname("subdir");
+    aof.set_appendfilename("myapp.aof");
+    aof.open(tmp_dir_path_);
+
+    ASSERT_TRUE(aof.start_rewrite(store, tmp_dir_path_));
+
+    while (!aof.check_rewrite_complete()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    aof.close();
+
+    auto content = aof.read_aof_content(tmp_dir_path_);
+    EXPECT_NE(content.find("XADD"), std::string::npos);
+    EXPECT_NE(content.find('s'), std::string::npos);
+    EXPECT_NE(content.find("1-0"), std::string::npos);
+    EXPECT_NE(content.find("2-0"), std::string::npos);
+}

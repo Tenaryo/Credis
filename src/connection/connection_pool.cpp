@@ -38,6 +38,10 @@ auto ConnectionPool::contains(int fd) const -> bool {
     return connections_.contains(fd);
 }
 
+auto ConnectionPool::get_pending_write(int fd) -> std::string& {
+    return connections_.at(fd)->pending_write();
+}
+
 void ConnectionPool::flush_all() {
     for (auto& [fd, conn] : connections_) {
         conn->flush();

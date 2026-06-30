@@ -13,13 +13,9 @@
 namespace credis::handler {
 
 struct ProcessResult {
-    struct Normal {
-        std::string response;
-    };
+    struct Normal {};
     struct Block {};
-    struct ReplicaHandshake {
-        std::string response;
-    };
+    struct ReplicaHandshake {};
     struct Wait {
         int64_t numreplicas{0};
         int64_t timeout_ms{0};
@@ -29,14 +25,14 @@ struct ProcessResult {
     std::vector<std::string> propagate_cmds;
     size_t consumed{0};
 
-    static auto normal(std::string resp) -> ProcessResult {
-        return {Normal{std::move(resp)}, {}};
+    static auto normal() -> ProcessResult {
+        return {Normal{}, {}};
     }
     static auto block() -> ProcessResult {
         return {Block{}, {}};
     }
-    static auto replica_handshake(std::string resp) -> ProcessResult {
-        return {ReplicaHandshake{std::move(resp)}, {}};
+    static auto replica_handshake() -> ProcessResult {
+        return {ReplicaHandshake{}, {}};
     }
     static auto wait(int64_t num, int64_t timeout) -> ProcessResult {
         return {Wait{num, timeout}, {}};

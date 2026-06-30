@@ -10,85 +10,99 @@
 
 namespace credis::handler {
 
-auto handle_rpush(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
+void handle_rpush(CommandContext& ctx, const std::vector<std::string_view>& args) {
     const std::string_view key = args[1];
     if (!ctx.store.key_is_absent_or_holds<credis::store::List>(key)) {
-        return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
+        credis::protocol::encode_error_into(*ctx.out,
+                                            "WRONGTYPE Operation against a key holding the wrong kind of value");
+        return;
     }
     int64_t count = 0;
     for (size_t i = 2; i < args.size(); ++i) {
         count = ctx.store.rpush(std::string(key), std::string(args[i]));
     }
-    return credis::protocol::encode_integer(count);
+    credis::protocol::encode_integer_into(*ctx.out, count);
 }
 
-auto handle_lpush(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
+void handle_lpush(CommandContext& ctx, const std::vector<std::string_view>& args) {
     const std::string_view key = args[1];
     if (!ctx.store.key_is_absent_or_holds<credis::store::List>(key)) {
-        return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
+        credis::protocol::encode_error_into(*ctx.out,
+                                            "WRONGTYPE Operation against a key holding the wrong kind of value");
+        return;
     }
     int64_t count = 0;
     for (size_t i = 2; i < args.size(); ++i) {
         count = ctx.store.lpush(std::string(key), std::string(args[i]));
     }
-    return credis::protocol::encode_integer(count);
+    credis::protocol::encode_integer_into(*ctx.out, count);
 }
 
-auto handle_lpop(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
+void handle_lpop(CommandContext& ctx, const std::vector<std::string_view>& args) {
     const std::string_view key = args[1];
 
     if (args.size() == 2) {
         auto element = ctx.store.lpop(key);
-        return element ? credis::protocol::encode_bulk_string(*element) : credis::protocol::encode_null_bulk_string();
+        if (element) {
+            credis::protocol::encode_bulk_string_into(*ctx.out, *element);
+        } else {
+            credis::protocol::encode_null_bulk_string_into(*ctx.out);
+        }
+        return;
     }
 
     auto parsed = credis::util::parse_int<int64_t>(args[2]);
-    if (!parsed) {
-        return credis::protocol::encode_error("ERR value is not an integer or out of range");
+    if (parsed) {
+        int64_t count_val = *parsed;
+        if (count_val <= 0) {
+            *ctx.out += "*0\r\n";
+            return;
+        }
+        auto elements = ctx.store.lpop(key, count_val);
+        credis::protocol::encode_array_into(*ctx.out, std::vector<std::string>{elements.begin(), elements.end()});
+        return;
     }
-    int64_t count = *parsed;
-
-    if (count <= 0) {
-        return credis::protocol::encode_array({});
-    }
-
-    auto elements = ctx.store.lpop(key, count);
-    return credis::protocol::encode_array(elements);
+    credis::protocol::encode_error_into(*ctx.out, "ERR value is not an integer or out of range");
 }
 
-auto handle_rpop(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
-    const std::string_view key = args[1];
-
+void handle_rpop(CommandContext& ctx, const std::vector<std::string_view>& args) {
     if (args.size() == 2) {
-        auto element = ctx.store.rpop(key);
-        return element ? credis::protocol::encode_bulk_string(*element) : credis::protocol::encode_null_bulk_string();
+        auto element = ctx.store.rpop(args[1]);
+        if (element) {
+            credis::protocol::encode_bulk_string_into(*ctx.out, *element);
+        } else {
+            credis::protocol::encode_null_bulk_string_into(*ctx.out);
+        }
+        return;
     }
 
     auto parsed = credis::util::parse_int<int64_t>(args[2]);
     if (!parsed) {
-        return credis::protocol::encode_error("ERR value is not an integer or out of range");
+        credis::protocol::encode_error_into(*ctx.out, "ERR value is not an integer or out of range");
+        return;
     }
-    int64_t count = *parsed;
+    int64_t count_val = *parsed;
 
-    if (count <= 0) {
-        return credis::protocol::encode_array({});
+    if (count_val <= 0) {
+        *ctx.out += "*0\r\n";
+        return;
     }
-
-    auto elements = ctx.store.rpop(key, count);
-    return credis::protocol::encode_array(elements);
+    auto elements = ctx.store.rpop(args[1], count_val);
+    credis::protocol::encode_array_into(*ctx.out, std::vector<std::string>{elements.begin(), elements.end()});
 }
 
-auto handle_lrange(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
+void handle_lrange(CommandContext& ctx, const std::vector<std::string_view>& args) {
     const std::string_view key = args[1];
 
     auto start_opt = credis::util::parse_int<int64_t>(args[2]);
     auto stop_opt = credis::util::parse_int<int64_t>(args[3]);
     if (!start_opt || !stop_opt) {
-        return credis::protocol::encode_error("ERR value is not an integer or out of range");
+        credis::protocol::encode_error_into(*ctx.out, "ERR value is not an integer or out of range");
+        return;
     }
 
     auto elements = ctx.store.lrange(key, *start_opt, *stop_opt);
-    return credis::protocol::encode_array(elements);
+    credis::protocol::encode_array_into(*ctx.out, elements);
 }
 
 auto handle_blpop(CommandContext& ctx, int fd, const std::vector<std::string_view>& args) -> ProcessResult {
@@ -96,16 +110,19 @@ auto handle_blpop(CommandContext& ctx, int fd, const std::vector<std::string_vie
 
     auto timeout_opt = credis::util::parse_double(args[2]);
     if (!timeout_opt) {
-        return ProcessResult::normal(credis::protocol::encode_error("ERR value is not an integer or out of range"));
+        credis::protocol::encode_error_into(*ctx.out, "ERR value is not an integer or out of range");
+        return ProcessResult::normal();
     }
     if (*timeout_opt < 0) {
-        return ProcessResult::normal(credis::protocol::encode_error("ERR timeout is negative"));
+        credis::protocol::encode_error_into(*ctx.out, "ERR timeout is negative");
+        return ProcessResult::normal();
     }
     double timeout_sec = *timeout_opt;
 
     auto elements = ctx.store.lpop(key, 1);
     if (!elements.empty()) {
-        return ProcessResult::normal(credis::protocol::encode_array({std::string(key), elements[0]}));
+        credis::protocol::encode_array_into(*ctx.out, std::vector<std::string>{std::string(key), elements[0]});
+        return ProcessResult::normal();
     }
 
     if (ctx.blocking_manager) {
@@ -114,7 +131,8 @@ auto handle_blpop(CommandContext& ctx, int fd, const std::vector<std::string_vie
         return ProcessResult::block();
     }
 
-    return ProcessResult::normal(credis::protocol::encode_error("ERR blocking not available"));
+    credis::protocol::encode_error_into(*ctx.out, "ERR blocking not available");
+    return ProcessResult::normal();
 }
 
 auto handle_rpush_with_blocking(CommandContext& ctx,
@@ -137,7 +155,8 @@ auto handle_rpush_with_blocking(CommandContext& ctx,
         }
         count = ctx.store.rpush(std::string(key), std::string(args[i]));
     }
-    return ProcessResult::normal(credis::protocol::encode_integer(count));
+    credis::protocol::encode_integer_into(*ctx.out, count);
+    return ProcessResult::normal();
 }
 
 auto handle_lpush_with_blocking(CommandContext& ctx,
@@ -160,7 +179,8 @@ auto handle_lpush_with_blocking(CommandContext& ctx,
         }
         count = ctx.store.lpush(std::string(key), std::string(args[i]));
     }
-    return ProcessResult::normal(credis::protocol::encode_integer(count));
+    credis::protocol::encode_integer_into(*ctx.out, count);
+    return ProcessResult::normal();
 }
 
 } // namespace credis::handler

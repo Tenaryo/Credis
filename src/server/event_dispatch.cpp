@@ -87,8 +87,6 @@ void dispatch_event(int fd, EventContext& ctx) {
             }
         }
     } else if (std::holds_alternative<ProcessResult::ReplicaHandshake>(result.state)) {
-        auto& hs = std::get<ProcessResult::ReplicaHandshake>(result.state);
-        ctx.conn_pool.send_to(fd, hs.response);
         ctx.replica_mgr.add_replica(fd);
     }
 

@@ -9,9 +9,9 @@
 
 namespace credis::handler {
 
-auto handle_xadd(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string;
-auto handle_xrange(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string;
-auto handle_xread(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string;
+void handle_xadd(CommandContext& ctx, const std::vector<std::string_view>& args);
+void handle_xrange(CommandContext& ctx, const std::vector<std::string_view>& args);
+void handle_xread(CommandContext& ctx, const std::vector<std::string_view>& args);
 auto handle_xread_with_blocking(CommandContext& ctx, int fd, const std::vector<std::string_view>& args)
     -> ProcessResult;
 auto handle_xadd_with_blocking(CommandContext& ctx,

@@ -7,9 +7,9 @@
 
 namespace credis::handler {
 
-auto handle_geoadd(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string;
-auto handle_geopos(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string;
-auto handle_geodist(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string;
-auto handle_geosearch(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string;
+void handle_geoadd(CommandContext& ctx, const std::vector<std::string_view>& args);
+void handle_geopos(CommandContext& ctx, const std::vector<std::string_view>& args);
+void handle_geodist(CommandContext& ctx, const std::vector<std::string_view>& args);
+void handle_geosearch(CommandContext& ctx, const std::vector<std::string_view>& args);
 
 } // namespace credis::handler

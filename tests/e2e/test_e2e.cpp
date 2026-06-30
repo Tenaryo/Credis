@@ -105,9 +105,9 @@ TEST(E2EPubSub, SubscribeAndReceiveMessage) {
     EXPECT_EQ(delivered[1][0], subscribe_msg);
     EXPECT_EQ(delivered[1][1], expected_msg);
 
-    auto* normal = std::get_if<handler::ProcessResult::Normal>(&result.state);
-    ASSERT_NE(normal, nullptr);
-    EXPECT_EQ(normal->response, ":1\r\n");
+    ASSERT_TRUE(delivered.contains(2));
+    ASSERT_EQ(delivered[2].size(), 1);
+    EXPECT_EQ(delivered[2][0], ":1\r\n");
 }
 
 TEST(E2EBlocking, BlpopExistingListReturnsElement) {
@@ -116,10 +116,12 @@ TEST(E2EBlocking, BlpopExistingListReturnsElement) {
     handler::CommandHandler handler(store, config);
 
     handler.process(make_resp({"RPUSH", "q", "item"}));
+    std::string response;
+    handler.set_output(response);
     auto result = handler.process_with_fd(1, make_resp({"BLPOP", "q", "0"}), nullptr);
 
     ASSERT_TRUE(std::holds_alternative<handler::ProcessResult::Normal>(result.state));
-    EXPECT_EQ(std::get<handler::ProcessResult::Normal>(result.state).response, "*2\r\n$1\r\nq\r\n$4\r\nitem\r\n");
+    EXPECT_EQ(response, "*2\r\n$1\r\nq\r\n$4\r\nitem\r\n");
 }
 
 TEST(E2ETypeValidation, SetThenZaddWrontype) {

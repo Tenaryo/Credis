@@ -7,7 +7,6 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
-#include <span>
 
 #include "util/logger.hpp"
 
@@ -243,8 +242,11 @@ auto AofManager::start_rewrite(const credis::store::Store& store, const std::str
     rewrite_temp_file_ = appenddirname_ + "/" + appendfilename_ + "." + std::to_string(new_seq) + ".incr.aof";
     auto temp_path = base_dir + "/" + rewrite_temp_file_;
 
+    stop_fsync_thread();
+
     pid_t pid = ::fork();
     if (pid < 0) [[unlikely]] {
+        start_fsync_thread();
         return false;
     }
 
@@ -255,6 +257,8 @@ auto AofManager::start_rewrite(const credis::store::Store& store, const std::str
     rewrite_child_pid_ = pid;
     rewrite_in_progress_ = true;
     rewrite_buffer_.clear();
+
+    start_fsync_thread();
     return true;
 }
 
@@ -269,11 +273,11 @@ auto AofManager::check_rewrite_complete() -> bool {
         return false;
     }
 
-    rewrite_in_progress_ = false;
     rewrite_child_pid_ = -1;
 
     if (result < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0) [[unlikely]] {
         LOG_ERROR("AOF rewrite child failed");
+        rewrite_in_progress_ = false;
         rewrite_buffer_.clear();
         return true;
     }
@@ -282,7 +286,10 @@ auto AofManager::check_rewrite_complete() -> bool {
         auto buf_path = base_dir_ + "/" + rewrite_temp_file_;
         int fd = ::open(buf_path.c_str(), O_WRONLY | O_APPEND);
         if (fd >= 0) {
-            ::write(fd, rewrite_buffer_.data(), rewrite_buffer_.size());
+            auto written = ::write(fd, rewrite_buffer_.data(), rewrite_buffer_.size());
+            if (written != static_cast<ssize_t>(rewrite_buffer_.size())) [[unlikely]] {
+                LOG_ERROR("AOF rewrite buffer append failed");
+            }
             ::close(fd);
         }
     }
@@ -295,6 +302,8 @@ auto AofManager::check_rewrite_complete() -> bool {
         mf << "file " << appendfilename_ << "." << new_seq << ".incr.aof seq " << new_seq << " type i\n";
     }
 
+    stop_fsync_thread();
+
     if (aof_fd_ >= 0) {
         ::close(aof_fd_);
         aof_fd_ = -1;
@@ -304,9 +313,9 @@ auto AofManager::check_rewrite_complete() -> bool {
     aof_fd_ = ::open(new_aof_path.c_str(), O_WRONLY | O_APPEND | O_CREAT, 0644);
     current_seq_ = new_seq;
 
-    stop_fsync_thread();
     start_fsync_thread();
 
+    rewrite_in_progress_ = false;
     rewrite_buffer_.clear();
     rewrite_temp_file_.clear();
     return true;

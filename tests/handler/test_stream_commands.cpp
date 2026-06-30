@@ -117,20 +117,25 @@ class HandlerStreamBlockingTest : public ::testing::Test {
     void SetUp() override {
         handler_.set_blocking_manager(blocking_manager_);
     }
+
+    std::string response_;
+    auto process_result(int fd, std::string_view input) -> ProcessResult {
+        response_.clear();
+        handler_.set_output(response_);
+        return handler_.process_with_fd(fd, input, nullptr);
+    }
 };
 
 TEST_F(HandlerStreamBlockingTest, XreadBlockDataAvailable) {
     constexpr int kFd = 10;
-    auto result = handler_.process_with_fd(
-        kFd, "*5\r\n$4\r\nXADD\r\n$2\r\ns1\r\n$3\r\n1-0\r\n$2\r\nf1\r\n$2\r\nv1\r\n", nullptr);
-    ASSERT_TRUE(std::holds_alternative<ProcessResult::Normal>(result.state));
 
-    result = handler_.process_with_fd(kFd,
-                                      "*6\r\n$5\r\nXREAD\r\n$5\r\nBLOCK\r\n$4\r\n1000\r\n$7\r\nSTREAMS\r\n$2\r\ns1\r\n"
-                                      "$3\r\n0-0\r\n",
-                                      nullptr);
+    handler_.process("*5\r\n$4\r\nXADD\r\n$2\r\ns1\r\n$3\r\n1-0\r\n$2\r\nf1\r\n$2\r\nv1\r\n");
+
+    auto result = process_result(kFd,
+                                 "*6\r\n$5\r\nXREAD\r\n$5\r\nBLOCK\r\n$4\r\n1000\r\n$7\r\nSTREAMS\r\n$2\r\ns1\r\n"
+                                 "$3\r\n0-0\r\n");
     ASSERT_TRUE(std::holds_alternative<ProcessResult::Normal>(result.state));
-    EXPECT_NE(std::get<ProcessResult::Normal>(result.state).response.find("1-0"), std::string::npos);
+    EXPECT_NE(response_.find("1-0"), std::string::npos);
 }
 
 TEST_F(HandlerStreamBlockingTest, XreadBlockNoDataBlocks) {
@@ -156,20 +161,18 @@ TEST_F(HandlerStreamBlockingTest, XreadBlockDollarId) {
 
 TEST_F(HandlerStreamBlockingTest, XreadBlockSyntaxErrorNoStreams) {
     constexpr int kFd = 13;
-    auto result
-        = handler_.process_with_fd(kFd, "*4\r\n$5\r\nXREAD\r\n$5\r\nBLOCK\r\n$4\r\n1000\r\n$6\r\nstream\r\n", nullptr);
+    auto result = process_result(kFd, "*4\r\n$5\r\nXREAD\r\n$5\r\nBLOCK\r\n$4\r\n1000\r\n$6\r\nstream\r\n");
     ASSERT_TRUE(std::holds_alternative<ProcessResult::Normal>(result.state));
-    EXPECT_TRUE(std::get<ProcessResult::Normal>(result.state).response.starts_with("-ERR"));
+    EXPECT_TRUE(response_.starts_with("-ERR"));
 }
 
 TEST_F(HandlerStreamBlockingTest, XreadBlockInvalidTimeout) {
     constexpr int kFd = 14;
-    auto result = handler_.process_with_fd(kFd,
-                                           "*6\r\n$5\r\nXREAD\r\n$5\r\nBLOCK\r\n$3\r\nabc\r\n$7\r\nSTREAMS\r\n$2\r\n"
-                                           "s1\r\n$3\r\n0-0\r\n",
-                                           nullptr);
+    auto result = process_result(kFd,
+                                 "*6\r\n$5\r\nXREAD\r\n$5\r\nBLOCK\r\n$3\r\nabc\r\n$7\r\nSTREAMS\r\n$2\r\n"
+                                 "s1\r\n$3\r\n0-0\r\n");
     ASSERT_TRUE(std::holds_alternative<ProcessResult::Normal>(result.state));
-    EXPECT_TRUE(std::get<ProcessResult::Normal>(result.state).response.starts_with("-ERR"));
+    EXPECT_TRUE(response_.starts_with("-ERR"));
 }
 
 TEST_F(HandlerStreamBlockingTest, XreadBlockMultiStreamError) {
@@ -177,13 +180,12 @@ TEST_F(HandlerStreamBlockingTest, XreadBlockMultiStreamError) {
     handler_.process("*5\r\n$4\r\nXADD\r\n$2\r\ns2\r\n$3\r\n1-0\r\n$2\r\nf1\r\n$2\r\nv1\r\n");
 
     constexpr int kFd = 15;
-    auto result = handler_.process_with_fd(
+    auto result = process_result(
         kFd,
         "*8\r\n$5\r\nXREAD\r\n$5\r\nBLOCK\r\n$4\r\n1000\r\n$7\r\nSTREAMS\r\n$2\r\ns1\r\n$2\r\ns2\r\n$3\r\n0-0\r\n"
-        "$3\r\n0-0\r\n",
-        nullptr);
+        "$3\r\n0-0\r\n");
     ASSERT_TRUE(std::holds_alternative<ProcessResult::Normal>(result.state));
-    EXPECT_TRUE(std::get<ProcessResult::Normal>(result.state).response.starts_with("-ERR"));
+    EXPECT_TRUE(response_.starts_with("-ERR"));
 }
 
 TEST_F(HandlerStreamBlockingTest, XaddWakesBlockedReader) {

@@ -9,12 +9,14 @@
 
 namespace credis::handler {
 
-auto handle_set(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
+void handle_set(CommandContext& ctx, const std::vector<std::string_view>& args) {
     std::string_view key = args[1];
     std::string_view value = args[2];
 
     if (!ctx.store.key_is_absent_or_holds<credis::store::String>(key)) {
-        return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
+        credis::protocol::encode_error_into(*ctx.out,
+                                            "WRONGTYPE Operation against a key holding the wrong kind of value");
+        return;
     }
 
     std::optional<uint64_t> ttl_ms;
@@ -24,12 +26,14 @@ auto handle_set(CommandContext& ctx, const std::vector<std::string_view>& args) 
 
         if (option == "EX" || option == "PX") {
             if (i + 1 >= args.size()) {
-                return credis::protocol::encode_error("ERR syntax error");
+                credis::protocol::encode_error_into(*ctx.out, "ERR syntax error");
+                return;
             }
 
             auto parsed = credis::util::parse_int<uint64_t>(args[i + 1]);
             if (!parsed) {
-                return credis::protocol::encode_error("ERR value is not an integer or out of range");
+                credis::protocol::encode_error_into(*ctx.out, "ERR value is not an integer or out of range");
+                return;
             }
 
             ttl_ms = (option == "EX") ? *parsed * 1000 : *parsed;
@@ -38,32 +42,42 @@ auto handle_set(CommandContext& ctx, const std::vector<std::string_view>& args) 
     }
 
     ctx.store.set(std::string(key), std::string(value), ttl_ms);
-    return credis::protocol::kRespOk;
+    *ctx.out += credis::protocol::kRespOk;
 }
 
-auto handle_get(CommandContext& ctx, std::string_view key) -> std::string {
+void handle_get(CommandContext& ctx, std::string_view key) {
     auto value = ctx.store.get(key);
-    return value ? credis::protocol::encode_bulk_string(*value) : credis::protocol::encode_null_bulk_string();
+    if (value) {
+        credis::protocol::encode_bulk_string_into(*ctx.out, *value);
+    } else {
+        credis::protocol::encode_null_bulk_string_into(*ctx.out);
+    }
 }
 
-auto handle_incr(CommandContext& ctx, std::string_view key) -> std::string {
+void handle_incr(CommandContext& ctx, std::string_view key) {
     if (!ctx.store.key_is_absent_or_holds<credis::store::String>(key)) {
-        return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
+        credis::protocol::encode_error_into(*ctx.out,
+                                            "WRONGTYPE Operation against a key holding the wrong kind of value");
+        return;
     }
     auto result = ctx.store.incr(key);
     if (!result) {
-        return credis::protocol::encode_error("ERR value is not an integer or out of range");
+        credis::protocol::encode_error_into(*ctx.out, "ERR value is not an integer or out of range");
+        return;
     }
-    return credis::protocol::encode_integer(*result);
+    credis::protocol::encode_integer_into(*ctx.out, *result);
 }
 
-auto handle_mset(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string {
+void handle_mset(CommandContext& ctx, const std::vector<std::string_view>& args) {
     if ((args.size() - 1) % 2 != 0) {
-        return credis::protocol::encode_error("ERR wrong number of arguments for MSET");
+        credis::protocol::encode_error_into(*ctx.out, "ERR wrong number of arguments for MSET");
+        return;
     }
     for (size_t i = 1; i < args.size(); i += 2) {
         if (!ctx.store.key_is_absent_or_holds<credis::store::String>(args[i])) {
-            return credis::protocol::encode_error("WRONGTYPE Operation against a key holding the wrong kind of value");
+            credis::protocol::encode_error_into(*ctx.out,
+                                                "WRONGTYPE Operation against a key holding the wrong kind of value");
+            return;
         }
     }
     std::vector<std::pair<std::string, std::string>> pairs;
@@ -72,7 +86,7 @@ auto handle_mset(CommandContext& ctx, const std::vector<std::string_view>& args)
         pairs.emplace_back(std::string(args[i]), std::string(args[i + 1]));
     }
     ctx.store.mset(pairs);
-    return credis::protocol::kRespOk;
+    *ctx.out += credis::protocol::kRespOk;
 }
 
 } // namespace credis::handler

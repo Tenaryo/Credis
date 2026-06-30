@@ -97,15 +97,16 @@ struct HandlerFixture {
     credis::store::Store store;
     credis::server::ServerConfig config;
     credis::handler::CommandHandler handler{store, config};
+    std::string response_;
 
     HandlerFixture() {
         handler.set_replica_count_fn([] { return 1; });
+        handler.set_output(response_);
     }
 
     auto process(int fd, std::string_view input) -> credis::handler::ProcessResult {
-        std::string client_response;
-        auto send_fn = [&](int, const std::string& s) { client_response = s; };
-        return handler.process_with_fd(fd, input, send_fn);
+        response_.clear();
+        return handler.process_with_fd(fd, input, nullptr);
     }
 };
 
@@ -123,8 +124,7 @@ TEST(CommandHandlerReplicaTest, ReplconfListeningPortReturnsOk) {
     auto result = f.process(1, input);
 
     ASSERT_TRUE(std::holds_alternative<credis::handler::ProcessResult::Normal>(result.state));
-    const auto& normal = std::get<credis::handler::ProcessResult::Normal>(result.state);
-    EXPECT_EQ(normal.response, "+OK\r\n");
+    EXPECT_EQ(f.response_, "+OK\r\n");
 }
 
 TEST(CommandHandlerReplicaTest, ReplconfCapaPsync2ReturnsOk) {
@@ -133,8 +133,7 @@ TEST(CommandHandlerReplicaTest, ReplconfCapaPsync2ReturnsOk) {
     auto result = f.process(1, input);
 
     ASSERT_TRUE(std::holds_alternative<credis::handler::ProcessResult::Normal>(result.state));
-    const auto& normal = std::get<credis::handler::ProcessResult::Normal>(result.state);
-    EXPECT_EQ(normal.response, "+OK\r\n");
+    EXPECT_EQ(f.response_, "+OK\r\n");
 }
 
 TEST(CommandHandlerReplicaTest, PsyncResponseIncludesFullresyncPrefix) {
@@ -143,9 +142,8 @@ TEST(CommandHandlerReplicaTest, PsyncResponseIncludesFullresyncPrefix) {
     auto result = f.process(1, input);
 
     ASSERT_TRUE(std::holds_alternative<credis::handler::ProcessResult::ReplicaHandshake>(result.state));
-    const auto& hs = std::get<credis::handler::ProcessResult::ReplicaHandshake>(result.state);
 
-    EXPECT_TRUE(hs.response.starts_with("+FULLRESYNC"));
+    EXPECT_TRUE(f.response_.starts_with("+FULLRESYNC"));
 }
 
 TEST(CommandHandlerReplicaTest, SetCommandGeneratesPropagateArgs) {

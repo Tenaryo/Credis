@@ -8,11 +8,11 @@
 
 namespace credis::handler {
 
-auto handle_zadd(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string;
-auto handle_zrank(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string;
-auto handle_zrange(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string;
-auto handle_zcard(CommandContext& ctx, std::string_view key) -> std::string;
-auto handle_zscore(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string;
-auto handle_zrem(CommandContext& ctx, const std::vector<std::string_view>& args) -> std::string;
+void handle_zadd(CommandContext& ctx, const std::vector<std::string_view>& args);
+void handle_zrank(CommandContext& ctx, const std::vector<std::string_view>& args);
+void handle_zrange(CommandContext& ctx, const std::vector<std::string_view>& args);
+void handle_zcard(CommandContext& ctx, std::string_view key);
+void handle_zscore(CommandContext& ctx, const std::vector<std::string_view>& args);
+void handle_zrem(CommandContext& ctx, const std::vector<std::string_view>& args);
 
 } // namespace credis::handler
