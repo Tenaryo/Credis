@@ -73,4 +73,6 @@ add_module_test(client LIBRARIES credis_server credis_util credis_aof)
 
 add_module_test(aof LIBRARIES credis_aof)
 
+add_module_test(blocking LIBRARIES credis_blocking_manager credis_store credis_protocol credis_util)
+
 add_module_test(e2e LIBRARIES credis_core)

@@ -116,3 +116,25 @@ TEST_F(HandlerStringTest, MsetWrongNumberOfArgs) {
     auto response = handler_.process(input);
     EXPECT_TRUE(response.starts_with("-ERR"));
 }
+
+TEST_F(HandlerStringTest, IncrOnNonNumericString) {
+    handler_.process("*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$3\r\nabc\r\n");
+    auto response = handler_.process("*2\r\n$4\r\nINCR\r\n$3\r\nkey\r\n");
+    EXPECT_NE(response.find("ERR"), std::string::npos);
+}
+
+TEST_F(HandlerStringTest, SetWithExExpiry) {
+    auto response = handler_.process("*5\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n$2\r\nEX\r\n$1\r\n0\r\n");
+    EXPECT_EQ(response, "+OK\r\n");
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    auto get_resp = handler_.process("*2\r\n$3\r\nGET\r\n$3\r\nfoo\r\n");
+    EXPECT_EQ(get_resp, "$-1\r\n");
+}
+
+TEST_F(HandlerStringTest, MsetOnWrongType) {
+    handler_.process("*3\r\n$5\r\nRPUSH\r\n$3\r\nkey\r\n$1\r\na\r\n");
+    auto input = "*3\r\n$4\r\nMSET\r\n$3\r\nkey\r\n$1\r\n1\r\n";
+    auto response = handler_.process(input);
+    EXPECT_TRUE(response.starts_with("-WRONGTYPE"));
+}
