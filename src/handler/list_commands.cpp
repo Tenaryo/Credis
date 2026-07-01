@@ -12,13 +12,14 @@ namespace credis::handler {
 
 void handle_rpush(CommandContext& ctx, const std::vector<std::string_view>& args) {
     const std::string_view key = args[1];
-    if (!ctx.store.key_is_absent_or_holds<credis::store::List>(key)) {
+    auto opt = ctx.store.rpush_if_valid_type(key, std::string(args[2]));
+    if (!opt) {
         credis::protocol::encode_error_into(*ctx.out,
                                             "WRONGTYPE Operation against a key holding the wrong kind of value");
         return;
     }
-    int64_t count = 0;
-    for (size_t i = 2; i < args.size(); ++i) {
+    int64_t count = *opt;
+    for (size_t i = 3; i < args.size(); ++i) {
         count = ctx.store.rpush(std::string(key), std::string(args[i]));
     }
     credis::protocol::encode_integer_into(*ctx.out, count);
@@ -26,13 +27,14 @@ void handle_rpush(CommandContext& ctx, const std::vector<std::string_view>& args
 
 void handle_lpush(CommandContext& ctx, const std::vector<std::string_view>& args) {
     const std::string_view key = args[1];
-    if (!ctx.store.key_is_absent_or_holds<credis::store::List>(key)) {
+    auto opt = ctx.store.lpush_if_valid_type(key, std::string(args[2]));
+    if (!opt) {
         credis::protocol::encode_error_into(*ctx.out,
                                             "WRONGTYPE Operation against a key holding the wrong kind of value");
         return;
     }
-    int64_t count = 0;
-    for (size_t i = 2; i < args.size(); ++i) {
+    int64_t count = *opt;
+    for (size_t i = 3; i < args.size(); ++i) {
         count = ctx.store.lpush(std::string(key), std::string(args[i]));
     }
     credis::protocol::encode_integer_into(*ctx.out, count);
@@ -143,9 +145,26 @@ auto handle_rpush_with_blocking(CommandContext& ctx,
                                 const std::vector<std::string_view>& args,
                                 const std::function<void(int, const std::string&)>& send_to_client) -> ProcessResult {
     const std::string_view key = args[1];
-    int64_t count = 0;
 
-    for (size_t i = 2; i < args.size(); ++i) {
+    auto opt = ctx.store.rpush_if_valid_type(key, std::string(args[2]));
+    if (!opt) {
+        credis::protocol::encode_error_into(*ctx.out,
+                                            "WRONGTYPE Operation against a key holding the wrong kind of value");
+        return ProcessResult::normal();
+    }
+    int64_t count = *opt;
+
+    if (ctx.blocking_manager) {
+        auto blocked = ctx.blocking_manager->get().wake_client(std::string(key));
+        if (blocked) {
+            auto elements = ctx.store.lpop(key, 1);
+            if (!elements.empty()) {
+                send_to_client(blocked->fd, credis::protocol::encode_array({std::string(key), elements[0]}));
+            }
+        }
+    }
+
+    for (size_t i = 3; i < args.size(); ++i) {
         if (ctx.blocking_manager) {
             auto blocked = ctx.blocking_manager->get().wake_client(std::string(key));
             if (blocked) {
@@ -167,9 +186,26 @@ auto handle_lpush_with_blocking(CommandContext& ctx,
                                 const std::vector<std::string_view>& args,
                                 const std::function<void(int, const std::string&)>& send_to_client) -> ProcessResult {
     const std::string_view key = args[1];
-    int64_t count = 0;
 
-    for (size_t i = 2; i < args.size(); ++i) {
+    auto opt = ctx.store.lpush_if_valid_type(key, std::string(args[2]));
+    if (!opt) {
+        credis::protocol::encode_error_into(*ctx.out,
+                                            "WRONGTYPE Operation against a key holding the wrong kind of value");
+        return ProcessResult::normal();
+    }
+    int64_t count = *opt;
+
+    if (ctx.blocking_manager) {
+        auto blocked = ctx.blocking_manager->get().wake_client(std::string(key));
+        if (blocked) {
+            auto elements = ctx.store.lpop(key, 1);
+            if (!elements.empty()) {
+                send_to_client(blocked->fd, credis::protocol::encode_array({std::string(key), elements[0]}));
+            }
+        }
+    }
+
+    for (size_t i = 3; i < args.size(); ++i) {
         if (ctx.blocking_manager) {
             auto blocked = ctx.blocking_manager->get().wake_client(std::string(key));
             if (blocked) {

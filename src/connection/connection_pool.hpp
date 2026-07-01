@@ -22,6 +22,7 @@ class ConnectionPool {
     [[nodiscard]] auto get_pending_write(int fd) -> std::string&;
     void flush_all();
     [[nodiscard]] auto contains(int fd) const -> bool;
+    [[nodiscard]] auto get_connection(int fd) -> Connection&;
 };
 
 } // namespace credis::connection

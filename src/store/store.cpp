@@ -65,14 +65,133 @@ void Store::set(std::string key, std::string value, std::optional<uint64_t> ttl_
     data_[std::move(key)] = std::move(entry);
 }
 
-void Store::mset(const std::vector<std::pair<std::string, std::string>>& pairs) {
-    for (const auto& [key, value] : pairs) {
+auto Store::set_if_valid_type(std::string_view key_sv, std::string value, std::optional<uint64_t> ttl_ms) -> bool {
+    auto it = data_.find(key_sv);
+    if (it != data_.end()) {
+        if (!is_expired(it->second)) {
+            if (!std::holds_alternative<String>(it->second.value)) {
+                return false;
+            }
+            touch_key(key_sv);
+            it->second.value = std::move(value);
+            if (ttl_ms) {
+                it->second.expiry = get_current_time() + std::chrono::milliseconds(*ttl_ms);
+            } else {
+                it->second.expiry = std::nullopt;
+            }
+            return true;
+        }
+        data_.erase(it);
+    }
+    std::string key(key_sv);
+    touch_key(key);
+    Entry entry{std::move(value),
+                ttl_ms ? std::optional(get_current_time() + std::chrono::milliseconds(*ttl_ms)) : std::nullopt};
+    data_.emplace(std::move(key), std::move(entry));
+    return true;
+}
+
+auto Store::incr_if_valid_type(std::string_view key_sv) -> std::optional<int64_t> {
+    auto it = data_.find(key_sv);
+    if (it != data_.end()) {
+        if (!is_expired(it->second)) {
+            if (!std::holds_alternative<String>(it->second.value)) {
+                return std::nullopt;
+            }
+            touch_key(key_sv);
+            const std::string& str_value = std::get<String>(it->second.value);
+            auto parsed = credis::util::parse_int<int64_t>(str_value);
+            if (!parsed || *parsed == INT64_MAX) {
+                return std::nullopt;
+            }
+            int64_t new_value = *parsed + 1;
+            it->second.value = String(std::to_string(new_value));
+            return new_value;
+        }
+        data_.erase(it);
+    }
+    std::string key(key_sv);
+    touch_key(key);
+    data_.emplace(std::move(key), Entry{String("1"), {}});
+    return 1;
+}
+
+auto Store::rpush_if_valid_type(std::string_view key_sv, std::string value) -> std::optional<int64_t> {
+    auto it = data_.find(key_sv);
+    if (it != data_.end()) {
+        if (!is_expired(it->second)) {
+            if (!std::holds_alternative<List>(it->second.value)) {
+                return std::nullopt;
+            }
+        } else {
+            data_.erase(it);
+            goto create_new;
+        }
+    } else {
+    create_new:
+        std::string key(key_sv);
+        List lst;
+        lst.push_back(std::move(value));
+        int64_t size = static_cast<int64_t>(lst.size());
         touch_key(key);
+        data_.emplace(std::move(key), Entry{std::move(lst), {}});
+        return size;
     }
-    for (const auto& [key, value] : pairs) {
-        data_.emplace(
-            std::piecewise_construct, std::forward_as_tuple(key), std::forward_as_tuple(Entry{String(value), {}}));
+    touch_key(key_sv);
+    auto& lst = std::get<List>(it->second.value);
+    lst.push_back(std::move(value));
+    return static_cast<int64_t>(lst.size());
+}
+
+auto Store::lpush_if_valid_type(std::string_view key_sv, std::string value) -> std::optional<int64_t> {
+    auto it = data_.find(key_sv);
+    if (it != data_.end()) {
+        if (!is_expired(it->second)) {
+            if (!std::holds_alternative<List>(it->second.value)) {
+                return std::nullopt;
+            }
+        } else {
+            data_.erase(it);
+            goto create_new;
+        }
+    } else {
+    create_new:
+        std::string key(key_sv);
+        List lst;
+        lst.push_front(std::move(value));
+        int64_t size = static_cast<int64_t>(lst.size());
+        touch_key(key);
+        data_.emplace(std::move(key), Entry{std::move(lst), {}});
+        return size;
     }
+    touch_key(key_sv);
+    auto& lst = std::get<List>(it->second.value);
+    lst.push_front(std::move(value));
+    return static_cast<int64_t>(lst.size());
+}
+
+auto Store::zadd_if_valid_type(std::string_view key_sv, double score, std::string member) -> std::optional<int64_t> {
+    auto it = data_.find(key_sv);
+    if (it != data_.end()) {
+        if (!is_expired(it->second)) {
+            if (!std::holds_alternative<SortedSet>(it->second.value)) {
+                return std::nullopt;
+            }
+        } else {
+            data_.erase(it);
+            goto create_new;
+        }
+    } else {
+    create_new:
+        std::string key(key_sv);
+        SortedSet zset;
+        int64_t result = zset.add(score, std::move(member));
+        touch_key(key);
+        data_.emplace(std::move(key), Entry{std::move(zset), {}});
+        return result;
+    }
+    touch_key(key_sv);
+    return std::get<SortedSet>(it->second.value).add(score, std::move(member));
 }
 
 auto Store::get(std::string_view key) -> std::optional<std::string_view> {

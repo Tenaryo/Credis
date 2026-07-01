@@ -42,6 +42,10 @@ auto ConnectionPool::get_pending_write(int fd) -> std::string& {
     return connections_.at(fd)->pending_write();
 }
 
+auto ConnectionPool::get_connection(int fd) -> Connection& {
+    return *connections_.at(fd);
+}
+
 void ConnectionPool::flush_all() {
     for (auto& [fd, conn] : connections_) {
         conn->flush();

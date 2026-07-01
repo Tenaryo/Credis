@@ -1,9 +1,12 @@
 #pragma once
 
 #include <cstddef>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
+
+#include "handler/transaction_state.hpp"
 
 namespace credis::connection {
 
@@ -13,6 +16,8 @@ class Connection {
     size_t read_pos_{0};
     size_t data_len_{0};
     std::string pending_write_;
+    bool authenticated_{false};
+    std::unique_ptr<credis::handler::TransactionState> tx_;
 
   public:
     explicit Connection(int fd);
@@ -41,6 +46,26 @@ class Connection {
     }
     void trim_pending(size_t n) {
         pending_write_.erase(0, n);
+    }
+
+    auto authenticated() const noexcept -> bool {
+        return authenticated_;
+    }
+    void set_authenticated(bool val) noexcept {
+        authenticated_ = val;
+    }
+
+    auto tx() noexcept -> credis::handler::TransactionState* {
+        return tx_.get();
+    }
+    auto tx_or_create() -> credis::handler::TransactionState& {
+        if (!tx_) {
+            tx_ = std::make_unique<credis::handler::TransactionState>();
+        }
+        return *tx_;
+    }
+    void clear_tx() {
+        tx_.reset();
     }
 
   private:

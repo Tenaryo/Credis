@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "aof/aof_manager.hpp"
+#include "connection/connection_pool.hpp"
 #include "handler/geo_commands.hpp"
 #include "handler/list_commands.hpp"
 #include "handler/pubsub_commands.hpp"
@@ -52,8 +53,6 @@ CommandHandler::CommandHandler(credis::store::Store& store, credis::server::Serv
 }
 
 void CommandHandler::remove_connection(int fd) {
-    ctx_.authenticated_fds.erase(fd);
-    ctx_.transactions.erase(fd);
 }
 
 void CommandHandler::register_commands() {
@@ -331,6 +330,118 @@ void CommandHandler::register_commands() {
               return ProcessResult::normal();
           },
           1}},
+        {"CONFIG",
+         {[](CommandContext& ctx,
+             const std::vector<std::string_view>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              if (args.size() < 3) {
+                  credis::protocol::encode_error_into(*ctx.out, "ERR wrong number of arguments for 'config' command");
+                  return ProcessResult::normal();
+              }
+              auto subcmd = credis::util::to_upper(args[1]);
+              if (subcmd == "GET") {
+                  if (args.size() < 3) {
+                      credis::protocol::encode_error_into(*ctx.out,
+                                                          "ERR wrong number of arguments for 'config|get' command");
+                      return ProcessResult::normal();
+                  }
+                  handle_config_get(ctx, args[2]);
+                  return ProcessResult::normal();
+              }
+              if (subcmd == "SET") {
+                  if (args.size() < 4) {
+                      credis::protocol::encode_error_into(*ctx.out,
+                                                          "ERR wrong number of arguments for 'config|set' command");
+                      return ProcessResult::normal();
+                  }
+                  handle_config_set(ctx, args[2], args[3]);
+                  return ProcessResult::normal();
+              }
+              credis::protocol::encode_error_into(*ctx.out, "ERR unsupported CONFIG subcommand");
+              return ProcessResult::normal();
+          },
+          3}},
+        {"ACL",
+         {[](CommandContext& ctx,
+             const std::vector<std::string_view>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              handle_acl(ctx, args);
+              return ProcessResult::normal();
+          },
+          2}},
+        {"AUTH",
+         {[](CommandContext& ctx,
+             const std::vector<std::string_view>& args,
+             int fd,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              handle_auth(ctx, fd, args);
+              return ProcessResult::normal();
+          },
+          2}},
+        {"REPLCONF",
+         {[](CommandContext& ctx,
+             const std::vector<std::string_view>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              handle_replconf(ctx, args);
+              return ProcessResult::normal();
+          },
+          2}},
+        {"WAIT",
+         {[](CommandContext& ctx,
+             const std::vector<std::string_view>& args,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult { return handle_wait(ctx, args); },
+          3}},
+        {"PSYNC",
+         {[](CommandContext& ctx,
+             const std::vector<std::string_view>&,
+             int,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult { return handle_psync(ctx); },
+          1}},
+        {"SUBSCRIBE",
+         {[](CommandContext& ctx,
+             const std::vector<std::string_view>& args,
+             int fd,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              if (args.size() < 2) {
+                  credis::protocol::encode_error_into(*ctx.out,
+                                                      "ERR wrong number of arguments for 'subscribe' command");
+                  return ProcessResult::normal();
+              }
+              handle_subscribe(ctx, fd, args[1]);
+              return ProcessResult::normal();
+          },
+          2}},
+        {"UNSUBSCRIBE",
+         {[](CommandContext& ctx,
+             const std::vector<std::string_view>& args,
+             int fd,
+             const std::function<void(int, const std::string&)>&) -> ProcessResult {
+              if (args.size() < 2) {
+                  credis::protocol::encode_error_into(*ctx.out,
+                                                      "ERR wrong number of arguments for 'unsubscribe' command");
+                  return ProcessResult::normal();
+              }
+              handle_unsubscribe(ctx, fd, args[1]);
+              return ProcessResult::normal();
+          },
+          2}},
+        {"PUBLISH",
+         {[](CommandContext& ctx,
+             const std::vector<std::string_view>& args,
+             int,
+             const std::function<void(int, const std::string&)>& send_to_client) -> ProcessResult {
+              if (args.size() < 3) {
+                  credis::protocol::encode_error_into(*ctx.out, "ERR wrong number of arguments for 'publish' command");
+                  return ProcessResult::normal();
+              }
+              handle_publish(ctx, args[1], args[2], send_to_client);
+              return ProcessResult::normal();
+          },
+          3}},
     };
 }
 
@@ -423,7 +534,18 @@ auto CommandHandler::process_single_command(int fd,
         }
     }
 
-    if (cmd != "AUTH" && !ctx_.authenticated_fds.contains(fd)) {
+    if (cmd != "AUTH" && ctx_.conn_pool) {
+        auto& conn = ctx_.conn_pool->get_connection(fd);
+        if (!conn.authenticated()) {
+            const auto* user = ctx_.acl_manager.get_user("default");
+            if ((user != nullptr) && user->nopass) {
+                conn.set_authenticated(true);
+            } else {
+                credis::protocol::encode_error_into(*ctx_.out, "NOAUTH Authentication required.");
+                return ProcessResult::normal();
+            }
+        }
+    } else if (cmd != "AUTH" && !ctx_.authenticated_fds.contains(fd)) {
         const auto* user = ctx_.acl_manager.get_user("default");
         if ((user != nullptr) && user->nopass) {
             ctx_.authenticated_fds.insert(fd);
@@ -433,24 +555,54 @@ auto CommandHandler::process_single_command(int fd,
         }
     }
 
+    auto* conn = ctx_.conn_pool ? &ctx_.conn_pool->get_connection(fd) : nullptr;
+
+    auto tx_in_multi = [&]() -> bool {
+        if (conn)
+            return conn->tx() && conn->tx()->in_multi;
+        auto it = ctx_.transactions.find(fd);
+        return it != ctx_.transactions.end() && it->second.in_multi;
+    };
+    auto tx_set_in_multi = [&]() {
+        if (conn)
+            conn->tx_or_create().in_multi = true;
+        else
+            ctx_.transactions[fd].in_multi = true;
+    };
+    auto tx_get = [&]() -> TransactionState* {
+        if (conn)
+            return &conn->tx_or_create();
+        return &ctx_.transactions[fd];
+    };
+    auto tx_have = [&]() -> bool {
+        if (conn)
+            return conn->tx() != nullptr;
+        return ctx_.transactions.contains(fd);
+    };
+    auto tx_clear = [&]() {
+        if (conn)
+            conn->clear_tx();
+        else
+            ctx_.transactions.erase(fd);
+    };
+
     if (cmd == "MULTI") {
-        if (ctx_.transactions[fd].in_multi) {
+        if (tx_in_multi()) {
             credis::protocol::encode_error_into(*ctx_.out, "ERR MULTI calls can not be nested");
             return ProcessResult::normal();
         }
-        ctx_.transactions[fd].in_multi = true;
+        tx_set_in_multi();
         *ctx_.out += credis::protocol::kRespOk;
         return ProcessResult::normal();
     }
 
     if (cmd == "EXEC") {
-        auto it = ctx_.transactions.find(fd);
-        if (it == ctx_.transactions.end() || !it->second.in_multi) {
+        if (!tx_in_multi()) {
             credis::protocol::encode_error_into(*ctx_.out, "ERR EXEC without MULTI");
             return ProcessResult::normal();
         }
 
-        auto& tx = it->second;
+        auto& tx = *tx_get();
 
         bool dirty = false;
         for (const auto& [key, version] : tx.watched_keys) {
@@ -461,7 +613,7 @@ auto CommandHandler::process_single_command(int fd,
         }
 
         if (dirty) {
-            ctx_.transactions.erase(it);
+            tx_clear();
             credis::protocol::encode_null_array_into(*ctx_.out);
             return ProcessResult::normal();
         }
@@ -484,18 +636,17 @@ auto CommandHandler::process_single_command(int fd,
             }
         }
         ctx_.out = saved_out;
-        ctx_.transactions.erase(it);
+        tx_clear();
         credis::protocol::encode_raw_array_into(*ctx_.out, results);
         return ProcessResult::normal();
     }
 
     if (cmd == "DISCARD") {
-        auto dit = ctx_.transactions.find(fd);
-        if (dit == ctx_.transactions.end() || !dit->second.in_multi) {
+        if (!tx_in_multi()) {
             credis::protocol::encode_error_into(*ctx_.out, "ERR DISCARD without MULTI");
             return ProcessResult::normal();
         }
-        ctx_.transactions.erase(dit);
+        tx_clear();
         *ctx_.out += credis::protocol::kRespOk;
         return ProcessResult::normal();
     }
@@ -505,12 +656,11 @@ auto CommandHandler::process_single_command(int fd,
             credis::protocol::encode_error_into(*ctx_.out, "ERR wrong number of arguments for 'watch' command");
             return ProcessResult::normal();
         }
-        auto it = ctx_.transactions.find(fd);
-        if (it != ctx_.transactions.end() && it->second.in_multi) {
+        if (tx_in_multi()) {
             credis::protocol::encode_error_into(*ctx_.out, "ERR WATCH inside MULTI is not allowed");
             return ProcessResult::normal();
         }
-        auto& tx = ctx_.transactions[fd];
+        auto& tx = *tx_get();
         for (size_t i = 1; i < args.size(); ++i) {
             tx.watched_keys[std::string(args[i])] = ctx_.store.get_key_version(args[i]);
         }
@@ -519,17 +669,15 @@ auto CommandHandler::process_single_command(int fd,
     }
 
     if (cmd == "UNWATCH") {
-        auto uit = ctx_.transactions.find(fd);
-        if (uit != ctx_.transactions.end()) {
-            uit->second.watched_keys.clear();
+        if (tx_have()) {
+            tx_get()->watched_keys.clear();
         }
         *ctx_.out += credis::protocol::kRespOk;
         return ProcessResult::normal();
     }
 
-    auto tx_it = ctx_.transactions.find(fd);
-    if (tx_it != ctx_.transactions.end() && tx_it->second.in_multi) {
-        tx_it->second.queued_commands.emplace_back(args.begin(), args.end());
+    if (tx_in_multi()) {
+        tx_get()->queued_commands.emplace_back(args.begin(), args.end());
         *ctx_.out += credis::protocol::kRespQueued;
         return ProcessResult::normal();
     }
@@ -542,76 +690,6 @@ auto CommandHandler::execute_command(std::vector<std::string_view> args,
                                      std::string_view cmd,
                                      int fd,
                                      SendFn&& send_to_client) -> ProcessResult {
-    if (cmd == "CONFIG") {
-        if (args.size() < 3) {
-            credis::protocol::encode_error_into(*ctx_.out, "ERR wrong number of arguments for 'config' command");
-            return ProcessResult::normal();
-        }
-        auto subcmd = credis::util::to_upper(args[1]);
-        if (subcmd == "GET") {
-            if (args.size() < 3) {
-                credis::protocol::encode_error_into(*ctx_.out,
-                                                    "ERR wrong number of arguments for 'config|get' command");
-                return ProcessResult::normal();
-            }
-            handle_config_get(ctx_, args[2]);
-            return ProcessResult::normal();
-        }
-        if (subcmd == "SET") {
-            if (args.size() < 4) {
-                credis::protocol::encode_error_into(*ctx_.out,
-                                                    "ERR wrong number of arguments for 'config|set' command");
-                return ProcessResult::normal();
-            }
-            handle_config_set(ctx_, args[2], args[3]);
-            return ProcessResult::normal();
-        }
-        credis::protocol::encode_error_into(*ctx_.out, "ERR unsupported CONFIG subcommand");
-        return ProcessResult::normal();
-    }
-    if (cmd == "ACL") {
-        handle_acl(ctx_, args);
-        return ProcessResult::normal();
-    }
-    if (cmd == "AUTH") {
-        handle_auth(ctx_, fd, args);
-        return ProcessResult::normal();
-    }
-    if (cmd == "REPLCONF") {
-        handle_replconf(ctx_, args);
-        return ProcessResult::normal();
-    }
-    if (cmd == "WAIT") {
-        return handle_wait(ctx_, args);
-    }
-    if (cmd == "PSYNC") {
-        return handle_psync(ctx_);
-    }
-    if (cmd == "SUBSCRIBE") {
-        if (args.size() < 2) {
-            credis::protocol::encode_error_into(*ctx_.out, "ERR wrong number of arguments for 'subscribe' command");
-            return ProcessResult::normal();
-        }
-        handle_subscribe(ctx_, fd, args[1]);
-        return ProcessResult::normal();
-    }
-    if (cmd == "UNSUBSCRIBE") {
-        if (args.size() < 2) {
-            credis::protocol::encode_error_into(*ctx_.out, "ERR wrong number of arguments for 'unsubscribe' command");
-            return ProcessResult::normal();
-        }
-        handle_unsubscribe(ctx_, fd, args[1]);
-        return ProcessResult::normal();
-    }
-    if (cmd == "PUBLISH") {
-        if (args.size() < 3) {
-            credis::protocol::encode_error_into(*ctx_.out, "ERR wrong number of arguments for 'publish' command");
-            return ProcessResult::normal();
-        }
-        handle_publish(ctx_, args[1], args[2], send_to_client);
-        return ProcessResult::normal();
-    }
-
     auto it = command_table_.find(cmd);
     if (it == command_table_.end()) {
         credis::protocol::encode_error_into(*ctx_.out, "ERR unknown command '" + std::string(cmd) + "'");

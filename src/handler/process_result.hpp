@@ -2,11 +2,7 @@
 
 #include <cstdint>
 #include <functional>
-#include <optional>
 #include <string>
-#include <string_view>
-#include <unordered_map>
-#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -37,12 +33,6 @@ struct ProcessResult {
     static auto wait(int64_t num, int64_t timeout) -> ProcessResult {
         return {Wait{num, timeout}, {}};
     }
-};
-
-struct TransactionState {
-    bool in_multi{false};
-    std::vector<std::vector<std::string>> queued_commands;
-    std::unordered_map<std::string, uint64_t> watched_keys;
 };
 
 } // namespace credis::handler
