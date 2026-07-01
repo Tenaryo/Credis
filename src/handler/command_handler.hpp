@@ -29,10 +29,6 @@ namespace credis::aof {
 class AofManager;
 } // namespace credis::aof
 
-namespace credis::connection {
-class ConnectionPool;
-} // namespace credis::connection
-
 namespace credis::handler {
 
 struct CommandContext {
