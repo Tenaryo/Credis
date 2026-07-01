@@ -9,20 +9,26 @@
 namespace credis::handler {
 
 void handle_zadd(CommandContext& ctx, const std::vector<std::string_view>& args) {
-    if (!ctx.store.key_is_absent_or_holds<credis::store::SortedSet>(args[1])) {
+    const std::string_view key = args[1];
+    auto score1 = credis::util::parse_double(args[2]);
+    if (!score1) {
+        credis::protocol::encode_error_into(*ctx.out, "ERR value is not a valid float");
+        return;
+    }
+    auto opt = ctx.store.zadd_if_valid_type(key, *score1, std::string(args[3]));
+    if (!opt) {
         credis::protocol::encode_error_into(*ctx.out,
                                             "WRONGTYPE Operation against a key holding the wrong kind of value");
         return;
     }
-
-    int64_t added = 0;
-    for (size_t i = 2; i + 1 < args.size(); i += 2) {
+    int64_t added = *opt;
+    for (size_t i = 4; i < args.size(); i += 2) {
         auto score = credis::util::parse_double(args[i]);
         if (!score) {
             credis::protocol::encode_error_into(*ctx.out, "ERR value is not a valid float");
             return;
         }
-        added += ctx.store.zadd(std::string(args[1]), *score, std::string(args[i + 1]));
+        added += ctx.store.zadd(std::string(key), *score, std::string(args[i + 1]));
     }
     credis::protocol::encode_integer_into(*ctx.out, added);
 }

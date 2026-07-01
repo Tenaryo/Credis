@@ -90,7 +90,7 @@ target_include_directories(credis_handler PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(
     credis_handler
     PUBLIC credis_store credis_server credis_blocking_manager credis_pubsub credis_aof
-    PRIVATE credis_protocol credis_util credis_geo credis_rdb
+    PRIVATE credis_protocol credis_util credis_geo credis_rdb credis_connection
 )
 
 # --- L5: event dispatch (integration glue) ---

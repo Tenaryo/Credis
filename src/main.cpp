@@ -76,6 +76,7 @@ auto main(int argc, char* argv[]) -> int {
     handler.set_aof_manager(aof);
     handler.set_replica_count_fn([&replica_mgr] { return replica_mgr.count(); });
     handler.set_offset_fn([&replica_mgr] { return replica_mgr.offset(); });
+    handler.set_connection_pool(conn_pool);
 
     // 7. Add initial fds to event loop
     loop.add_fd(listener->fd());

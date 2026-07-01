@@ -129,7 +129,16 @@ class Store {
 
   public:
     void set(std::string key, std::string value, std::optional<uint64_t> ttl_ms = std::nullopt);
-    void mset(const std::vector<std::pair<std::string, std::string>>& pairs);
+    auto set_if_valid_type(std::string_view key, std::string value, std::optional<uint64_t> ttl_ms = std::nullopt)
+        -> bool;
+    auto incr_if_valid_type(std::string_view key) -> std::optional<int64_t>;
+    auto rpush_if_valid_type(std::string_view key, std::string value) -> std::optional<int64_t>;
+    auto lpush_if_valid_type(std::string_view key, std::string value) -> std::optional<int64_t>;
+    auto zadd_if_valid_type(std::string_view key, double score, std::string member) -> std::optional<int64_t>;
+    auto xadd_if_valid_type(std::string_view key,
+                            const std::string& id,
+                            const std::vector<std::pair<std::string, std::string>>& fields)
+        -> std::optional<std::string>;
     auto get(std::string_view key) -> std::optional<std::string_view>;
     auto incr(std::string_view key) -> std::optional<int64_t>;
     auto exists(std::string_view key) -> bool;

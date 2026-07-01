@@ -18,12 +18,6 @@ void handle_xadd(CommandContext& ctx, const std::vector<std::string_view>& args)
     std::string key(args[1]);
     std::string id(args[2]);
 
-    if (!ctx.store.key_is_absent_or_holds<credis::store::Stream>(key)) {
-        credis::protocol::encode_error_into(*ctx.out,
-                                            "WRONGTYPE Operation against a key holding the wrong kind of value");
-        return;
-    }
-
     if ((args.size() - 3) % 2 != 0) {
         credis::protocol::encode_error_into(*ctx.out, "ERR wrong number of arguments for 'xadd' command");
         return;
@@ -34,14 +28,19 @@ void handle_xadd(CommandContext& ctx, const std::vector<std::string_view>& args)
         fields.emplace_back(std::string(args[i]), std::string(args[i + 1]));
     }
 
-    std::string result = ctx.store.xadd(key, id, fields);
-
-    if (result.starts_with("ERR")) {
-        credis::protocol::encode_error_into(*ctx.out, result);
+    auto result = ctx.store.xadd_if_valid_type(key, id, fields);
+    if (!result) {
+        credis::protocol::encode_error_into(*ctx.out,
+                                            "WRONGTYPE Operation against a key holding the wrong kind of value");
         return;
     }
 
-    credis::protocol::encode_bulk_string_into(*ctx.out, result);
+    if (result->starts_with("ERR")) {
+        credis::protocol::encode_error_into(*ctx.out, *result);
+        return;
+    }
+
+    credis::protocol::encode_bulk_string_into(*ctx.out, *result);
 }
 
 void handle_xrange(CommandContext& ctx, const std::vector<std::string_view>& args) {
@@ -183,12 +182,6 @@ auto handle_xadd_with_blocking(CommandContext& ctx,
     std::string key(args[1]);
     std::string id(args[2]);
 
-    if (!ctx.store.key_is_absent_or_holds<credis::store::Stream>(key)) {
-        credis::protocol::encode_error_into(*ctx.out,
-                                            "WRONGTYPE Operation against a key holding the wrong kind of value");
-        return ProcessResult::normal();
-    }
-
     if ((args.size() - 3) % 2 != 0) {
         credis::protocol::encode_error_into(*ctx.out, "ERR wrong number of arguments for 'xadd' command");
         return ProcessResult::normal();
@@ -200,7 +193,13 @@ auto handle_xadd_with_blocking(CommandContext& ctx,
     }
 
     std::string key_copy(key);
-    std::string new_id = ctx.store.xadd(std::move(key), id, fields);
+    auto result = ctx.store.xadd_if_valid_type(key, id, fields);
+    if (!result) {
+        credis::protocol::encode_error_into(*ctx.out,
+                                            "WRONGTYPE Operation against a key holding the wrong kind of value");
+        return ProcessResult::normal();
+    }
+    std::string new_id = std::move(*result);
 
     if (new_id.starts_with("ERR")) {
         credis::protocol::encode_error_into(*ctx.out, new_id);

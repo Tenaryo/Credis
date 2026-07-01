@@ -13,35 +13,29 @@ void handle_set(CommandContext& ctx, const std::vector<std::string_view>& args) 
     std::string_view key = args[1];
     std::string_view value = args[2];
 
-    if (!ctx.store.key_is_absent_or_holds<credis::store::String>(key)) {
-        credis::protocol::encode_error_into(*ctx.out,
-                                            "WRONGTYPE Operation against a key holding the wrong kind of value");
-        return;
-    }
-
     std::optional<uint64_t> ttl_ms;
-
     for (size_t i = 3; i < args.size(); ++i) {
         auto option = credis::util::to_upper(args[i]);
-
         if (option == "EX" || option == "PX") {
             if (i + 1 >= args.size()) {
                 credis::protocol::encode_error_into(*ctx.out, "ERR syntax error");
                 return;
             }
-
             auto parsed = credis::util::parse_int<uint64_t>(args[i + 1]);
             if (!parsed) {
                 credis::protocol::encode_error_into(*ctx.out, "ERR value is not an integer or out of range");
                 return;
             }
-
             ttl_ms = (option == "EX") ? *parsed * 1000 : *parsed;
             ++i;
         }
     }
 
-    ctx.store.set(std::string(key), std::string(value), ttl_ms);
+    if (!ctx.store.set_if_valid_type(key, std::string(value), ttl_ms)) {
+        credis::protocol::encode_error_into(*ctx.out,
+                                            "WRONGTYPE Operation against a key holding the wrong kind of value");
+        return;
+    }
     *ctx.out += credis::protocol::kRespOk;
 }
 
@@ -55,12 +49,7 @@ void handle_get(CommandContext& ctx, std::string_view key) {
 }
 
 void handle_incr(CommandContext& ctx, std::string_view key) {
-    if (!ctx.store.key_is_absent_or_holds<credis::store::String>(key)) {
-        credis::protocol::encode_error_into(*ctx.out,
-                                            "WRONGTYPE Operation against a key holding the wrong kind of value");
-        return;
-    }
-    auto result = ctx.store.incr(key);
+    auto result = ctx.store.incr_if_valid_type(key);
     if (!result) {
         credis::protocol::encode_error_into(*ctx.out, "ERR value is not an integer or out of range");
         return;
@@ -80,12 +69,9 @@ void handle_mset(CommandContext& ctx, const std::vector<std::string_view>& args)
             return;
         }
     }
-    std::vector<std::pair<std::string, std::string>> pairs;
-    pairs.reserve((args.size() - 1) / 2);
     for (size_t i = 1; i < args.size(); i += 2) {
-        pairs.emplace_back(std::string(args[i]), std::string(args[i + 1]));
+        ctx.store.set(std::string(args[i]), std::string(args[i + 1]));
     }
-    ctx.store.mset(pairs);
     *ctx.out += credis::protocol::kRespOk;
 }
 

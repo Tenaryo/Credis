@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "handler/process_result.hpp"
+#include "handler/transaction_state.hpp"
 #include "server/acl_manager.hpp"
 #include "server/server_config.hpp"
 
@@ -29,12 +30,17 @@ namespace credis::aof {
 class AofManager;
 } // namespace credis::aof
 
+namespace credis::connection {
+class ConnectionPool;
+} // namespace credis::connection
+
 namespace credis::handler {
 
 struct CommandContext {
     credis::store::Store& store;
     credis::server::ServerConfig config;
     credis::aof::AofManager* aof_manager = nullptr;
+    credis::connection::ConnectionPool* conn_pool = nullptr;
     std::string* out = nullptr;
     std::optional<std::reference_wrapper<credis::blocking::BlockingManager>> blocking_manager;
     std::optional<std::reference_wrapper<credis::pubsub::PubSubManager>> pubsub_manager;
@@ -65,6 +71,9 @@ class CommandHandler {
     }
     void set_aof_manager(credis::aof::AofManager& mgr) {
         ctx_.aof_manager = &mgr;
+    }
+    void set_connection_pool(credis::connection::ConnectionPool& pool) {
+        ctx_.conn_pool = &pool;
     }
     [[nodiscard]] auto get_aof_manager() const noexcept -> credis::aof::AofManager* {
         return ctx_.aof_manager;

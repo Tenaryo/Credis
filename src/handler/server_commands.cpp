@@ -3,6 +3,7 @@
 #include <string>
 
 #include "aof/aof_manager.hpp"
+#include "connection/connection_pool.hpp"
 #include "protocol/resp_codec.hpp"
 #include "pubsub/pubsub_manager.hpp"
 #include "rdb/rdb_constants.hpp"
@@ -188,7 +189,9 @@ void handle_auth(CommandContext& ctx, int fd, const std::vector<std::string_view
         return;
     }
     if (ctx.acl_manager.authenticate(args[1], args[2])) {
-        ctx.authenticated_fds.insert(fd);
+        if (ctx.conn_pool) {
+            ctx.conn_pool->get_connection(fd).set_authenticated(true);
+        }
         *ctx.out += credis::protocol::kRespOk;
         return;
     }

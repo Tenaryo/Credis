@@ -302,19 +302,14 @@ TEST(StoreTest, SetIncrementsKeyVersion) {
     EXPECT_GT(v2, v1);
 }
 
-TEST(StoreTest, MsetStoresMultipleKeys) {
+TEST(StoreTest, SetMultipleKeys) {
     Store store;
-    store.mset({{"k1", "v1"}, {"k2", "v2"}, {"k3", "v3"}});
+    store.set("k1", "v1");
+    store.set("k2", "v2");
+    store.set("k3", "v3");
     EXPECT_EQ(store.get("k1").value_or(""), "v1");
     EXPECT_EQ(store.get("k2").value_or(""), "v2");
     EXPECT_EQ(store.get("k3").value_or(""), "v3");
-}
-
-TEST(StoreTest, MsetWithoutTtlHitsExisting) {
-    Store store;
-    store.set("k1", "old");
-    store.mset({{"k1", "new"}});
-    EXPECT_EQ(store.get("k1").value_or(""), "old");
 }
 
 TEST(StoreTest, DelNonExistentReturnsFalse) {
