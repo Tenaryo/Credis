@@ -138,10 +138,7 @@ setup_redis() {
 # Setup Credis (auto-build if not present)
 # --------------------------------------------------
 setup_credis() {
-    if [[ -x "$CREDIS_BIN" ]]; then
-        return 0
-    fi
-    echo -e "${YELLOW}Credis binary not found. Building Release...${NC}"
+    echo -e "${YELLOW}Building Credis Release...${NC}"
     "$SCRIPT_DIR/build.sh" Release
 }
 
