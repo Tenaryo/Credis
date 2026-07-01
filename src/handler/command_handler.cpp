@@ -349,10 +349,16 @@ auto CommandHandler::process_with_fd(int fd,
     -> ProcessResult {
     size_t total_consumed = 0;
     ProcessResult result = ProcessResult::normal();
-    std::string batch_resp;
-    batch_resp.reserve(input.size());
-    std::string cmd_buf;
     std::string* saved_out = ctx_.out;
+    std::string local_buf;
+
+    if (send_to_client) {
+        local_buf.reserve(input.size());
+        ctx_.out = &local_buf;
+    } else if (!saved_out) {
+        local_buf.reserve(input.size());
+        ctx_.out = &local_buf;
+    }
 
     while (total_consumed < input.size()) {
         auto parsed = credis::protocol::parse_one(input.substr(total_consumed));
@@ -363,9 +369,6 @@ auto CommandHandler::process_with_fd(int fd,
         size_t cmd_start = total_consumed;
         total_consumed += parsed->consumed;
         std::string cmd_name = credis::util::to_upper(parsed->args[0]);
-
-        cmd_buf.clear();
-        ctx_.out = &cmd_buf;
 
         auto cmd_result = process_single_command(fd, std::move(parsed->args), cmd_name, send_to_client);
 
@@ -381,25 +384,19 @@ auto CommandHandler::process_with_fd(int fd,
 
         if (!std::holds_alternative<ProcessResult::Normal>(cmd_result.state)) {
             ctx_.out = saved_out;
-            if (saved_out)
-                *saved_out += batch_resp + cmd_buf;
-            if (send_to_client) {
-                send_to_client(fd, batch_resp + cmd_buf);
+            if (send_to_client && !local_buf.empty()) {
+                send_to_client(fd, local_buf);
             }
             cmd_result.propagate_cmds = std::move(result.propagate_cmds);
             cmd_result.consumed = total_consumed;
             return cmd_result;
         }
-
-        batch_resp += cmd_buf;
     }
 
     ctx_.out = saved_out;
-    if (saved_out)
-        *saved_out += batch_resp;
 
-    if (!batch_resp.empty() && send_to_client) {
-        send_to_client(fd, batch_resp);
+    if (send_to_client && !local_buf.empty()) {
+        send_to_client(fd, local_buf);
     }
 
     result.consumed = total_consumed;

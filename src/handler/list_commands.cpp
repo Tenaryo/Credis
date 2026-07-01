@@ -59,7 +59,7 @@ void handle_lpop(CommandContext& ctx, const std::vector<std::string_view>& args)
             return;
         }
         auto elements = ctx.store.lpop(key, count_val);
-        credis::protocol::encode_array_into(*ctx.out, std::vector<std::string>{elements.begin(), elements.end()});
+        credis::protocol::encode_array_into(*ctx.out, elements);
         return;
     }
     credis::protocol::encode_error_into(*ctx.out, "ERR value is not an integer or out of range");
@@ -88,7 +88,7 @@ void handle_rpop(CommandContext& ctx, const std::vector<std::string_view>& args)
         return;
     }
     auto elements = ctx.store.rpop(args[1], count_val);
-    credis::protocol::encode_array_into(*ctx.out, std::vector<std::string>{elements.begin(), elements.end()});
+    credis::protocol::encode_array_into(*ctx.out, elements);
 }
 
 void handle_lrange(CommandContext& ctx, const std::vector<std::string_view>& args) {
@@ -121,7 +121,11 @@ auto handle_blpop(CommandContext& ctx, int fd, const std::vector<std::string_vie
 
     auto elements = ctx.store.lpop(key, 1);
     if (!elements.empty()) {
-        credis::protocol::encode_array_into(*ctx.out, std::vector<std::string>{std::string(key), elements[0]});
+        std::vector<std::string> arr;
+        arr.reserve(2);
+        arr.emplace_back(key);
+        arr.push_back(std::move(elements[0]));
+        credis::protocol::encode_array_into(*ctx.out, arr);
         return ProcessResult::normal();
     }
 

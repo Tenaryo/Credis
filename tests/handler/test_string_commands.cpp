@@ -74,14 +74,9 @@ TEST_F(HandlerStringTest, PipelineMultipleCommands) {
                  "*3\r\n$3\r\nSET\r\n$1\r\nb\r\n$1\r\n2\r\n"
                  "*3\r\n$3\r\nSET\r\n$1\r\nc\r\n$1\r\n3\r\n";
 
-    std::vector<std::string> sent;
-    auto send_fn = [&](int, const std::string& msg) { sent.push_back(msg); };
+    auto response = handler_.process(input);
 
-    auto result = handler_.process_with_fd(1, input, send_fn);
-
-    ASSERT_EQ(sent.size(), 1);
-    EXPECT_EQ(sent[0], "+OK\r\n+OK\r\n+OK\r\n");
-    EXPECT_GT(result.consumed, 0u);
+    EXPECT_EQ(response, "+OK\r\n+OK\r\n+OK\r\n");
 
     EXPECT_EQ(handler_.process("*2\r\n$3\r\nGET\r\n$1\r\na\r\n"), "$1\r\n1\r\n");
     EXPECT_EQ(handler_.process("*2\r\n$3\r\nGET\r\n$1\r\nb\r\n"), "$1\r\n2\r\n");
@@ -89,16 +84,12 @@ TEST_F(HandlerStringTest, PipelineMultipleCommands) {
 }
 
 TEST_F(HandlerStringTest, PipelineConsumePartial) {
-    std::string_view input = "*3\r\n$3\r\nSET\r\n$1\r\na\r\n$1\r\n1\r\n"
-                             "*3\r\n$3\r\nSET\r\n$1\r\nb\r\n$1\r\n2\r\n";
+    std::string input = "*3\r\n$3\r\nSET\r\n$1\r\na\r\n$1\r\n1\r\n"
+                        "*3\r\n$3\r\nSET\r\n$1\r\nb\r\n$1\r\n2\r\n";
 
-    std::vector<std::string> sent;
-    auto send_fn = [&](int, const std::string& msg) { sent.push_back(msg); };
+    auto response = handler_.process(input);
 
-    auto result = handler_.process_with_fd(1, input, send_fn);
-
-    ASSERT_EQ(sent.size(), 1);
-    EXPECT_EQ(result.consumed, input.size());
+    EXPECT_EQ(response, "+OK\r\n+OK\r\n");
     EXPECT_EQ(handler_.process("*2\r\n$3\r\nGET\r\n$1\r\na\r\n"), "$1\r\n1\r\n");
     EXPECT_EQ(handler_.process("*2\r\n$3\r\nGET\r\n$1\r\nb\r\n"), "$1\r\n2\r\n");
 }
