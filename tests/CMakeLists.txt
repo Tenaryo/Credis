@@ -69,6 +69,8 @@ add_module_test(
     credis_util
 )
 
+add_module_test(connection LIBRARIES credis_connection credis_util)
+
 add_module_test(client LIBRARIES credis_server credis_util credis_aof)
 
 add_module_test(aof LIBRARIES credis_aof)

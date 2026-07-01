@@ -2,6 +2,13 @@
 
 namespace credis::connection {
 
+void ConnectionPool::mark_dirty(int fd, Connection& conn) {
+    if (!conn.dirty()) {
+        conn.set_dirty(true);
+        dirty_fds_.push_back(fd);
+    }
+}
+
 void ConnectionPool::add(int fd) {
     connections_[fd] = std::make_unique<Connection>(fd);
 }
@@ -32,6 +39,7 @@ void ConnectionPool::send_to(int fd, std::string_view response) {
         return;
     }
     it->second->send_data(response.data(), response.size());
+    mark_dirty(fd, *it->second);
 }
 
 auto ConnectionPool::contains(int fd) const -> bool {
@@ -39,7 +47,9 @@ auto ConnectionPool::contains(int fd) const -> bool {
 }
 
 auto ConnectionPool::get_pending_write(int fd) -> std::string& {
-    return connections_.at(fd)->pending_write();
+    auto& conn = *connections_.at(fd);
+    mark_dirty(fd, conn);
+    return conn.pending_write();
 }
 
 auto ConnectionPool::get_connection(int fd) -> Connection& {
@@ -47,9 +57,15 @@ auto ConnectionPool::get_connection(int fd) -> Connection& {
 }
 
 void ConnectionPool::flush_all() {
-    for (auto& [fd, conn] : connections_) {
-        conn->flush();
+    for (int fd : dirty_fds_) {
+        auto it = connections_.find(fd);
+        if (it == connections_.end()) [[unlikely]] {
+            continue;
+        }
+        it->second->flush();
+        it->second->set_dirty(false);
     }
+    dirty_fds_.clear();
 }
 
 } // namespace credis::connection

@@ -41,7 +41,7 @@ Usage: $0 [OPTIONS]
 Options:
   --quick        Quick mode (30K reqs per test, faster)
   --seed N       Random seed for reproducible benchmark order
-  --section S    Run only one section: throughput|pipeline|latency
+  --section S    Run only one section: throughput|pipeline|threads|latency
   --help         Show this help
 
 Output: benchmarks/results/<timestamp>.md

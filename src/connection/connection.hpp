@@ -17,6 +17,7 @@ class Connection {
     size_t data_len_{0};
     std::string pending_write_;
     bool authenticated_{false};
+    bool dirty_{false};
     std::unique_ptr<credis::handler::TransactionState> tx_;
 
   public:
@@ -53,6 +54,13 @@ class Connection {
     }
     void set_authenticated(bool val) noexcept {
         authenticated_ = val;
+    }
+
+    [[nodiscard]] auto dirty() const noexcept -> bool {
+        return dirty_;
+    }
+    void set_dirty(bool val) noexcept {
+        dirty_ = val;
     }
 
     auto tx() noexcept -> credis::handler::TransactionState* {

@@ -36,6 +36,15 @@ WARMUP_REQUESTS = 5000
 CONCURRENCIES = [1, 10, 50, 100, 500]
 PIPELINES = [1, 4, 8, 16, 32, 64]
 
+# Client-side threads to test (capped by available cores at runtime).
+CLIENT_THREADS = [1, 2, 4, 8]
+# (concurrency, pipeline, requests) scenarios for the client-threads section.
+# NOTE: redis-benchmark --threads has a fixed ~0.25s startup/coordination floor;
+# short runs report a bogus clamped rps. Request counts here are deliberately
+# large (independent of --quick) so each run lasts well beyond that floor even
+# at high thread counts (non-pipeline runs ~250-400K rps, so 1.5M => >=3.5s).
+THREAD_SCENARIOS = [(50, 1, 1_500_000), (50, 32, 3_000_000)]
+
 # Commands: (name, needs_prepop_key, extra_args)
 COMMANDS = [
     ("SET", None, None),
@@ -128,10 +137,14 @@ class BenchmarkRunner:
         return {"rps": rps, "stdout": stdout_text.strip(), "stderr": stderr_text.strip()}
 
     def _run_bench_csv(self, host: str, port: int, cmd: str, concurrency: int,
-                       pipeline: int = 1, extra_args: Optional[list] = None) -> float:
+                       pipeline: int = 1, extra_args: Optional[list] = None,
+                       threads: Optional[int] = None, requests: Optional[int] = None) -> float:
+        n = requests if requests is not None else self.n
         args = [BENCH, "-h", host, "-p", str(port),
-                "-n", str(self.n), "-c", str(concurrency),
+                "-n", str(n), "-c", str(concurrency),
                 "-P", str(pipeline), "-t", cmd, "--csv"]
+        if threads is not None:
+            args.extend(["--threads", str(threads)])
         if extra_args:
             args.extend(extra_args)
         try:
@@ -152,12 +165,13 @@ class BenchmarkRunner:
         return 0.0
 
     def _bench_rps_repeated(self, host: str, port: int, cmd: str, concurrency: int,
-                             pipeline: int = 1, extra_args: Optional[list] = None) -> float:
+                             pipeline: int = 1, extra_args: Optional[list] = None,
+                             threads: Optional[int] = None, requests: Optional[int] = None) -> float:
         """Warmup once per (server, command), then run REPEATS times, return median."""
         self._warmup_once(host, port, cmd)
         vals = []
         for _ in range(REPEATS):
-            v = self._run_bench_csv(host, port, cmd, concurrency, pipeline, extra_args)
+            v = self._run_bench_csv(host, port, cmd, concurrency, pipeline, extra_args, threads, requests)
             if v > 0:
                 vals.append(v)
         return statistics.median(vals) if vals else 0.0
@@ -308,6 +322,59 @@ class BenchmarkRunner:
             self.write()
             sys.stdout.flush()
 
+    def section_client_threads(self) -> None:
+        """Client-thread scaling: is redis-benchmark itself the bottleneck?
+
+        redis-benchmark drives all -c connections on a single thread by default.
+        Varying --threads spreads those connections across CPU cores. If rps
+        rises with more client threads, the previous numbers were client-bound.
+        """
+        max_threads = os.cpu_count() or 4
+        thread_list = [t for t in CLIENT_THREADS if t <= max_threads]
+        if not thread_list:
+            thread_list = [1]
+
+        self.write("## Client-Thread Scaling")
+        self.write()
+        self.write(f"Host has {max_threads} logical cores.")
+        self.write()
+        self.write("Purpose: `-c` sets connection count but redis-benchmark drives them on a "
+                   "single thread by default. `--threads` spreads connections across cores. "
+                   "Rising rps with more threads ⇒ the client was the bottleneck.")
+        self.write()
+        self.write("> Request counts are large and independent of `--quick`: redis-benchmark "
+                   "`--threads` has a fixed ~0.25s coordination floor that makes short runs "
+                   "report bogus clamped throughput.")
+        self.write()
+
+        for cmd in ("SET", "GET"):
+            for c, p, req in THREAD_SCENARIOS:
+                self.write(f"### {cmd} (c={c}, P={p}, n={req:,})")
+                self.write()
+                header = "| Client Threads | Redis rps | Credis rps | Ratio | Winner |"
+                sep =    "|---------------:|----------:|-----------:|------:|--------|"
+                self.write(header)
+                self.write(sep)
+
+                for t in thread_list:
+                    servers = [(REDIS_HOST, REDIS_PORT, "Redis"),
+                               (CREDIS_HOST, CREDIS_PORT, "Credis")]
+                    random.shuffle(servers)
+                    results_t = {}
+                    for host, port, label in servers:
+                        results_t[label] = self._bench_rps_repeated(host, port, cmd, c, p, None, t, req)
+                    credis_rps = results_t["Credis"]
+                    redis_rps = results_t["Redis"]
+                    if redis_rps > 0:
+                        ratio = credis_rps / redis_rps * 100
+                        winner = "**Credis**" if ratio >= 100 else "Redis"
+                    else:
+                        ratio = 0.0
+                        winner = "N/A"
+                    self.write(f"| {t} | {redis_rps:>10,.1f} | {credis_rps:>10,.1f} | {ratio:>5.1f}% | {winner} |")
+                self.write()
+                sys.stdout.flush()
+
     def section_latency(self) -> None:
         """Latency distribution for SET: c=1, c=50 at P=1 and P=64."""
         self.write("## 3. Latency Distribution (SET, n=100K)")
@@ -357,6 +424,7 @@ class BenchmarkRunner:
         self.section_info()
         self.section_throughput()
         self.section_pipeline_throughput()
+        self.section_client_threads()
         self.section_latency()
         self.flush()
 
@@ -365,7 +433,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Credis vs Redis benchmark suite")
     parser.add_argument("--quick", action="store_true", help="Quick mode (fewer requests)")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
-    parser.add_argument("--section", choices=["throughput", "pipeline", "latency"],
+    parser.add_argument("--section", choices=["throughput", "pipeline", "threads", "latency"],
                         help="Run only one section")
     args = parser.parse_args()
 
@@ -379,6 +447,10 @@ if __name__ == "__main__":
         runner.flush()
     elif args.section == "pipeline":
         runner.section_pipeline_throughput()
+        runner.flush()
+    elif args.section == "threads":
+        runner.section_info()
+        runner.section_client_threads()
         runner.flush()
     elif args.section == "latency":
         runner.section_latency()
