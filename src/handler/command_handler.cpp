@@ -463,7 +463,9 @@ auto CommandHandler::process_with_fd(int fd,
     std::string* saved_out = ctx_.out;
     std::string local_buf;
 
-    if (send_to_client) {
+    if (send_to_client && ctx_.conn_pool) {
+        ctx_.out = &ctx_.conn_pool->get_pending_write(fd);
+    } else if (send_to_client) {
         local_buf.reserve(input.size());
         ctx_.out = &local_buf;
     } else if (!saved_out) {
@@ -471,31 +473,35 @@ auto CommandHandler::process_with_fd(int fd,
         ctx_.out = &local_buf;
     }
 
+    std::vector<std::string_view> cmd_args;
+
     while (total_consumed < input.size()) {
-        auto parsed = credis::protocol::parse_one(input.substr(total_consumed));
-        if (!parsed) {
+        cmd_args.clear();
+        auto consumed = credis::protocol::parse_one_into(cmd_args, input.substr(total_consumed));
+        if (!consumed) {
             break;
         }
 
+        size_t cmd_len = *consumed;
         size_t cmd_start = total_consumed;
-        total_consumed += parsed->consumed;
-        std::string cmd_name = credis::util::to_upper(parsed->args[0]);
+        total_consumed += cmd_len;
+        std::string cmd_name = credis::util::to_upper(cmd_args[0]);
 
-        auto cmd_result = process_single_command(fd, std::move(parsed->args), cmd_name, send_to_client);
+        auto cmd_result = process_single_command(fd, std::move(cmd_args), cmd_name, send_to_client);
 
         if (is_write_command(cmd_name)) {
             if (ctx_.replica_count_fn && ctx_.replica_count_fn() > 0) {
-                result.propagate_cmds.push_back(std::string(input.substr(cmd_start, parsed->consumed)));
+                result.propagate_cmds.push_back(std::string(input.substr(cmd_start, cmd_len)));
             }
             if (ctx_.aof_manager != nullptr) {
-                ctx_.aof_manager->append(input.substr(cmd_start, parsed->consumed));
-                ctx_.aof_manager->append_to_rewrite_buffer(input.substr(cmd_start, parsed->consumed));
+                ctx_.aof_manager->append(input.substr(cmd_start, cmd_len));
+                ctx_.aof_manager->append_to_rewrite_buffer(input.substr(cmd_start, cmd_len));
             }
         }
 
         if (!std::holds_alternative<ProcessResult::Normal>(cmd_result.state)) {
             ctx_.out = saved_out;
-            if (send_to_client && !local_buf.empty()) {
+            if (send_to_client && !ctx_.conn_pool && !local_buf.empty()) {
                 send_to_client(fd, local_buf);
             }
             cmd_result.propagate_cmds = std::move(result.propagate_cmds);
@@ -506,7 +512,7 @@ auto CommandHandler::process_with_fd(int fd,
 
     ctx_.out = saved_out;
 
-    if (send_to_client && !local_buf.empty()) {
+    if (send_to_client && !ctx_.conn_pool && !local_buf.empty()) {
         send_to_client(fd, local_buf);
     }
 

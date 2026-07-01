@@ -20,6 +20,8 @@ struct ParsedCommand {
 };
 
 auto parse_one(std::string_view input) -> std::expected<ParsedCommand, credis::util::Error>;
+auto parse_one_into(std::vector<std::string_view>& args, std::string_view input)
+    -> std::expected<size_t, credis::util::Error>;
 
 auto encode_simple_string(std::string_view s) -> std::string;
 auto encode_bulk_string(std::string_view s) -> std::string;

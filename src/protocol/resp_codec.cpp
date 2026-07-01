@@ -9,6 +9,16 @@ using credis::util::ErrorCode;
 
 namespace {
 
+inline void append_digit(std::string& out, size_t n) {
+    if (n < 10) [[likely]] {
+        out += static_cast<char>('0' + n);
+    } else {
+        char buf[11];
+        auto [ptr, ec] = std::to_chars(buf, buf + sizeof(buf), n);
+        out.append(buf, static_cast<size_t>(ptr - buf));
+    }
+}
+
 constexpr auto digit_count(size_t n) -> size_t {
     if (n == 0) {
         return 1;
@@ -80,6 +90,44 @@ auto parse_one(std::string_view input) -> std::expected<ParsedCommand, Error> {
 
     size_t consumed = static_cast<size_t>(p - input.data());
     return ParsedCommand{std::move(args), consumed};
+}
+
+auto parse_one_into(std::vector<std::string_view>& args, std::string_view input) -> std::expected<size_t, Error> {
+    if (input.empty() || input[0] != '*') [[unlikely]] {
+        return std::unexpected(Error(ErrorCode::kProtocolError, "Invalid RESP: expected array"));
+    }
+
+    const char* p = input.data() + 1;
+    const char* end = input.data() + input.size();
+
+    auto count_opt = parse_int_until_crlf(p, end);
+    if (!count_opt || *count_opt < 0) [[unlikely]] {
+        return std::unexpected(Error(ErrorCode::kProtocolError, "Invalid RESP: invalid array count"));
+    }
+    int count = *count_opt;
+
+    args.clear();
+    args.reserve(static_cast<size_t>(count));
+    for (int i = 0; i < count; ++i) {
+        if (p >= end || *p != '$') [[unlikely]] {
+            return std::unexpected(Error(ErrorCode::kProtocolError, "Invalid RESP: expected bulk string"));
+        }
+        ++p;
+
+        auto len_opt = parse_int_until_crlf(p, end);
+        if (!len_opt || *len_opt < 0) [[unlikely]] {
+            return std::unexpected(Error(ErrorCode::kProtocolError, "Invalid RESP: invalid bulk string length"));
+        }
+        int len = *len_opt;
+
+        if (p + len > end) [[unlikely]] {
+            return std::unexpected(Error(ErrorCode::kProtocolError, "Incomplete RESP: bulk string truncated"));
+        }
+        args.emplace_back(p, static_cast<size_t>(len));
+        p += static_cast<size_t>(len) + 2;
+    }
+
+    return static_cast<size_t>(p - input.data());
 }
 
 auto encode_simple_string(std::string_view s) -> std::string {
@@ -303,10 +351,15 @@ void encode_simple_string_into(std::string& out, std::string_view s) {
 }
 
 void encode_bulk_string_into(std::string& out, std::string_view s) {
-    char buf[11];
-    auto [ptr, ec] = std::to_chars(buf, buf + sizeof(buf), s.size());
     out += '$';
-    out.append(buf, static_cast<size_t>(ptr - buf));
+    auto len = s.size();
+    if (len < 10) [[likely]] {
+        out += static_cast<char>('0' + len);
+    } else {
+        char buf[11];
+        auto [ptr, ec] = std::to_chars(buf, buf + sizeof(buf), len);
+        out.append(buf, static_cast<size_t>(ptr - buf));
+    }
     out += "\r\n";
     out += s;
     out += "\r\n";
@@ -319,10 +372,14 @@ void encode_error_into(std::string& out, std::string_view s) {
 }
 
 void encode_integer_into(std::string& out, int64_t n) {
-    char buf[21];
-    auto [ptr, ec] = std::to_chars(buf, buf + sizeof(buf), n);
     out += ':';
-    out.append(buf, static_cast<size_t>(ptr - buf));
+    if (n >= 0 && n < 10) [[likely]] {
+        out += static_cast<char>('0' + n);
+    } else {
+        char buf[21];
+        auto [ptr, ec] = std::to_chars(buf, buf + sizeof(buf), n);
+        out.append(buf, static_cast<size_t>(ptr - buf));
+    }
     out += "\r\n";
 }
 
@@ -335,15 +392,12 @@ void encode_null_array_into(std::string& out) {
 }
 
 void encode_array_into(std::string& out, const std::vector<std::string>& elements) {
-    char buf[11];
-    auto [ptr, ec] = std::to_chars(buf, buf + sizeof(buf), elements.size());
     out += '*';
-    out.append(buf, static_cast<size_t>(ptr - buf));
+    append_digit(out, elements.size());
     out += "\r\n";
     for (const auto& elem : elements) {
-        auto [p2, ec2] = std::to_chars(buf, buf + sizeof(buf), elem.size());
         out += '$';
-        out.append(buf, static_cast<size_t>(p2 - buf));
+        append_digit(out, elem.size());
         out += "\r\n";
         out += elem;
         out += "\r\n";
@@ -351,15 +405,12 @@ void encode_array_into(std::string& out, const std::vector<std::string>& element
 }
 
 void encode_array_into(std::string& out, std::span<const std::string_view> elements) {
-    char buf[11];
-    auto [ptr, ec] = std::to_chars(buf, buf + sizeof(buf), elements.size());
     out += '*';
-    out.append(buf, static_cast<size_t>(ptr - buf));
+    append_digit(out, elements.size());
     out += "\r\n";
     for (const auto& elem : elements) {
-        auto [p2, ec2] = std::to_chars(buf, buf + sizeof(buf), elem.size());
         out += '$';
-        out.append(buf, static_cast<size_t>(p2 - buf));
+        append_digit(out, elem.size());
         out += "\r\n";
         out += elem;
         out += "\r\n";
@@ -367,10 +418,8 @@ void encode_array_into(std::string& out, std::span<const std::string_view> eleme
 }
 
 void encode_raw_array_into(std::string& out, const std::vector<std::string>& raw_elements) {
-    char buf[11];
-    auto [ptr, ec] = std::to_chars(buf, buf + sizeof(buf), raw_elements.size());
     out += '*';
-    out.append(buf, static_cast<size_t>(ptr - buf));
+    append_digit(out, raw_elements.size());
     out += "\r\n";
     for (const auto& elem : raw_elements) {
         out += elem;
@@ -378,35 +427,29 @@ void encode_raw_array_into(std::string& out, const std::vector<std::string>& raw
 }
 
 void encode_entries_into(std::string& out, std::span<const credis::store::StreamEntry> entries) {
-    char buf[21];
-    auto [ptr, ec] = std::to_chars(buf, buf + sizeof(buf), entries.size());
     out += '*';
-    out.append(buf, static_cast<size_t>(ptr - buf));
+    append_digit(out, entries.size());
     out += "\r\n";
     for (const auto& entry : entries) {
         out += "*2\r\n";
-        auto [p2, ec2] = std::to_chars(buf, buf + sizeof(buf), entry.id.size());
         out += '$';
-        out.append(buf, static_cast<size_t>(p2 - buf));
+        append_digit(out, entry.id.size());
         out += "\r\n";
         out += entry.id;
         out += "\r\n";
 
-        auto [p3, ec3] = std::to_chars(buf, buf + sizeof(buf), entry.fields.size() * 2);
         out += '*';
-        out.append(buf, static_cast<size_t>(p3 - buf));
+        append_digit(out, entry.fields.size() * 2);
         out += "\r\n";
         for (const auto& [field, value] : entry.fields) {
-            auto [p4, ec4] = std::to_chars(buf, buf + sizeof(buf), field.size());
             out += '$';
-            out.append(buf, static_cast<size_t>(p4 - buf));
+            append_digit(out, field.size());
             out += "\r\n";
             out += field;
             out += "\r\n";
 
-            auto [p5, ec5] = std::to_chars(buf, buf + sizeof(buf), value.size());
             out += '$';
-            out.append(buf, static_cast<size_t>(p5 - buf));
+            append_digit(out, value.size());
             out += "\r\n";
             out += value;
             out += "\r\n";
@@ -417,48 +460,40 @@ void encode_entries_into(std::string& out, std::span<const credis::store::Stream
 void encode_stream_entries_into(
     std::string& out,
     const std::vector<std::pair<std::string, std::span<const credis::store::StreamEntry>>>& streams) {
-    char buf[21];
-    auto [ptr, ec] = std::to_chars(buf, buf + sizeof(buf), streams.size());
     out += '*';
-    out.append(buf, static_cast<size_t>(ptr - buf));
+    append_digit(out, streams.size());
     out += "\r\n";
     for (const auto& [key, entries] : streams) {
         out += "*2\r\n";
-        auto [p2, ec2] = std::to_chars(buf, buf + sizeof(buf), key.size());
         out += '$';
-        out.append(buf, static_cast<size_t>(p2 - buf));
+        append_digit(out, key.size());
         out += "\r\n";
         out += key;
         out += "\r\n";
 
-        auto [p3, ec3] = std::to_chars(buf, buf + sizeof(buf), entries.size());
         out += '*';
-        out.append(buf, static_cast<size_t>(p3 - buf));
+        append_digit(out, entries.size());
         out += "\r\n";
         for (const auto& entry : entries) {
             out += "*2\r\n";
-            auto [p4, ec4] = std::to_chars(buf, buf + sizeof(buf), entry.id.size());
             out += '$';
-            out.append(buf, static_cast<size_t>(p4 - buf));
+            append_digit(out, entry.id.size());
             out += "\r\n";
             out += entry.id;
             out += "\r\n";
 
-            auto [p5, ec5] = std::to_chars(buf, buf + sizeof(buf), entry.fields.size() * 2);
             out += '*';
-            out.append(buf, static_cast<size_t>(p5 - buf));
+            append_digit(out, entry.fields.size() * 2);
             out += "\r\n";
             for (const auto& [field, value] : entry.fields) {
-                auto [p6, ec6] = std::to_chars(buf, buf + sizeof(buf), field.size());
                 out += '$';
-                out.append(buf, static_cast<size_t>(p6 - buf));
+                append_digit(out, field.size());
                 out += "\r\n";
                 out += field;
                 out += "\r\n";
 
-                auto [p7, ec7] = std::to_chars(buf, buf + sizeof(buf), value.size());
                 out += '$';
-                out.append(buf, static_cast<size_t>(p7 - buf));
+                append_digit(out, value.size());
                 out += "\r\n";
                 out += value;
                 out += "\r\n";

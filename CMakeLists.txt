@@ -12,6 +12,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(Threads REQUIRED)
 
+find_library(JEMALLOC_LIB jemalloc)
+if (JEMALLOC_LIB)
+    message(STATUS "Found jemalloc: ${JEMALLOC_LIB}")
+endif ()
+
 # ============================================================
 # Module library targets (bottom-up, from leaf to root)
 # ============================================================
@@ -190,6 +195,9 @@ target_precompile_headers(credis_event_dispatch REUSE_FROM credis_util)
 
 add_executable(redis src/main.cpp)
 target_link_libraries(redis PRIVATE credis_core)
+if (JEMALLOC_LIB)
+    target_link_libraries(redis PRIVATE ${JEMALLOC_LIB})
+endif ()
 
 # ============================================================
 # Options
