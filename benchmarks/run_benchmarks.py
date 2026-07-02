@@ -424,7 +424,6 @@ class BenchmarkRunner:
         self.section_info()
         self.section_throughput()
         self.section_pipeline_throughput()
-        self.section_client_threads()
         self.section_latency()
         self.flush()
 
