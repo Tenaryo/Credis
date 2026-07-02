@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-07-02
+
+### Added
+- **AOF rewrite** (`BGREWRITEAOF`): snapshots the current keyspace into a fresh incremental
+  file while buffering concurrent writes, then atomically swaps via the manifest
+- **AOF `everysec`**: background `std::jthread` that `fsync()`s once per second; toggled live
+  through `CONFIG SET appendfsync` (`always` / `everysec`)
+- **CONFIG SET**: runtime configuration updates
+
+### Changed
+- **Command hot path**: eliminated redundant per-command hash lookups and string comparisons
+  in dispatch
+- **Connection flush**: track a per-event-loop *dirty connection set* and flush only
+  connections with pending writes, instead of scanning every connection each iteration —
+  large throughput win under high client-thread concurrency
+- **`process_with_fd`**: removed intermediate `batch_resp` / `cmd_buf` copies
+- Benchmark suite: server-side warmup, larger request counts to escape the redis-benchmark
+  `--threads` fixed-time floor
+
+### Fixed
+- `run_tests.sh` no longer silently downgrades Release→Debug (`-O0`) builds
+- Purge CMake cache when switching build types (prevents accidental `-O0` Release builds)
+- AOF rewrite: data-loss and thread-safety fixes from review
+
 ## [1.2.0] - 2026-06-15
 
 ### Added

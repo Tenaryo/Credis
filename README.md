@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![C++23](https://img.shields.io/badge/C%2B%2B-23-blue.svg)](https://en.cppreference.com/w/cpp/23)
 
-A Redis 7.0-compatible server written from scratch in C++23 — 5,175 lines, zero dependencies, 394 KB stripped binary. Pipeline throughput (P=64) reaches 170% of Redis at 37% lower tail latency; high-concurrency throughput leads by 5–15%.
+A Redis 7.0-compatible server written from scratch in C++23 — ~6,300 lines, zero dependencies, 458 KB stripped binary. Pipeline throughput (P=64) reaches 170% of Redis at 37% lower tail latency; high-concurrency throughput leads by 5–15%.
 
 ## Dependencies
 
@@ -67,8 +67,11 @@ Credis scales from 253K to 307K rps across 10–500 concurrent clients (variance
 ### Run Tests
 
 ```bash
-./run_tests.sh      # 161 tests across all modules
+./run_tests.sh             # 302 tests across all modules
+./run_tests.sh --coverage  # + line/function coverage report (lcov/genhtml)
 ```
+
+Current coverage: **78.6% lines, 81.2% functions** (302 tests).
 
 ### Run Benchmarks
 
@@ -171,7 +174,8 @@ Master-replica replication with eventual consistency and synchronous WAIT:
 - Manifest-driven: `appendonly.aof.manifest` → `file <name>.1.incr.aof seq 1 type i`
 - Write commands appended in raw RESP format to the incremental file
 - `appendfsync always` — `fsync()` after every write command (zero data loss)
-- `appendfsync everysec` — (planned: background fsync thread)
+- `appendfsync everysec` — background `std::jthread` flushes to disk once per second; toggled live via `CONFIG SET appendfsync`
+- **AOF rewrite** (`BGREWRITEAOF`): compacts the log by snapshotting the current keyspace into a fresh incremental file while buffering concurrent writes, then atomically swaps via the manifest
 - **Replay on startup**: reads manifest, finds the type `i` entry, parses RESP commands, and executes them to rebuild state — all before accepting client connections
 
 ### ACL & Authentication
@@ -204,18 +208,19 @@ Complete Redis Serialization Protocol (RESP3):
 - `EventLoop` wraps Linux `epoll` with sigfd-based signal handling (SIGINT/SIGTERM)
 - `ConnectionPool` manages per-fd read/write buffers with dynamic expansion (4 KB → 512 MB)
 - `TcpListener` with `SO_REUSEADDR` and backlog 511
-- Batch output flush reduces `write()` syscalls
+- Batched output flush over a per-event-loop **dirty connection set** — only connections with pending writes are flushed, not every connection
 - Single-threaded, event-driven architecture — no thread pools, no context switches
 
 ### Config Management
 
 - **CONFIG GET** `param` — query `dir`, `dbfilename`, `appendonly`, `appenddirname`, `appendfilename`, `appendfsync`
+- **CONFIG SET** `param value` — update config at runtime (e.g. `appendfsync` toggles the everysec fsync thread live)
 - All AOF config values overridable via command-line flags (see CLI Options)
 
 ## Supported Commands
 
 ### General
-- `PING`, `ECHO`, `INFO`, `CONFIG GET`, `KEYS`, `TYPE`
+- `PING`, `ECHO`, `INFO`, `CONFIG GET`, `CONFIG SET`, `KEYS`, `TYPE`, `BGREWRITEAOF`
 
 ### Strings
 - `SET` (with EX/PX), `GET`, `INCR`, `MSET`
@@ -241,7 +246,7 @@ Complete Redis Serialization Protocol (RESP3):
 ### Replication & Auth
 - `REPLCONF`, `PSYNC`, `WAIT`, `AUTH`, `ACL WHOAMI`, `ACL GETUSER`, `ACL SETUSER`
 
-**45 commands** total.
+**47 commands** total.
 
 ## API Documentation
 
